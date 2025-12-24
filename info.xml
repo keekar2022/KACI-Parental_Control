@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<pfsensepkgs>
+	<package>
+		<name>KACI-Parental_Control</name>
+		<descr><![CDATA[Keekar's Parental Control - Advanced time-based access control and content filtering for children's devices. Manage screen time, set daily/weekly limits, and block access during specific hours.]]></descr>
+		<website>https://github.com/keekar/KACI-Parental-Control</website>
+		<version>0.0.7</version>
+		<required_version>2.7.0</required_version>
+		<maximum_version></maximum_version>
+		<maintainer>Mukesh Kesharwani (Keekar)</maintainer>
+		<category>Services</category>
+		<pkginfolink>https://github.com/yourusername/pfsense-parental-control</pkginfolink>
+		<configurationfile>parental_control.xml</configurationfile>
+		<menu>
+			<name>Keekar's Parental Control</name>
+			<section>Services</section>
+			<configfile>parental_control.xml</configfile>
+		</menu>
+		<service>
+			<name>parental_control</name>
+			<rcfile>parental_control.sh</rcfile>
+			<executable>parental_control</executable>
+			<description>Keekar's Parental Control Service</description>
+		</service>
+		<additional_files_needed>
+			<prefix>/usr/local/pkg/</prefix>
+			<item>https://raw.githubusercontent.com/keekar/KACI-Parental-Control/main/parental_control.inc</item>
+		</additional_files_needed>
+		<additional_files_needed>
+			<prefix>/usr/local/www/</prefix>
+			<item>https://raw.githubusercontent.com/keekar/KACI-Parental-Control/main/parental_control_status.php</item>
+		</additional_files_needed>
+		<after_install_info>
+			<![CDATA[
+===============================================
+Keekar's Parental Control Package Installed Successfully!
+===============================================
+
+To configure Keekar's Parental Control:
+1. Go to Services > Keekar's Parental Control
+2. Enable the service
+3. Add child devices (by MAC address or IP)
+4. Set time limits and schedules
+5. Configure content categories to block
+
+Features:
+- Time-based access control (daily/weekly limits)
+- Schedule-based blocking (bedtime, homework time)
+- Device management by MAC address
+- Integration with pfSense firewall rules
+- Real-time usage monitoring
+- Dashboard widget for quick overview
+
+Documentation: Services > Parental Control > Help
+
+Note: Firewall rules will be automatically created and managed.
+Changes take effect immediately.
+			]]>
+		</after_install_info>
+	</package>
+</pfsensepkgs>
+

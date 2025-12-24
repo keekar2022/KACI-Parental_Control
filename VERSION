@@ -1,0 +1,46 @@
+# Keekar's Parental Control Package Version History
+# Format: MAJOR.MINOR.PATCH (two digits each)
+# Auto-increment PATCH on each .inc file update
+
+CURRENT_VERSION=0.1.0
+BUILD_DATE=2025-12-24
+AUTHOR=Mukesh Kesharwani
+
+# Version History:
+# 0.1.0 - 2025-12-24 - MAJOR FIX: Backend parsing of device_selector dropdown
+#                    - Devices now save correctly even without JavaScript
+#                    - Auto-fills mac_address, ip_address, device_name from dropdown
+#                    - Fixed profile XML configpath and package name
+# 0.0.7 - 2025-12-24 - CRITICAL FIX: Correct config path to /config/0/enable
+#                    - Service enable status now works correctly
+#                    - Fixed all config_path_enabled() calls
+# 0.0.6 - 2025-12-24 - Fixed DHCP/ARP device auto-discovery
+#                    - Rewrote pc_get_dhcp_leases() to use ARP table directly
+#                    - Updated JavaScript to vanilla JS (no jQuery dependency)
+#                    - Added console logging for debugging
+# 0.0.5 - 2025-12-24 - FINAL FIX: Correct config path (no [0] element)
+# 0.0.4 - 2025-12-24 - Added debug logging to find correct path
+# 0.0.3 - 2025-12-24 - CRITICAL FIX: Service enable/disable now works correctly
+#                    - Fixed config path checking in all functions
+#                    - Added configpath to XML for proper pfSense integration
+# 0.0.2 - 2025-12-24 - Added DHCP/ARP device auto-discovery dropdown
+#                    - Auto-populate device info from network
+#                    - Fixed shell syntax errors in INSTALL.sh
+# 0.0.1 - 2025-12-24 - Initial release with profile-based device grouping
+#                    - Shared time accounting across devices
+#                    - OpenTelemetry logging
+#                    - Weekend bonus time
+#                    - Profile-wide schedules
+
+# Version Numbering Guide:
+# - MAJOR (00-99): Breaking changes, major features
+# - MINOR (00-99): New features, non-breaking changes
+# - PATCH (01-99): Bug fixes, .inc file updates
+#
+# Examples:
+# 0.0.1 → 0.0.2 (bug fix in .inc)
+# 0.0.99 → 0.1.0 (new feature added)
+# 0.99.99 → 1.0.0 (major release)
+
+# Next version will be: 0.0.2 (on next .inc update)
+

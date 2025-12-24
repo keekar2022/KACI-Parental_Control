@@ -1,0 +1,55 @@
+# Debug and Testing Files
+debug/
+*.debug.php
+*_test.php
+test_*.php
+check_*.php
+debug_*.php
+enable_service.php
+register_package*.php
+
+# Build and Deployment Scripts
+build-scripts/
+CREATE_RELEASE.sh
+VERIFY_DEPLOYMENT.sh
+QUICK_DEPLOY.sh
+install-production*.sh
+*_COMMANDS.txt
+
+# Documentation (Development/Internal)
+BEST_PRACTICES.md
+PUBLISHING_GUIDE.md
+PACKAGE_BUILD_GUIDE.md
+VERIFICATION_GUIDE.md
+DISTRIBUTION_SUMMARY.md
+PACKAGE_MANAGER_QUICKSTART.md
+GITHUB_README_TEMPLATE.md
+PACKAGE_FILES.txt
+PROJECT_STATUS.txt
+CLEANUP_COMPLETE.md
+*_SUMMARY.md
+*_STATUS.txt
+*_GUIDE.md
+
+# Temporary Files
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+.DS_Store
+
+# IDE Files
+.vscode/
+.idea/
+*.sublime-*
+
+# Backup Files
+*.backup
+backup/
+old/
+
+# Release Archives
+*.tar.gz
+*.zip
+releases/

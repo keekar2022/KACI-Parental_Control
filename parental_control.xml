@@ -1,0 +1,275 @@
+<?xml version="1.0" encoding="utf-8"?>
+<packagegui>
+	<title>Services/Keekar's Parental Control</title>
+	<name>KACI-Parental_Control</name>
+	<version>0.0.7</version>
+	<include_file>/usr/local/pkg/parental_control.inc</include_file>
+	<configpath>installedpackages/parentalcontrol/config/0</configpath>
+	
+	<!-- Menu entries -->
+	<menu>
+		<name>Keekar's Parental Control</name>
+		<tooltiptext>Configure parental control and time limits</tooltiptext>
+		<section>Services</section>
+		<url>/pkg_edit.php?xml=parental_control.xml&amp;id=0</url>
+	</menu>
+	
+	<!-- Tabs for navigation -->
+	<tabs>
+		<tab>
+			<text>Settings</text>
+			<url>/pkg_edit.php?xml=parental_control.xml&amp;id=0</url>
+			<active/>
+		</tab>
+		<tab>
+			<text>Profiles</text>
+			<url>/pkg.php?xml=parental_control_profiles.xml</url>
+		</tab>
+		<tab>
+			<text>Status</text>
+			<url>/parental_control_status.php</url>
+		</tab>
+	</tabs>
+	
+	<fields>
+		<!-- Service Description -->
+		<field>
+			<name>Parental Control Service</name>
+			<type>listtopic</type>
+		</field>
+		
+		<field>
+			<name>service_description</name>
+			<type>info</type>
+			<description>
+				<![CDATA[
+				<strong>Keekar's Parental Control</strong> helps you manage and limit children's internet access time.
+				<br/><br/>
+				<strong>Features:</strong>
+				<ul>
+					<li><strong>Time Limits:</strong> Set daily or weekly internet time limits per device</li>
+					<li><strong>Schedules:</strong> Block internet access during specific hours (bedtime, homework, etc.)</li>
+					<li><strong>Device Management:</strong> Track devices by MAC address for consistent control</li>
+					<li><strong>Grace Periods:</strong> Warning time before completely blocking access</li>
+					<li><strong>Real-time Monitoring:</strong> View current usage and remaining time</li>
+				</ul>
+				<br/>
+				<strong>How it works:</strong> This package creates and manages firewall rules based on time limits 
+				and schedules. When a device exceeds its time limit or enters a blocked period, all internet 
+				access is automatically blocked. LAN access remains available.
+				]]>
+			</description>
+		</field>
+		
+		<!-- Global Settings -->
+		<field>
+			<name>Global Settings</name>
+			<type>listtopic</type>
+		</field>
+		
+		<field>
+			<fielddescr>Enable Parental Control</fielddescr>
+			<fieldname>enable</fieldname>
+			<type>checkbox</type>
+			<description>Enable the Parental Control service</description>
+			<sethelp>
+				<![CDATA[
+				When enabled, the Parental Control service will monitor device usage and enforce 
+				time limits and schedules configured for child devices.
+				]]>
+			</sethelp>
+		</field>
+		
+		<field>
+			<fielddescr>Enforcement Mode</fielddescr>
+			<fieldname>enforcement_mode</fieldname>
+			<type>select</type>
+			<default_value>strict</default_value>
+			<options>
+				<option><name>Strict - Block all internet access</name><value>strict</value></option>
+				<option><name>Moderate - Block only web browsing</name><value>moderate</value></option>
+				<option><name>Soft - DNS-based blocking only</name><value>soft</value></option>
+			</options>
+			<description>Choose how strictly to enforce limits</description>
+			<sethelp>
+				<![CDATA[
+				<strong>Strict:</strong> Blocks all outbound internet traffic (except LAN access)<br/>
+				<strong>Moderate:</strong> Blocks HTTP/HTTPS but allows other services (email, games, etc.)<br/>
+				<strong>Soft:</strong> Only blocks DNS resolution (easier to bypass)
+				]]>
+			</sethelp>
+		</field>
+		
+		<field>
+			<fielddescr>Grace Period (minutes)</fielddescr>
+			<fieldname>grace_period</fieldname>
+			<type>input</type>
+			<size>10</size>
+			<default_value>5</default_value>
+			<description>Warning time before blocking access (0-30 minutes)</description>
+			<sethelp>
+				When a device approaches its time limit, show a warning page for this many minutes 
+				before completely blocking access. Set to 0 to disable warnings.
+			</sethelp>
+		</field>
+		
+		<field>
+			<fielddescr>Reset Time</fielddescr>
+			<fieldname>reset_time</fieldname>
+			<type>select</type>
+			<default_value>midnight</default_value>
+			<options>
+				<option><name>Midnight (00:00)</name><value>midnight</value></option>
+				<option><name>6:00 AM</name><value>06:00</value></option>
+				<option><name>7:00 AM</name><value>07:00</value></option>
+				<option><name>8:00 AM</name><value>08:00</value></option>
+			</options>
+			<description>Time when daily limits reset</description>
+		</field>
+		
+		<!-- Logging and Notifications -->
+		<field>
+			<name>Logging and Notifications</name>
+			<type>listtopic</type>
+		</field>
+		
+		<field>
+			<fielddescr>Enable Logging</fielddescr>
+			<fieldname>enable_logging</fieldname>
+			<type>checkbox</type>
+			<default_value>on</default_value>
+			<description>Log all parental control events</description>
+			<sethelp>
+				Logs when devices reach time limits, enter/exit blocked periods, and when rules are applied.
+			</sethelp>
+		</field>
+		
+		<field>
+			<fielddescr>Log Level</fielddescr>
+			<fieldname>log_level</fieldname>
+			<type>select</type>
+			<default_value>info</default_value>
+			<options>
+				<option><name>Debug - Very detailed</name><value>debug</value></option>
+				<option><name>Info - Normal events</name><value>info</value></option>
+				<option><name>Warning - Important events only</name><value>warning</value></option>
+			</options>
+			<description>Logging verbosity level</description>
+		</field>
+		
+		<field>
+			<fielddescr>Email Notifications</fielddescr>
+			<fieldname>enable_email</fieldname>
+			<type>checkbox</type>
+			<description>Send email notifications for events</description>
+			<sethelp>
+				Requires SMTP settings to be configured under System > Advanced > Notifications
+			</sethelp>
+		</field>
+		
+		<field>
+			<fielddescr>Email Recipients</fielddescr>
+			<fieldname>email_recipients</fieldname>
+			<type>input</type>
+			<size>60</size>
+			<description>Comma-separated email addresses (e.g., parent1@example.com, parent2@example.com)</description>
+		</field>
+		
+		<!-- Advanced Settings -->
+		<field>
+			<name>Advanced Settings</name>
+			<type>listtopic</type>
+		</field>
+		
+		<field>
+			<fielddescr>Check Interval (seconds)</fielddescr>
+			<fieldname>check_interval</fieldname>
+			<type>input</type>
+			<size>10</size>
+			<default_value>60</default_value>
+			<description>How often to check and update device status (30-300 seconds)</description>
+			<sethelp>
+				Lower values provide more responsive enforcement but use more system resources.
+				Recommended: 60 seconds.
+			</sethelp>
+		</field>
+		
+		<field>
+			<fielddescr>Blocked Page Message</fielddescr>
+			<fieldname>blocked_message</fieldname>
+			<type>textarea</type>
+			<rows>5</rows>
+			<cols>60</cols>
+			<default_value>Your internet time is up! Time to take a break and do other activities.</default_value>
+			<description>Custom message to display when access is blocked</description>
+		</field>
+		
+		<field>
+			<fielddescr>Whitelist (Always Allow)</fielddescr>
+			<fieldname>whitelist_sites</fieldname>
+			<type>textarea</type>
+			<rows>5</rows>
+			<cols>60</cols>
+			<description>Sites/IPs always accessible, one per line (e.g., educational sites, family services)</description>
+			<sethelp>
+				<![CDATA[
+				Enter domain names or IP addresses that should always be accessible, even when blocked.
+				Examples: khan-academy.org, classroom.google.com, 192.168.1.100<br/>
+				Use this for educational sites, school portals, and family communication tools.
+				]]>
+			</sethelp>
+		</field>
+		
+		<field>
+			<fielddescr>Override Password</fielddescr>
+			<fieldname>override_password</fieldname>
+			<type>password</type>
+			<size>30</size>
+			<description>Password for parents to temporarily override restrictions</description>
+			<sethelp>
+				Parents can enter this password on the blocked page to grant temporary access.
+			</sethelp>
+		</field>
+		
+		<field>
+			<fielddescr>Override Duration (minutes)</fielddescr>
+			<fieldname>override_duration</fieldname>
+			<type>input</type>
+			<size>10</size>
+			<default_value>30</default_value>
+			<description>How long override access lasts (1-240 minutes)</description>
+		</field>
+		
+	</fields>
+	
+	<!-- Custom PHP hooks -->
+	<custom_php_command_before_form>
+		parental_control_before_form();
+	</custom_php_command_before_form>
+	
+	<custom_php_validation_command>
+		parental_control_validate_input($_POST, $input_errors);
+	</custom_php_validation_command>
+	
+	<custom_php_resync_config_command>
+		parental_control_sync();
+	</custom_php_resync_config_command>
+	
+	<custom_php_install_command>
+		parental_control_install();
+	</custom_php_install_command>
+	
+	<custom_php_deinstall_command>
+		parental_control_deinstall();
+	</custom_php_deinstall_command>
+	
+	<custom_php_after_form_command>
+		echo '&lt;div style="text-align: center; margin-top: 20px; padding: 10px; border-top: 1px solid #ddd; color: #666; font-size: 12px;"&gt;';
+		echo '&lt;strong&gt;Keekar\'s Parental Control&lt;/strong&gt; v' . (defined('PC_VERSION') ? PC_VERSION : '0.0.7') . ' | ';
+		echo 'Built with Passion by &lt;strong&gt;Mukesh Kesharwani&lt;/strong&gt; | ';
+		echo '© ' . date('Y') . ' Keekar';
+		echo '&lt;/div&gt;';
+	</custom_php_after_form_command>
+	
+</packagegui>
+
