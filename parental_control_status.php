@@ -171,10 +171,19 @@ if (is_array($profiles)) {
 							$device_name = htmlspecialchars($device['device_name']);
 							$mac_display = htmlspecialchars($device['mac_address']);
 							
-							// Get usage from state (profile-based)
+							// Get usage from state (IP-based tracking since v0.2.1)
 							$usage_today = 0;
-							if (isset($state['profiles'][$profile['name']])) {
-								$usage_today = isset($state['profiles'][$profile['name']]['usage_today']) ? $state['profiles'][$profile['name']]['usage_today'] : 0;
+							$device_ip = null;
+							
+							// First, try to find IP from mac_to_ip_cache
+							if (isset($state['mac_to_ip_cache'][$mac])) {
+								$device_ip = $state['mac_to_ip_cache'][$mac];
+							}
+							
+							// If IP found, get usage from devices_by_ip
+							if ($device_ip && isset($state['devices_by_ip'][$device_ip])) {
+								$usage_today = isset($state['devices_by_ip'][$device_ip]['usage_today']) ? 
+									intval($state['devices_by_ip'][$device_ip]['usage_today']) : 0;
 							}
 							
 							// Calculate remaining time
@@ -279,13 +288,24 @@ if (is_array($profiles)) {
 	</div>
 	<div class="panel-body">
 		<?php
-		if (file_exists(PC_LOG_FILE)) {
-			$log_lines = array_slice(file(PC_LOG_FILE), -20);
+		// Get current log file (dated filename)
+		$current_log = pc_get_current_log_file();
+		
+		if (file_exists($current_log) && filesize($current_log) > 0) {
+			$log_lines = array_slice(file($current_log), -20);
 			$log_lines = array_reverse($log_lines);
 			?>
 			<pre style="max-height: 300px; overflow-y: auto;"><?php
 			foreach ($log_lines as $line) {
-				echo htmlspecialchars($line);
+				// Parse JSON and format nicely
+				$log_entry = json_decode($line, true);
+				if ($log_entry) {
+					$timestamp = isset($log_entry['Timestamp']) ? date('H:i:s', strtotime($log_entry['Timestamp'])) : '';
+					$body = isset($log_entry['Body']) ? $log_entry['Body'] : '';
+					echo htmlspecialchars($timestamp . ' | ' . $body) . "\n";
+				} else {
+					echo htmlspecialchars($line);
+				}
 			}
 			?></pre>
 		<?php } else { ?>
