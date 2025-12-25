@@ -315,26 +315,60 @@ function pc_is_device_enabled($device) {
  * $enabled_devices = pc_get_devices(true);
  */
 function pc_get_devices($enabled_only = false, $no_cache = false) {
-	// PERFORMANCE: Cache all devices to avoid repeated config_get_path calls
-	// WHY: Config reads can be expensive, especially with many devices
+	// CRITICAL FIX: Extract devices from profiles, not separate config section
+	// WHY: Devices are stored nested within profiles, not in a separate section
 	$cache_key = 'devices_all';
 	
+	$all_devices = [];
+	
 	if ($no_cache) {
-		$devices = config_get_path('installedpackages/parentalcontroldevices/config', []);
+		$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', []);
 	} else {
-		$devices = pc_get_cached($cache_key, function() {
-			return config_get_path('installedpackages/parentalcontroldevices/config', []);
+		$profiles = pc_get_cached($cache_key, function() {
+			return config_get_path('installedpackages/parentalcontrolprofiles/config', []);
 		}, 30);
 	}
 	
+	// Extract devices from all profiles
+	foreach ($profiles as $profile) {
+		// Check if profile is enabled
+		if (empty($profile['enabled']) || $profile['enabled'] !== 'on') {
+			continue; // Skip disabled profiles
+		}
+		
+		// Get devices from profile (normalize row to devices)
+		$profile_devices = [];
+		if (isset($profile['devices']) && is_array($profile['devices'])) {
+			$profile_devices = $profile['devices'];
+		} elseif (isset($profile['row']) && is_array($profile['row'])) {
+			$profile_devices = $profile['row'];
+		}
+		
+		// Add profile context to each device
+		foreach ($profile_devices as $device) {
+			// Skip empty rows
+			if (empty($device['mac_address'])) {
+				continue;
+			}
+			
+			// Add profile information to device
+			$device['profile_name'] = $profile['profile_name'] ?? $profile['name'] ?? 'Unknown';
+			$device['child_name'] = $profile['profile_name'] ?? $profile['name'] ?? 'Unknown';
+			$device['daily_limit'] = $profile['daily_limit'] ?? 0;
+			$device['weekend_bonus'] = $profile['weekend_bonus'] ?? 0;
+			$device['profile_enabled'] = $profile['enabled'] ?? 'off';
+			
+			$all_devices[] = $device;
+		}
+	}
+	
 	if (!$enabled_only) {
-		return $devices;
+		return $all_devices;
 	}
 	
 	// Filter to only enabled devices
-	// WHY: Don't cache filtered results separately to avoid cache bloat
 	$enabled_devices = array();
-	foreach ($devices as $device) {
+	foreach ($all_devices as $device) {
 		if (pc_is_device_enabled($device)) {
 			$enabled_devices[] = $device;
 		}
