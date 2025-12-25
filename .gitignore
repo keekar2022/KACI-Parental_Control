@@ -1,55 +1,47 @@
-# Debug and Testing Files
-debug/
-*.debug.php
-*_test.php
-test_*.php
-check_*.php
-debug_*.php
-enable_service.php
-register_package*.php
+# Parental Control - Git Ignore Rules
 
-# Build and Deployment Scripts
-build-scripts/
-CREATE_RELEASE.sh
-VERIFY_DEPLOYMENT.sh
-QUICK_DEPLOY.sh
-install-production*.sh
-*_COMMANDS.txt
+# State files (contain runtime data)
+/var/db/parental_control_state.json
+parental_control_state.json
 
-# Documentation (Development/Internal)
-BEST_PRACTICES.md
-PUBLISHING_GUIDE.md
-PACKAGE_BUILD_GUIDE.md
-VERIFICATION_GUIDE.md
-DISTRIBUTION_SUMMARY.md
-PACKAGE_MANAGER_QUICKSTART.md
-GITHUB_README_TEMPLATE.md
-PACKAGE_FILES.txt
-PROJECT_STATUS.txt
-CLEANUP_COMPLETE.md
-*_SUMMARY.md
-*_STATUS.txt
-*_GUIDE.md
+# Log files (contain sensitive usage data)
+/var/log/parental_control*.jsonl
+*.jsonl
 
-# Temporary Files
+# Configuration files (may contain sensitive settings)
+config/app/config.json
+backend/config.json
+
+# Temporary files
 *.tmp
-*.bak
 *.swp
 *.swo
 *~
-.DS_Store
 
-# IDE Files
+# IDE and editor files
 .vscode/
 .idea/
-*.sublime-*
+*.code-workspace
 
-# Backup Files
-*.backup
-backup/
-old/
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
 
-# Release Archives
-*.tar.gz
-*.zip
-releases/
+# Keep example files
+!*.example
+!config.example/
+!config.example/**
+
+# Build artifacts
+build/
+dist/
+
+# Credentials
+credentials.txt
+*.pem
+*.key
+*.crt
+
+# pfSense specific
+/cf/conf/config.xml.backup*

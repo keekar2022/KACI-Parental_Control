@@ -1,0 +1,42 @@
+{
+  "_comment": "This is an example template for the parental control state file.",
+  "_usage": "Copy this file to /var/db/parental_control_state.json to manually initialize state.",
+  "_note": "The system will create this file automatically on first run if it doesn't exist.",
+  
+  "devices": {
+    "aa:bb:cc:dd:ee:ff": {
+      "usage_today": 0,
+      "usage_week": 0,
+      "last_seen": 0,
+      "_description": "Device usage tracking by MAC address",
+      "_notes": "usage_today and usage_week are in minutes; last_seen is Unix timestamp"
+    }
+  },
+  
+  "profiles": {
+    "Emma": {
+      "usage_today": 0,
+      "usage_week": 0,
+      "last_reset": 1735084800,
+      "_description": "Profile usage tracking (shared across all devices in profile)",
+      "_notes": "last_reset is Unix timestamp of last daily reset"
+    }
+  },
+  
+  "last_reset": 1735084800,
+  "last_check": 1735084800,
+  
+  "_metadata": {
+    "version": "0.1.3",
+    "created": "2025-12-25T00:00:00Z",
+    "description": "Parental Control State File - tracks usage and timestamps"
+  },
+  
+  "_field_descriptions": {
+    "devices": "Per-device usage tracking keyed by MAC address",
+    "profiles": "Per-profile usage tracking (shared across profile devices)",
+    "last_reset": "Unix timestamp of last daily counter reset",
+    "last_check": "Unix timestamp of last cron job check"
+  }
+}
+

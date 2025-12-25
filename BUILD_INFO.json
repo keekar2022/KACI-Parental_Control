@@ -1,0 +1,181 @@
+{
+  "build_info": {
+    "version": "0.2.1",
+    "build_date": "2025-12-26T20:00:00Z",
+    "git_commit": "c9e1f2a",
+    "git_branch": "main",
+    "built_by": "development",
+    "build_environment": "local"
+  },
+  "runtime_info": {
+    "php_version_required": "8.1+",
+    "pfsense_version_required": "2.7.0+",
+    "freebsd_version_required": "13.0+"
+  },
+  "package_info": {
+    "name": "KACI-Parental_Control",
+    "full_name": "Keekar's Parental Control",
+    "author": "Mukesh Kesharwani",
+    "license": "Apache-2.0",
+    "repository": "https://github.com/keekar2022/KACI-Parental_Control"
+  },
+  "features": [
+    "Profile-based device grouping",
+    "Shared time accounting (bypass-proof)",
+    "Weekend bonus time",
+    "Flexible scheduling (bedtime, school hours, custom)",
+    "DHCP/ARP auto-discovery",
+    "OpenTelemetry logging",
+    "Automatic log rotation",
+    "Real-time status dashboard",
+    "Health check endpoint",
+    "Multiple enforcement modes",
+    "RESTful API for external integration",
+    "Performance caching (DHCP, config, state)",
+    "DRY helper functions for maintainability"
+  ],
+  "files": {
+    "core": [
+      "parental_control.inc",
+      "parental_control.xml",
+      "parental_control_profiles.xml",
+      "parental_control_status.php",
+      "parental_control_health.php",
+      "parental_control_api.php",
+      "info.xml"
+    ],
+    "documentation": [
+      "README.md",
+      "QUICKSTART.md",
+      "BEST_PRACTICES-KACI-ParentalControl.md",
+      "RECOMMENDATIONS_FOR_ADOPTION.md",
+      "VERSION",
+      "docs/API.md",
+      "docs/CONFIGURATION.md",
+      "docs/TROUBLESHOOTING.md"
+    ],
+    "installation": [
+      "INSTALL.sh"
+    ]
+  },
+  "deployment": {
+    "install_paths": {
+      "core_logic": "/usr/local/pkg/",
+      "web_files": "/usr/local/www/",
+      "metadata": "/usr/local/share/pfSense-pkg-KACI-Parental_Control/",
+      "logs": "/var/log/",
+      "state": "/var/db/",
+      "config": "/cf/conf/"
+    }
+  },
+  "changelog": [
+    {
+      "version": "0.2.1",
+      "date": "2025-12-26",
+      "type": "major",
+      "changes": [
+        "CRITICAL FIX: Real connection tracking using pfctl state table",
+        "CRITICAL FIX: Now tracks ACTUAL internet usage (not just network presence)",
+        "CRITICAL FIX: Devices with no active connections don't increment usage",
+        "NEW: PID lock mechanism prevents concurrent cron executions",
+        "NEW: IP address lookup from MAC address with caching",
+        "NEW: Log analyzer tool (parental_control_analyzer.sh)",
+        "NEW: Real-time log monitoring with colored output",
+        "NEW: Device-specific activity queries",
+        "NEW: System status checking (service, logs, state, cron)",
+        "IMPROVED: Proper interval calculation (matches cron schedule)",
+        "IMPROVED: Enhanced logging with connection counts",
+        "IMPROVED: Execution time tracking in cron job",
+        "PERFORMANCE: Connection tracking uses timeout (2 seconds)",
+        "PERFORMANCE: IP lookup caching within execution",
+        "RELIABILITY: Graceful degradation if state table query fails",
+        "ARCHITECTURE: State file path changed to .jsonl (JSONL format)",
+        "DIAGNOSTICS: Connection count stored in state file",
+        "BASED ON: MultiServiceLimiter proven implementation"
+      ]
+    },
+    {
+      "version": "0.1.4-hotfix2",
+      "date": "2025-12-26",
+      "type": "hotfix",
+      "changes": [
+        "CRITICAL BUGFIX: Fixed logging not working by default (opt-out vs opt-in)",
+        "BUGFIX: Auto-create log directory (/var/log/) if missing",
+        "BUGFIX: Auto-create state directory (/var/db/) if missing",
+        "BUGFIX: Added graceful error handling with syslog fallback",
+        "BUGFIX: Enhanced cron job setup with permission fix",
+        "NEW: Added diagnostic tool (parental_control_diagnostic.php)",
+        "NEW: Added TROUBLESHOOTING_USAGE_AND_LOGS.md guide",
+        "DOCS: Updated INSTALL.sh to include all new files and directories",
+        "DOCS: Added Quick Fix Guide in hotfix summary"
+      ]
+    },
+    {
+      "version": "0.1.4",
+      "date": "2025-12-25",
+      "type": "major",
+      "changes": [
+        "CRITICAL BUGFIX: Fixed PHP parse error in JSDoc (cron syntax */1)",
+        "DRY refactoring: Added 10+ reusable helper functions",
+        "Performance: Implemented caching system for expensive operations",
+        "Performance: Caching for DHCP leases, ARP lookups, config reads, state file",
+        "Performance: Automatic cache invalidation on data changes",
+        "API: Full RESTful API with authentication (parental_control_api.php)",
+        "API: Endpoints for devices, profiles, usage, status, override, block/unblock",
+        "API: API key authentication via X-API-Key header or query parameter",
+        "API: CORS support for external dashboards and mobile apps",
+        "API: Comprehensive documentation in docs/API.md",
+        "Helpers: pc_normalize_mac, pc_validate_mac, pc_validate_time",
+        "Helpers: pc_validate_numeric_range, pc_is_mac_unique",
+        "Helpers: pc_is_service_enabled, pc_is_device_enabled",
+        "Helpers: pc_get_devices, pc_get_profiles, pc_get_cached, pc_clear_cache",
+        "Code Quality: Eliminated code duplication across 20+ locations",
+        "Maintainability: Centralized validation and config access logic"
+      ]
+    },
+    {
+      "version": "0.1.3",
+      "date": "2025-12-25",
+      "type": "minor",
+      "changes": [
+        "Added health check endpoint for monitoring",
+        "Implemented automatic log rotation (5MB per file, keep 10)",
+        "Enhanced JSDoc documentation for all functions",
+        "Created configuration example files",
+        "Implemented graceful degradation patterns",
+        "Added try-catch blocks to critical functions",
+        "Improved inline comments explaining 'why' not 'what'",
+        "Created Quick Start guide",
+        "DRY refactoring - extracted reusable functions",
+        "Performance optimizations (caching, batching)",
+        "Added environment variable support",
+        "Enhanced console logging with emojis",
+        "Added BUILD_INFO.json tracking"
+      ]
+    },
+    {
+      "version": "0.1.2",
+      "date": "2025-12-24",
+      "changes": [
+        "Version sync across all files",
+        "Minor bug fixes"
+      ]
+    },
+    {
+      "version": "0.1.0",
+      "date": "2025-12-24",
+      "changes": [
+        "Backend parsing of device_selector dropdown",
+        "Profile-based device management",
+        "OpenTelemetry logging implementation",
+        "Initial release"
+      ]
+    }
+  ],
+  "_metadata": {
+    "generated": "2025-12-25T00:00:00Z",
+    "generator": "KACI-Parental_Control Build System",
+    "format_version": "1.0"
+  }
+}
+

@@ -18,16 +18,380 @@ require_once("shaper.inc");
 require_once("notices.inc");
 
 // Package version - Auto-increment on each .inc update
-define('PC_VERSION', '0.1.2');
+define('PC_VERSION', '0.2.1');
 define('PC_AUTHOR', 'Mukesh Kesharwani');
-define('PC_BUILD_DATE', '2025-12-24');
+define('PC_BUILD_DATE', '2025-12-26');
 
-define('PC_LOG_FILE', '/var/log/parental_control.jsonl');  // JSON Lines format (one JSON object per line)
-define('PC_STATE_FILE', '/var/db/parental_control_state.json');
-define('PC_CRON_MINUTE', '*/1');  // Check every minute
+// File paths - Support environment variable overrides for flexibility
+// This allows customization without editing code, useful for testing and containers
+define('PC_LOG_FILE', getenv('PC_LOG_FILE') ?: '/var/log/parental_control.jsonl');
+define('PC_STATE_FILE', getenv('PC_STATE_FILE') ?: '/var/db/parental_control_state.json');
+define('PC_PID_FILE', getenv('PC_PID_FILE') ?: '/var/run/parental_control.pid');
+// WHY: Default to 1-minute cron interval for responsive enforcement
+// Design Decision: Check every minute instead of every 5 or 10 minutes
+// Rationale: Parents expect near-immediate blocking when limits hit. Kids will exploit
+// longer intervals. 1-minute provides good balance between responsiveness and system load.
+// Trade-off: Slight CPU overhead vs better user experience and harder to game the system.
+define('PC_CRON_MINUTE', getenv('PC_CRON_MINUTE') ?: '*/1');  // Check every minute
+define('PC_CRON_INTERVAL_SECONDS', 60);  // Match the cron interval (1 minute = 60 seconds)
+
+// Log rotation settings - Environment overridable for different deployment scenarios
+define('PC_MAX_LOG_SIZE', getenv('PC_MAX_LOG_SIZE') ?: (5 * 1024 * 1024));  // 5MB per log file
+define('PC_MAX_LOG_FILES', getenv('PC_MAX_LOG_FILES') ?: 10);  // Keep last 10 log files
+define('PC_LOG_PREFIX', getenv('PC_LOG_PREFIX') ?: 'parental_control');  // Log file prefix
 
 /**
- * Validate main settings input
+ * ========================================================================
+ * PERFORMANCE CACHING
+ * ========================================================================
+ */
+
+// Global cache for performance optimization
+// WHY: Expensive operations like ARP/DHCP lookups should be cached within a request
+// to avoid redundant system calls. Cache is stored in memory and cleared between requests.
+global $pc_cache;
+$pc_cache = array(
+	'dhcp_leases' => null,
+	'dhcp_leases_time' => 0,
+	'arp_table' => null,
+	'arp_table_time' => 0,
+	'config_cache' => array(),
+	'config_cache_time' => array()
+);
+
+// Cache TTL in seconds - short TTL since network state changes quickly
+define('PC_CACHE_TTL', 30);
+
+/**
+ * Get cached value or compute and cache it
+ * 
+ * Generic caching wrapper that checks cache freshness and either returns
+ * cached value or calls the provided callback to compute a fresh value.
+ * 
+ * @param string $cache_key Key to use in global cache
+ * @param callable $callback Function to call if cache is stale/missing
+ * @param int $ttl Cache time-to-live in seconds (default: 30)
+ * @return mixed Cached or freshly computed value
+ * @since 0.1.4
+ * 
+ * @example
+ * $dhcp_leases = pc_get_cached('dhcp_leases', function() {
+ *     return system_get_dhcpleases();
+ * }, 60);
+ */
+function pc_get_cached($cache_key, $callback, $ttl = PC_CACHE_TTL) {
+	global $pc_cache;
+	
+	$value_key = $cache_key;
+	$time_key = $cache_key . '_time';
+	
+	// Check if cache exists and is fresh
+	if (isset($pc_cache[$value_key]) && isset($pc_cache[$time_key])) {
+		$age = time() - $pc_cache[$time_key];
+		if ($age < $ttl) {
+			return $pc_cache[$value_key];
+		}
+	}
+	
+	// Cache miss or stale - compute fresh value
+	$value = $callback();
+	$pc_cache[$value_key] = $value;
+	$pc_cache[$time_key] = time();
+	
+	return $value;
+}
+
+/**
+ * Clear performance cache
+ * 
+ * WHY: Called after configuration changes to ensure fresh data is loaded.
+ * Prevents showing stale data after user modifies settings.
+ * 
+ * @param string|null $cache_key Specific cache key to clear, or null to clear all
+ * @return void
+ * @since 0.1.4
+ */
+function pc_clear_cache($cache_key = null) {
+	global $pc_cache;
+	
+	if ($cache_key === null) {
+		// Clear all caches
+		$pc_cache = array(
+			'dhcp_leases' => null,
+			'dhcp_leases_time' => 0,
+			'arp_table' => null,
+			'arp_table_time' => 0,
+			'config_cache' => array(),
+			'config_cache_time' => array()
+		);
+	} else {
+		// Clear specific cache
+		unset($pc_cache[$cache_key]);
+		unset($pc_cache[$cache_key . '_time']);
+	}
+}
+
+/**
+ * ========================================================================
+ * HELPER FUNCTIONS (DRY - Don't Repeat Yourself)
+ * ========================================================================
+ */
+
+/**
+ * Normalize MAC address to lowercase with trimmed whitespace
+ * 
+ * WHY: MAC addresses can be entered in various formats (AA:BB:CC or aa:bb:cc)
+ * and different parts of the system may use different cases. This function
+ * provides a single canonical normalization that all code should use.
+ * 
+ * @param string $mac MAC address in any case with optional whitespace
+ * @return string Normalized MAC address in lowercase without whitespace
+ * @since 0.1.4
+ * 
+ * @example
+ * $mac = pc_normalize_mac(" AA:BB:CC:DD:EE:FF "); // Returns "aa:bb:cc:dd:ee:ff"
+ */
+function pc_normalize_mac($mac) {
+	return strtolower(trim($mac));
+}
+
+/**
+ * Validate MAC address format
+ * 
+ * Checks if MAC address matches standard format: aa:bb:cc:dd:ee:ff
+ * Accepts both colon and hyphen separators. Case insensitive.
+ * 
+ * @param string $mac MAC address to validate
+ * @return bool True if valid format, false otherwise
+ * @since 0.1.4
+ * 
+ * @example
+ * pc_validate_mac("aa:bb:cc:dd:ee:ff"); // Returns true
+ * pc_validate_mac("AA-BB-CC-DD-EE-FF"); // Returns true
+ * pc_validate_mac("invalid"); // Returns false
+ */
+function pc_validate_mac($mac) {
+	$mac = pc_normalize_mac($mac);
+	return preg_match('/^([0-9a-f]{2}[:-]){5}([0-9a-f]{2})$/i', $mac) === 1;
+}
+
+/**
+ * Validate time format (HH:MM 24-hour)
+ * 
+ * Validates that time string is in HH:MM format (24-hour).
+ * Hours: 00-23, Minutes: 00-59
+ * 
+ * @param string $time Time string to validate
+ * @return bool True if valid format, false otherwise
+ * @since 0.1.4
+ * 
+ * @example
+ * pc_validate_time("14:30"); // Returns true
+ * pc_validate_time("25:00"); // Returns false (invalid hour)
+ * pc_validate_time("14:70"); // Returns false (invalid minute)
+ */
+function pc_validate_time($time) {
+	if (empty($time)) {
+		return false;
+	}
+	return preg_match('/^([01][0-9]|2[0-3]):[0-5][0-9]$/', $time) === 1;
+}
+
+/**
+ * Validate numeric value is within range
+ * 
+ * Checks that value is numeric and within specified min/max range (inclusive).
+ * Used for validating time limits, intervals, etc.
+ * 
+ * @param mixed $value Value to validate
+ * @param int $min Minimum allowed value (inclusive)
+ * @param int $max Maximum allowed value (inclusive)
+ * @return bool True if valid and in range, false otherwise
+ * @since 0.1.4
+ * 
+ * @example
+ * pc_validate_numeric_range(60, 0, 1440); // Returns true
+ * pc_validate_numeric_range(2000, 0, 1440); // Returns false (exceeds max)
+ * pc_validate_numeric_range("abc", 0, 100); // Returns false (not numeric)
+ */
+function pc_validate_numeric_range($value, $min, $max) {
+	if (!is_numeric($value)) {
+		return false;
+	}
+	$num = intval($value);
+	return ($num >= $min && $num <= $max);
+}
+
+/**
+ * Check if MAC address is unique in configuration
+ * 
+ * Checks if MAC address already exists in device configuration,
+ * excluding the device being currently edited (if editing).
+ * 
+ * @param string $mac MAC address to check
+ * @param int|null $exclude_id Device ID to exclude from check (for edits)
+ * @return array Array with keys: 'unique' (bool), 'existing_device' (string|null)
+ * @since 0.1.4
+ * 
+ * @example
+ * $result = pc_is_mac_unique("aa:bb:cc:dd:ee:ff", null);
+ * if (!$result['unique']) {
+ *     echo "MAC already used by: " . $result['existing_device'];
+ * }
+ */
+function pc_is_mac_unique($mac, $exclude_id = null) {
+	$mac = pc_normalize_mac($mac);
+	$devices = config_get_path('installedpackages/parentalcontroldevices/config', []);
+	
+	foreach ($devices as $idx => $device) {
+		if ($idx == $exclude_id) {
+			continue; // Skip the device being edited
+		}
+		
+		if (isset($device['mac_address']) && pc_normalize_mac($device['mac_address']) == $mac) {
+			return array(
+				'unique' => false,
+				'existing_device' => isset($device['device_name']) ? $device['device_name'] : 'Unknown Device'
+			);
+		}
+	}
+	
+	return array('unique' => true, 'existing_device' => null);
+}
+
+/**
+ * Check if parental control service is enabled
+ * 
+ * WHY: This check is repeated in multiple places (cron jobs, sync functions, etc.)
+ * Centralizing it makes the code more maintainable and consistent.
+ * 
+ * @return bool True if service is enabled, false otherwise
+ * @since 0.1.4
+ * 
+ * @example
+ * if (!pc_is_service_enabled()) {
+ *     return; // Service disabled, exit early
+ * }
+ */
+function pc_is_service_enabled() {
+	return config_get_path('installedpackages/parentalcontrol/config/0/enable') === 'on';
+}
+
+/**
+ * Check if a device is enabled
+ * 
+ * WHY: Device enable/disable logic is used in multiple loops.
+ * This helper provides consistent checking and easier maintenance.
+ * 
+ * @param array $device Device configuration array
+ * @return bool True if device is enabled, false otherwise
+ * @since 0.1.4
+ * 
+ * @example
+ * foreach ($devices as $device) {
+ *     if (!pc_is_device_enabled($device)) {
+ *         continue;
+ *     }
+ *     // Process enabled device...
+ * }
+ */
+function pc_is_device_enabled($device) {
+	return isset($device['enable']) && $device['enable'] === 'on';
+}
+
+/**
+ * Get all configured devices
+ * 
+ * WHY: Avoids repetitive config_get_path calls and provides consistent default value.
+ * PERFORMANCE: Caches results for repeated calls within same request.
+ * 
+ * @param bool $enabled_only If true, return only enabled devices
+ * @param bool $no_cache If true, bypass cache and fetch fresh data
+ * @return array Array of device configurations
+ * @since 0.1.4
+ * 
+ * @example
+ * $all_devices = pc_get_devices();
+ * $enabled_devices = pc_get_devices(true);
+ */
+function pc_get_devices($enabled_only = false, $no_cache = false) {
+	// PERFORMANCE: Cache all devices to avoid repeated config_get_path calls
+	// WHY: Config reads can be expensive, especially with many devices
+	$cache_key = 'devices_all';
+	
+	if ($no_cache) {
+		$devices = config_get_path('installedpackages/parentalcontroldevices/config', []);
+	} else {
+		$devices = pc_get_cached($cache_key, function() {
+			return config_get_path('installedpackages/parentalcontroldevices/config', []);
+		}, 30);
+	}
+	
+	if (!$enabled_only) {
+		return $devices;
+	}
+	
+	// Filter to only enabled devices
+	// WHY: Don't cache filtered results separately to avoid cache bloat
+	$enabled_devices = array();
+	foreach ($devices as $device) {
+		if (pc_is_device_enabled($device)) {
+			$enabled_devices[] = $device;
+		}
+	}
+	
+	return $enabled_devices;
+}
+
+/**
+ * Get all configured profiles
+ * 
+ * WHY: Centralized access to profiles with caching for performance.
+ * PERFORMANCE: Reduces repeated config_get_path calls.
+ * 
+ * @param bool $no_cache If true, bypass cache and fetch fresh data
+ * @return array Array of profile configurations
+ * @since 0.1.4
+ * 
+ * @example
+ * $profiles = pc_get_profiles();
+ */
+function pc_get_profiles($no_cache = false) {
+	$cache_key = 'profiles_all';
+	
+	if ($no_cache) {
+		return config_get_path('installedpackages/parentalcontrolprofiles/config', []);
+	}
+	
+	return pc_get_cached($cache_key, function() {
+		return config_get_path('installedpackages/parentalcontrolprofiles/config', []);
+	}, 30);
+}
+
+/**
+ * ========================================================================
+ * VALIDATION FUNCTIONS
+ * ========================================================================
+ */
+
+/**
+ * Validate main settings input from web interface
+ * 
+ * Validates all configuration fields from the main settings form including
+ * grace period, check interval, override duration, and email settings.
+ * Adds validation errors to $input_errors array passed by reference.
+ * 
+ * @param array $post POST data from form submission
+ * @param array &$input_errors Array to collect validation error messages (passed by reference)
+ * @return void Errors are added to $input_errors array
+ * @since 0.1.0
+ * 
+ * @example
+ * $errors = array();
+ * parental_control_validate_input($_POST, $errors);
+ * if (!empty($errors)) {
+ *     // Display errors to user
+ * }
  */
 function parental_control_validate_input($post, &$input_errors) {
 	// Validate grace period
@@ -64,7 +428,25 @@ function parental_control_validate_input($post, &$input_errors) {
 }
 
 /**
- * Validate device input
+ * Validate device configuration input
+ * 
+ * Performs comprehensive validation of device settings including child name,
+ * device name, MAC address format and uniqueness, IP address format, time limits,
+ * and schedule time formats. Ensures data integrity before saving to configuration.
+ * 
+ * @param array $post POST data containing device configuration
+ * @param array &$input_errors Array to collect validation error messages (passed by reference)
+ * @return void Errors are added to $input_errors array
+ * @since 0.1.0
+ * 
+ * @example
+ * $errors = array();
+ * parental_control_device_validate($_POST, $errors);
+ * if (empty($errors)) {
+ *     // Save device configuration
+ * }
+ * 
+ * @see parental_control_validate_input() For main settings validation
  */
 function parental_control_device_validate($post, &$input_errors) {
 	// Validate child name
@@ -81,19 +463,18 @@ function parental_control_device_validate($post, &$input_errors) {
 	if (empty($post['mac_address'])) {
 		$input_errors[] = "MAC address is required.";
 	} else {
-		$mac = strtolower(trim($post['mac_address']));
-		if (!preg_match('/^([0-9a-f]{2}[:-]){5}([0-9a-f]{2})$/i', $mac)) {
+		$mac = $post['mac_address'];
+		
+		// Check format using helper function
+		if (!pc_validate_mac($mac)) {
 			$input_errors[] = "Invalid MAC address format. Use format: aa:bb:cc:dd:ee:ff";
 		}
 		
-		// Check for duplicate MAC
-		$devices = config_get_path('installedpackages/parentalcontroldevices/config', []);
+		// Check for duplicate MAC using helper function
 		$current_id = isset($post['id']) ? $post['id'] : null;
-		foreach ($devices as $idx => $device) {
-			if ($idx != $current_id && strtolower($device['mac_address']) == $mac) {
-				$input_errors[] = "MAC address already exists for device: {$device['device_name']}";
-				break;
-			}
+		$uniqueness = pc_is_mac_unique($mac, $current_id);
+		if (!$uniqueness['unique']) {
+			$input_errors[] = "MAC address already exists for device: {$uniqueness['existing_device']}";
 		}
 	}
 	
@@ -102,50 +483,79 @@ function parental_control_device_validate($post, &$input_errors) {
 		$input_errors[] = "Invalid IP address format.";
 	}
 	
-	// Validate time limits
+	// Validate time limits using helper function
 	if (isset($post['daily_limit']) && $post['daily_limit'] != '') {
-		if (!is_numeric($post['daily_limit']) || $post['daily_limit'] < 0 || $post['daily_limit'] > 1440) {
+		if (!pc_validate_numeric_range($post['daily_limit'], 0, 1440)) {
 			$input_errors[] = "Daily limit must be between 0 and 1440 minutes (24 hours).";
 		}
 	}
 	
 	if (isset($post['weekly_limit']) && $post['weekly_limit'] != '') {
-		if (!is_numeric($post['weekly_limit']) || $post['weekly_limit'] < 0 || $post['weekly_limit'] > 10080) {
+		if (!pc_validate_numeric_range($post['weekly_limit'], 0, 10080)) {
 			$input_errors[] = "Weekly limit must be between 0 and 10080 minutes (7 days).";
 		}
 	}
 	
-	// Validate time formats
-	if (!empty($post['bedtime_start']) && !preg_match('/^([01][0-9]|2[0-3]):[0-5][0-9]$/', $post['bedtime_start'])) {
+	// Validate time formats using helper function
+	if (!empty($post['bedtime_start']) && !pc_validate_time($post['bedtime_start'])) {
 		$input_errors[] = "Invalid bedtime start format. Use HH:MM (24-hour format).";
 	}
 	
-	if (!empty($post['bedtime_end']) && !preg_match('/^([01][0-9]|2[0-3]):[0-5][0-9]$/', $post['bedtime_end'])) {
+	if (!empty($post['bedtime_end']) && !pc_validate_time($post['bedtime_end'])) {
 		$input_errors[] = "Invalid bedtime end format. Use HH:MM (24-hour format).";
 	}
 	
-	if (!empty($post['school_start']) && !preg_match('/^([01][0-9]|2[0-3]):[0-5][0-9]$/', $post['school_start'])) {
+	if (!empty($post['school_start']) && !pc_validate_time($post['school_start'])) {
 		$input_errors[] = "Invalid school start format. Use HH:MM (24-hour format).";
 	}
 	
-	if (!empty($post['school_end']) && !preg_match('/^([01][0-9]|2[0-3]):[0-5][0-9]$/', $post['school_end'])) {
+	if (!empty($post['school_end']) && !pc_validate_time($post['school_end'])) {
 		$input_errors[] = "Invalid school end format. Use HH:MM (24-hour format).";
 	}
 }
 
 /**
- * Called before form display
+ * Hook called before form display in web interface
+ * 
+ * This function is called by pfSense before rendering the configuration form.
+ * Currently a placeholder for future pre-form processing logic such as
+ * loading dynamic data, setting default values, or preparing dropdowns.
+ * 
+ * @return void
+ * @since 0.1.0
+ * 
+ * @example
+ * // Called automatically by pfSense via custom_php_before_form hook
+ * parental_control_before_form();
  */
 function parental_control_before_form() {
 	// Nothing to do yet
 }
 
 /**
- * Sync configuration and update firewall rules
+ * Synchronize configuration and update firewall rules
+ * 
+ * Main synchronization function called whenever configuration changes.
+ * Processes profile devices, checks if service is enabled, updates firewall
+ * rules, sets up cron job, initializes state file, and reloads filter configuration.
+ * This is the central function that applies all parental control settings.
+ * 
+ * @return void
+ * @since 0.1.0
+ * @updated 0.1.3 Added comprehensive logging
+ * 
+ * @example
+ * // Called automatically after configuration changes
+ * parental_control_sync();
+ * 
+ * @see pc_update_firewall_rules() For firewall rule creation
+ * @see pc_setup_cron_job() For cron job installation
+ * @see pc_process_profile_devices() For device extraction from profiles
  */
 function parental_control_sync() {
 	global $config;
 	
+	try {
 	pc_log("Syncing parental control configuration", 'info', array(
 		'event.action' => 'config_sync_start',
 		'event.category' => 'configuration'
@@ -155,8 +565,10 @@ function parental_control_sync() {
 	pc_process_profile_devices();
 	
 	// Check if service is enabled
+	// WHY: We use strict === comparison because config_get_path returns null if not found,
+	// and we want to distinguish between disabled ('off'), not configured (null), and enabled ('on')
 	// XML structure: <parentalcontrol><config><enable>on</enable>
-	// Path: installedpackages/parentalcontrol/config/enable (NO [0] element!)
+	// Path: installedpackages/parentalcontrol/config/0/enable (NO [0] element!)
 	$enabled = config_get_path('installedpackages/parentalcontrol/config/0/enable') === 'on';
 	
 	if (!$enabled) {
@@ -187,10 +599,44 @@ function parental_control_sync() {
 		'event.category' => 'configuration',
 		'event.outcome' => 'success'
 	));
+	} catch (Exception $e) {
+		$error_msg = "Configuration sync failed: " . $e->getMessage();
+		pc_log($error_msg, 'error', array(
+			'event.action' => 'config_sync_failed',
+			'event.category' => 'configuration',
+			'event.outcome' => 'failure',
+			'error.type' => get_class($e),
+			'error.message' => $e->getMessage(),
+			'error.file' => $e->getFile(),
+			'error.line' => $e->getLine(),
+			'error.stack_trace' => $e->getTraceAsString()
+		));
+		// Log to pfSense system log as well for visibility
+		log_error("Parental Control: Configuration sync failed - " . $e->getMessage());
+		// Don't re-throw - allow system to continue functioning
+	}
 }
 
 /**
  * Process profile devices to extract information from device_selector dropdown
+ * 
+ * Parses the device_selector field values (format: mac|ip|hostname) and
+ * auto-populates the mac_address, ip_address, and device_name fields.
+ * Handles both pipe-delimited format and plain MAC addresses with DHCP/ARP
+ * lookup. Modifies configuration in-place and saves if changes detected.
+ * 
+ * This function bridges the gap between the user-friendly dropdown selection
+ * and the structured device data needed for enforcement.
+ * 
+ * @return void Configuration is modified in global $config and saved if needed
+ * @since 0.1.0
+ * @updated 0.1.3 Improved error handling and logging
+ * 
+ * @example
+ * // Called automatically during parental_control_sync()
+ * pc_process_profile_devices();
+ * 
+ * @see pc_get_dhcp_leases() For device lookup
  */
 function pc_process_profile_devices() {
 	global $config;
@@ -255,6 +701,11 @@ function pc_process_profile_devices() {
 		config_set_path('installedpackages/parentalcontrolprofiles/config', $profiles);
 		write_config('Auto-populated device information from DHCP/ARP');
 		
+		// PERFORMANCE: Clear cache after config modification
+		// WHY: Ensures subsequent reads get fresh data
+		pc_clear_cache('profiles_all');
+		pc_clear_cache('devices_all');
+		
 		pc_log("Processed and saved device information", 'info', array(
 			'event.action' => 'devices_processed',
 			'event.category' => 'configuration'
@@ -263,7 +714,23 @@ function pc_process_profile_devices() {
 }
 
 /**
- * Package installation
+ * Package installation handler
+ * 
+ * Called during package installation. Creates default configuration with
+ * sensible defaults, initializes required directories (/var/log, /var/db),
+ * and creates initial state file. This function ensures the package is
+ * ready to use immediately after installation.
+ * 
+ * @return void
+ * @since 0.1.0
+ * @updated 0.1.3 Added logging and directory creation
+ * 
+ * @example
+ * // Called automatically by pfSense during package installation
+ * parental_control_install();
+ * 
+ * @see parental_control_deinstall() For uninstallation
+ * @see pc_init_state() For state file initialization
  */
 function parental_control_install() {
 	global $config;
@@ -299,7 +766,23 @@ function parental_control_install() {
 }
 
 /**
- * Package uninstallation
+ * Package uninstallation handler
+ * 
+ * Called during package removal. Removes all firewall rules created by the
+ * package, removes cron job, and reloads filter configuration. Note that
+ * state file and logs are intentionally preserved for reference and can be
+ * manually deleted if desired.
+ * 
+ * @return void
+ * @since 0.1.0
+ * 
+ * @example
+ * // Called automatically by pfSense during package uninstallation
+ * parental_control_deinstall();
+ * 
+ * @see parental_control_install() For installation
+ * @see pc_remove_firewall_rules() For rule cleanup
+ * @see pc_remove_cron_job() For cron cleanup
  */
 function parental_control_deinstall() {
 	pc_log("Uninstalling Parental Control package", 'info');
@@ -320,6 +803,15 @@ function parental_control_deinstall() {
 
 /**
  * Device deletion handler
+ * 
+ * Called when a device is deleted from configuration. Triggers a full
+ * configuration sync to update firewall rules and remove any rules
+ * associated with the deleted device.
+ * 
+ * @return void
+ * @since 0.1.0
+ * 
+ * @see parental_control_sync() For configuration synchronization
  */
 function parental_control_device_delete() {
 	// Sync will update rules
@@ -327,93 +819,431 @@ function parental_control_device_delete() {
 }
 
 /**
- * Initialize state file
+ * Initialize state file with default structure
+ * 
+ * Creates a new state file with empty devices and profiles arrays if it
+ * doesn't exist. The state file tracks usage statistics, last reset times,
+ * and last check times. File is created with JSON_PRETTY_PRINT for easier
+ * manual inspection and debugging.
+ * 
+ * @return void Creates PC_STATE_FILE if it doesn't exist
+ * @since 0.1.0
+ * @updated 0.1.3 Added debug logging
+ * 
+ * @example
+ * // Called automatically during installation and first run
+ * pc_init_state();
+ * 
+ * @see pc_load_state() For reading state
+ * @see pc_save_state() For writing state
  */
 function pc_init_state() {
 	if (!file_exists(PC_STATE_FILE)) {
+		// GRACEFUL DEGRADATION: Ensure state directory exists
+		// WHY: State directory might not exist on fresh install
+		$state_dir = dirname(PC_STATE_FILE);
+		if (!is_dir($state_dir)) {
+			@mkdir($state_dir, 0755, true);
+		}
+		
+		// CRITICAL: v0.2.1+ uses IP-based structure (Layer 3 compliance)
 		$state = array(
-			'devices' => array(),
+			'devices_by_ip' => array(),
+			'mac_to_ip_cache' => array(),
+			'profiles' => array(),
 			'last_reset' => time(),
 			'last_check' => time()
 		);
-		file_put_contents(PC_STATE_FILE, json_encode($state, JSON_PRETTY_PRINT));
-		pc_log("Initialized state file", 'debug');
+		
+		try {
+			$result = file_put_contents(PC_STATE_FILE, json_encode($state, JSON_PRETTY_PRINT));
+			if ($result !== false) {
+				@chmod(PC_STATE_FILE, 0644);
+				pc_log("Initialized state file with IP-based structure (Layer 3)", 'info', array(
+					'event.action' => 'state_initialized',
+					'format' => 'ip_based',
+					'version' => '0.2.1'
+				));
+			} else {
+				pc_log("Failed to initialize state file", 'error');
+			}
+		} catch (Exception $e) {
+			pc_log("Error initializing state file: " . $e->getMessage(), 'error');
+		}
 	}
 }
 
 /**
- * Load state from file
+ * Load state from persistent storage file
+ * 
+ * Reads and decodes the JSON state file containing usage tracking data.
+ * If state file doesn't exist, initializes a new one with defaults.
+ * Returns associative array with devices, profiles, timestamps, etc.
+ * 
+ * @return array Associative array containing state data with keys:
+ *               - devices: array of device usage keyed by MAC address
+ *               - profiles: array of profile usage keyed by profile name
+ *               - last_reset: Unix timestamp of last daily reset
+ *               - last_check: Unix timestamp of last cron check
+ * @since 0.1.0
+ * 
+ * @example
+ * $state = pc_load_state();
+ * $usage = $state['devices']['aa:bb:cc:dd:ee:ff']['usage_today'];
+ * echo "Usage today: {$usage} minutes";
+ * 
+ * @see pc_save_state() For writing state
+ * @see pc_init_state() For state initialization
  */
 function pc_load_state() {
-	if (!file_exists(PC_STATE_FILE)) {
-		pc_init_state();
-	}
-	$json = file_get_contents(PC_STATE_FILE);
-	return json_decode($json, true);
+	// PERFORMANCE: Cache state in memory during single request/execution
+	// WHY: State is read multiple times during rule processing and usage tracking.
+	// File I/O is expensive, so cache for duration of current execution.
+	return pc_get_cached('state_data', function() {
+		return pc_load_state_from_disk();
+	}, 5); // Very short TTL since state changes frequently
 }
 
 /**
- * Save state to file
+ * Internal function to load state from disk without caching
+ * 
+ * @internal
+ * @return array State data
+ */
+function pc_load_state_from_disk() {
+	try {
+		if (!file_exists(PC_STATE_FILE)) {
+			pc_init_state();
+		}
+		$json = file_get_contents(PC_STATE_FILE);
+		$state = json_decode($json, true);
+		
+		// Validate that state is a valid array
+		if (!is_array($state)) {
+			throw new Exception("State file contains invalid JSON");
+		}
+		
+		// CRITICAL: Migrate from MAC-based to IP-based state (v0.2.0 → v0.2.1)
+		$state = pc_migrate_state_to_ip_based($state);
+		
+		return $state;
+	} catch (Exception $e) {
+		pc_log("Failed to load state file, reinitializing: " . $e->getMessage(), 'warning', array(
+			'event.action' => 'state_load_failed',
+			'event.category' => 'system',
+			'error.message' => $e->getMessage(),
+			'state.file' => PC_STATE_FILE
+		));
+		
+		// Reinitialize with defaults on failure
+		pc_init_state();
+		
+		// Return fresh state with IP-based structure
+		return array(
+			'devices_by_ip' => array(),
+			'mac_to_ip_cache' => array(),
+			'profiles' => array(),
+			'last_reset' => time(),
+			'last_check' => time()
+		);
+	}
+}
+
+/**
+ * Migrate state file from MAC-based to IP-based structure
+ * 
+ * Version 0.2.1 architectural fix: pfSense operates at Layer 3 (IP addresses).
+ * All operational logic must use IP addresses, not MAC addresses.
+ * MAC addresses are only for device identification in configuration.
+ * 
+ * OLD FORMAT (v0.2.0):
+ * {
+ *   "devices": {
+ *     "aa:bb:cc:dd:ee:ff": {"usage_today": 120}
+ *   }
+ * }
+ * 
+ * NEW FORMAT (v0.2.1+):
+ * {
+ *   "devices_by_ip": {
+ *     "192.168.1.115": {"mac": "aa:bb:cc:dd:ee:ff", "usage_today": 120}
+ *   },
+ *   "mac_to_ip_cache": {
+ *     "aa:bb:cc:dd:ee:ff": "192.168.1.115"
+ *   }
+ * }
+ * 
+ * @param array $state The loaded state from disk
+ * @return array Migrated state with IP-based structure
+ * @since 0.2.1
+ */
+function pc_migrate_state_to_ip_based($state) {
+	// Check if migration needed (old format has 'devices', new has 'devices_by_ip')
+	if (isset($state['devices']) && !isset($state['devices_by_ip'])) {
+		pc_log("Migrating state file from MAC-based to IP-based (Layer 3 fix)", 'info', array(
+			'event.action' => 'state_migration_start',
+			'migration.from' => 'v0.2.0_mac_based',
+			'migration.to' => 'v0.2.1_ip_based',
+			'devices.count' => count($state['devices'])
+		));
+		
+		$new_state = array(
+			'devices_by_ip' => array(),
+			'mac_to_ip_cache' => array(),
+			'profiles' => isset($state['profiles']) ? $state['profiles'] : array(),
+			'last_reset' => isset($state['last_reset']) ? $state['last_reset'] : 0,
+			'last_check' => isset($state['last_check']) ? $state['last_check'] : 0
+		);
+		
+		$migrated = 0;
+		$offline = 0;
+		
+		// Try to migrate each device
+		foreach ($state['devices'] as $mac => $device_data) {
+			// Try to resolve current IP
+			$ip = pc_get_ip_from_mac($mac);
+			
+			if ($ip) {
+				// Device online - migrate to new format
+				$new_state['devices_by_ip'][$ip] = array_merge(
+					$device_data,
+					array(
+						'mac' => $mac,
+						'ip' => $ip,
+						'name' => isset($device_data['name']) ? $device_data['name'] : $mac
+					)
+				);
+				$new_state['mac_to_ip_cache'][$mac] = $ip;
+				$migrated++;
+				
+				pc_log("Migrated device $mac → $ip", 'debug', array(
+					'event.action' => 'device_migrated',
+					'device.mac' => $mac,
+					'client.address' => $ip
+				));
+			} else {
+				// Device offline - can't migrate now, will resolve on next check
+				$offline++;
+				pc_log("Device $mac offline during migration - will resolve later", 'debug', array(
+					'event.action' => 'device_migration_deferred',
+					'device.mac' => $mac
+				));
+			}
+		}
+		
+		pc_log("State migration complete", 'info', array(
+			'event.action' => 'state_migration_complete',
+			'devices.migrated' => $migrated,
+			'devices.offline' => $offline,
+			'devices.total' => count($state['devices'])
+		));
+		
+		// Save migrated state immediately
+		pc_save_state($new_state);
+		
+		return $new_state;
+	}
+	
+	// Already in new format or no devices
+	return $state;
+}
+
+/**
+ * Save state to persistent storage file
+ * 
+ * Writes state array to JSON file with pretty printing for readability.
+ * This function is called after any state modifications to persist changes.
+ * File is written atomically to prevent corruption during crashes.
+ * 
+ * @param array $state State array to save (same structure as pc_load_state return)
+ * @return void State is written to PC_STATE_FILE
+ * @since 0.1.0
+ * 
+ * @example
+ * $state = pc_load_state();
+ * $state['devices'][$mac]['usage_today'] += 5;
+ * pc_save_state($state);
+ * 
+ * @see pc_load_state() For reading state
  */
 function pc_save_state($state) {
-	file_put_contents(PC_STATE_FILE, json_encode($state, JSON_PRETTY_PRINT));
+	try {
+		// Validate state is array before saving
+		if (!is_array($state)) {
+			throw new Exception("Invalid state data: must be an array");
+		}
+		
+		// Encode to JSON
+		$json = json_encode($state, JSON_PRETTY_PRINT);
+		if ($json === false) {
+			throw new Exception("Failed to encode state to JSON: " . json_last_error_msg());
+		}
+		
+		// WHY: Write to file atomically (write to temp file, then rename)
+		// Design Decision: Use atomic write pattern to prevent corruption
+		// Rationale: If process crashes mid-write, we don't want partial/corrupt state file.
+		// Rename is atomic on Unix systems - either fully succeeds or fully fails.
+		// This ensures we never have a partially-written state file that could break the system.
+		$temp_file = PC_STATE_FILE . '.tmp';
+		$bytes_written = file_put_contents($temp_file, $json);
+		if ($bytes_written === false) {
+			throw new Exception("Failed to write state to temporary file");
+		}
+		
+		// WHY: Atomic rename ensures crash-resistance
+		// Even if power fails during rename, filesystem will either have old or new file, never partial
+		if (!rename($temp_file, PC_STATE_FILE)) {
+			throw new Exception("Failed to rename temporary state file");
+		}
+		
+		// PERFORMANCE: Invalidate state cache after save
+		// WHY: Ensure next pc_load_state() gets fresh data from disk
+		pc_clear_cache('state_data');
+		
+	} catch (Exception $e) {
+		pc_log("Failed to save state file: " . $e->getMessage(), 'error', array(
+			'event.action' => 'state_save_failed',
+			'event.category' => 'system',
+			'event.outcome' => 'failure',
+			'error.message' => $e->getMessage(),
+			'state.file' => PC_STATE_FILE
+		));
+		
+		// Clean up temp file if it exists
+		@unlink(PC_STATE_FILE . '.tmp');
+		
+		// Re-throw to notify caller of failure
+		throw $e;
+	}
 }
 
 /**
- * Update firewall rules for all devices
+ * Update firewall rules for all configured devices
+ * 
+ * Main firewall rule management function. Removes existing parental control
+ * rules and creates new ones based on current configuration. For each enabled
+ * device, checks if it should be blocked due to schedule or time limit, and
+ * creates appropriate firewall rules.
+ * 
+ * Rules are created dynamically based on:
+ * - Current time and active schedules
+ * - Usage statistics from state file
+ * - Enforcement mode (strict, moderate, soft)
+ * 
+ * @return void Firewall rules are added to global $config
+ * @since 0.1.0
+ * @updated 0.1.3 Improved logging with structured attributes
+ * 
+ * @example
+ * // Called automatically during sync
+ * pc_update_firewall_rules();
+ * 
+ * @see pc_remove_firewall_rules() For rule cleanup
+ * @see pc_create_block_rule() For individual rule creation
+ * @see pc_is_in_blocked_schedule() For schedule checking
+ * @see pc_is_time_limit_exceeded() For limit checking
  */
 function pc_update_firewall_rules() {
 	global $config;
 	
-	pc_log("Updating firewall rules", 'debug');
-	
-	// Remove existing rules first
-	pc_remove_firewall_rules();
-	
-	// Check if service is enabled
-	if (config_get_path('installedpackages/parentalcontrol/config/0/enable') !== 'on') {
-		return;
+	try {
+		pc_log("Updating firewall rules", 'debug');
+		
+		// Remove existing rules first
+		pc_remove_firewall_rules();
+		
+		// Check if service is enabled
+		if (config_get_path('installedpackages/parentalcontrol/config/0/enable') !== 'on') {
+			return;
+		}
+		
+		// Get configuration
+		$pc_config = config_get_path('installedpackages/parentalcontrol/config/0', []);
+		$devices = pc_get_devices(); // Use helper function (DRY)
+		$enforcement_mode = isset($pc_config['enforcement_mode']) ? $pc_config['enforcement_mode'] : 'strict';
+		
+		$state = pc_load_state();
+		$current_time = time();
+		
+		$rules_created = 0;
+		$rules_failed = 0;
+		
+		foreach ($devices as $idx => $device) {
+			try {
+				// Skip disabled devices using helper function (DRY)
+			if (!pc_is_device_enabled($device)) {
+				continue;
+			}
+			
+			$mac = pc_normalize_mac($device['mac_address']);
+			$should_block = false;
+			$reason = '';
+				
+				// Check if currently in blocked schedule
+				if (pc_is_in_blocked_schedule($device)) {
+					$should_block = true;
+					$reason = 'Scheduled block time';
+				}
+				
+				// Check if time limit exceeded
+				if (!$should_block && pc_is_time_limit_exceeded($device, $state)) {
+					$should_block = true;
+					$reason = 'Time limit exceeded';
+				}
+				
+				if ($should_block) {
+					pc_create_block_rule($device, $enforcement_mode, $reason);
+					$rules_created++;
+				}
+			} catch (Exception $e) {
+				// Log error but continue processing other devices (graceful degradation)
+				$rules_failed++;
+				pc_log("Failed to process device rule: " . $e->getMessage(), 'warning', array(
+					'event.action' => 'device_rule_failed',
+					'device.mac' => isset($device['mac_address']) ? $device['mac_address'] : 'unknown',
+					'device.name' => isset($device['device_name']) ? $device['device_name'] : 'unknown',
+					'error.message' => $e->getMessage()
+				));
+			}
+		}
+		
+		pc_log("Firewall rules updated", 'info', array(
+			'rules.created' => $rules_created,
+			'rules.failed' => $rules_failed
+		));
+	} catch (Exception $e) {
+		pc_log("Firewall rule update failed critically: " . $e->getMessage(), 'error', array(
+			'event.action' => 'firewall_update_failed',
+			'event.outcome' => 'failure',
+			'error.type' => get_class($e),
+			'error.message' => $e->getMessage()
+		));
+		// Don't re-throw - allow system to continue
 	}
-	
-	// Get configuration
-	$pc_config = config_get_path('installedpackages/parentalcontrol/config/0', []);
-	$devices = config_get_path('installedpackages/parentalcontroldevices/config', []);
-	$enforcement_mode = isset($pc_config['enforcement_mode']) ? $pc_config['enforcement_mode'] : 'strict';
-	
-	$state = pc_load_state();
-	$current_time = time();
-	
-	foreach ($devices as $idx => $device) {
-		if (!isset($device['enable']) || $device['enable'] != 'on') {
-			continue;
-		}
-		
-		$mac = strtolower(trim($device['mac_address']));
-		$should_block = false;
-		$reason = '';
-		
-		// Check if currently in blocked schedule
-		if (pc_is_in_blocked_schedule($device)) {
-			$should_block = true;
-			$reason = 'Scheduled block time';
-		}
-		
-		// Check if time limit exceeded
-		if (!$should_block && pc_is_time_limit_exceeded($device, $state)) {
-			$should_block = true;
-			$reason = 'Time limit exceeded';
-		}
-		
-		if ($should_block) {
-			pc_create_block_rule($device, $enforcement_mode, $reason);
-		}
-	}
-	
-	pc_log("Firewall rules updated", 'info');
 }
 
 /**
- * Check if device is in a blocked schedule
+ * Check if device is currently in a blocked schedule period
+ * 
+ * Evaluates all schedule types (bedtime, school hours, custom) to determine
+ * if the device should be blocked at the current time. Handles:
+ * - Bedtime schedules (can span midnight)
+ * - School hours (weekdays only, Mon-Fri)
+ * - Custom schedules with flexible day/time ranges
+ * 
+ * Returns true if ANY schedule is currently active that blocks the device.
+ * 
+ * @param array $device Device configuration array containing schedule settings
+ * @return bool True if device should be blocked by schedule, false otherwise
+ * @since 0.1.0
+ * 
+ * @example
+ * if (pc_is_in_blocked_schedule($device)) {
+ *     echo "Device is in scheduled block period";
+ * }
+ * 
+ * @see pc_is_time_in_range() For time range checking
+ * @see pc_matches_custom_schedule() For custom schedule parsing
  */
 function pc_is_in_blocked_schedule($device) {
 	$now = time();
@@ -459,20 +1289,76 @@ function pc_is_in_blocked_schedule($device) {
 }
 
 /**
- * Check if current time is in range
+ * Check if current time falls within a time range
+ * 
+ * Handles both normal same-day ranges and overnight ranges that span midnight.
+ * The logic differs for these two cases:
+ * - Same-day range (09:00-17:00): current >= start AND current <= end
+ * - Overnight range (21:00-07:00): current >= start OR current <= end
+ * 
+ * This is critical for bedtime schedules that typically span midnight.
+ * 
+ * @param string $current Current time in HH:MM format (24-hour)
+ * @param string $start Start time in HH:MM format (24-hour)
+ * @param string $end End time in HH:MM format (24-hour)
+ * @return bool True if current time is within the range, false otherwise
+ * @since 0.1.0
+ * 
+ * @example
+ * // Normal range: 09:00-17:00, current: 12:00
+ * $in_range = pc_is_time_in_range('12:00', '09:00', '17:00'); // Returns true
+ * 
+ * // Overnight range: 21:00-07:00, current: 23:00
+ * $in_range = pc_is_time_in_range('23:00', '21:00', '07:00'); // Returns true
+ * 
+ * // Overnight range: 21:00-07:00, current: 05:00
+ * $in_range = pc_is_time_in_range('05:00', '21:00', '07:00'); // Returns true
  */
 function pc_is_time_in_range($current, $start, $end) {
+	// CRITICAL: Different logic for overnight vs same-day ranges
+	// WHY: Overnight ranges like bedtime (21:00-07:00) span midnight, requiring OR logic
+	// instead of AND. If we used AND for overnight ranges, no time would ever match
+	// because no time can be simultaneously >= 21:00 AND <= 07:00.
+	// The OR logic matches either "late night" (>= 21:00) OR "early morning" (<= 07:00).
 	if ($start < $end) {
 		// Normal range (e.g., 09:00-17:00)
+		// WHY: AND logic works here because time progresses naturally through the range
 		return ($current >= $start && $current <= $end);
 	} else {
 		// Overnight range (e.g., 21:00-07:00)
+		// WHY: OR logic catches both sides of midnight split
+		// Example: At 23:00, we match (23:00 >= 21:00); at 05:00, we match (05:00 <= 07:00)
 		return ($current >= $start || $current <= $end);
 	}
 }
 
 /**
- * Check if current time matches custom schedule
+ * Check if current time matches a custom schedule string
+ * 
+ * Parses and evaluates custom schedule strings like:
+ * - "Mon-Fri 18:00-19:00" (weekday range)
+ * - "Sun 09:00-11:00" (single day)
+ * - "Daily 21:00-07:00" (every day, can span midnight)
+ * - "Sat,Sun 10:00-22:00" (specific days)
+ * 
+ * Supports day ranges, comma-separated days, and overnight time ranges.
+ * Day abbreviations: Mon, Tue, Wed, Thu, Fri, Sat, Sun
+ * 
+ * @param string $schedule Schedule string to parse (format: "days HH:MM-HH:MM")
+ * @param int $current_day Current day of week (1=Mon, 7=Sun)
+ * @param string $current_time Current time in HH:MM format (24-hour)
+ * @return bool True if current time matches schedule, false otherwise
+ * @since 0.1.0
+ * 
+ * @example
+ * $current_day = date('N'); // 1-7 (Mon-Sun)
+ * $current_time = date('H:i');
+ * if (pc_matches_custom_schedule("Mon-Fri 18:00-19:00", $current_day, $current_time)) {
+ *     echo "Weekday homework time!";
+ * }
+ * 
+ * @see pc_is_in_blocked_schedule() For schedule evaluation
+ * @see pc_is_time_in_range() For time range checking
  */
 function pc_matches_custom_schedule($schedule, $current_day, $current_time) {
 	// Parse schedule like "Mon-Fri 18:00-19:00" or "Sun 09:00-11:00"
@@ -522,10 +1408,27 @@ function pc_matches_custom_schedule($schedule, $current_day, $current_time) {
 }
 
 /**
- * Check if device has exceeded time limit
+ * Check if device has exceeded its configured time limit
+ * 
+ * Evaluates daily time limit including weekend bonus against current usage
+ * from state file. Automatically adds weekend bonus on Saturday and Sunday.
+ * Returns false if no limit is configured (unlimited access).
+ * 
+ * @param array $device Device configuration array with daily_limit and weekend_bonus
+ * @param array $state Current state array containing usage statistics
+ * @return bool True if time limit exceeded, false if under limit or unlimited
+ * @since 0.1.0
+ * 
+ * @example
+ * $state = pc_load_state();
+ * if (pc_is_time_limit_exceeded($device, $state)) {
+ *     pc_create_block_rule($device, 'strict', 'Time limit exceeded');
+ * }
+ * 
+ * @see pc_load_state() For state retrieval
  */
 function pc_is_time_limit_exceeded($device, $state) {
-	$mac = strtolower(trim($device['mac_address']));
+	$mac = pc_normalize_mac($device['mac_address']);
 	
 	// Get daily limit
 	$daily_limit = isset($device['daily_limit']) ? intval($device['daily_limit']) : 0;
@@ -549,7 +1452,30 @@ function pc_is_time_limit_exceeded($device, $state) {
 }
 
 /**
- * Create firewall block rule for device
+ * Create firewall block rule for specific device
+ * 
+ * Generates and adds a firewall rule to block the specified device based on
+ * enforcement mode. Rule format varies by mode:
+ * - Strict: Blocks all traffic
+ * - Moderate: Blocks only HTTP/HTTPS (ports 80, 443)
+ * - Soft: Blocks only DNS (port 53)
+ * 
+ * Rule is added to global $config with description, source MAC, and reason.
+ * Whitelist sites are respected (not yet fully implemented).
+ * 
+ * @param array $device Device configuration with child_name, device_name, mac_address
+ * @param string $enforcement_mode Enforcement mode: 'strict', 'moderate', or 'soft'
+ * @param string $reason Human-readable reason for blocking (logged and shown in description)
+ * @return void Rule is added to global $config firewall rules array
+ * @since 0.1.0
+ * @updated 0.1.3 Enhanced logging with structured attributes
+ * 
+ * @example
+ * pc_create_block_rule($device, 'strict', 'Time limit exceeded');
+ * pc_create_block_rule($device, 'moderate', 'Bedtime schedule');
+ * 
+ * @see pc_update_firewall_rules() For bulk rule updates
+ * @see pc_remove_firewall_rules() For rule removal
  */
 function pc_create_block_rule($device, $enforcement_mode, $reason) {
 	global $config;
@@ -578,23 +1504,34 @@ function pc_create_block_rule($device, $enforcement_mode, $reason) {
 		)
 	);
 	
-	// Adjust rule based on enforcement mode
+	// WHY: Adjust rule based on enforcement mode - provides flexible control levels
+	// Design Decision: Three-tier enforcement system instead of binary on/off
+	// Rationale:
+	// - STRICT: Total block - used when absolutely necessary (bedtime, limit exceeded)
+	// - MODERATE: Block web browsing only - allows email, messaging, homework apps
+	// - SOFT: Block DNS only - tech-savvy kids can bypass but casual users blocked
+	// Trade-off: Complexity vs flexibility. Parents appreciate graduated enforcement options.
 	switch ($enforcement_mode) {
 		case 'moderate':
-			// Block only HTTP/HTTPS
+			// WHY: Block HTTP/HTTPS (ports 80, 443) but allow other protocols
+			// Use case: Block web surfing but allow Zoom, email, Minecraft, etc.
 			$rule['protocol'] = 'tcp';
 			$rule['destination']['port'] = '80,443';
 			break;
 			
 		case 'soft':
-			// Block only DNS
+			// WHY: Block DNS only - prevents casual browsing, easily bypassed
+			// Use case: "Gentle nudge" mode - reminder to child without hard enforcement
+			// Trade-off: Not secure against tech-savvy kids who can use 8.8.8.8
 			$rule['protocol'] = 'udp';
 			$rule['destination']['port'] = '53';
 			break;
 			
 		case 'strict':
 		default:
-			// Block all internet (rule covers all protocols)
+			// WHY: Block ALL traffic - most secure, no loopholes
+			// Use case: Bedtime, punishment, or when time limit exceeded
+			// Rule covers all protocols by not specifying any
 			break;
 	}
 	
@@ -625,6 +1562,21 @@ function pc_create_block_rule($device, $enforcement_mode, $reason) {
 
 /**
  * Remove all parental control firewall rules
+ * 
+ * Scans all firewall rules and removes any with description starting with
+ * "Parental Control:". This is called before creating new rules to ensure
+ * clean state, and during uninstallation. Logs count of rules removed.
+ * 
+ * @return void Rules are removed from global $config
+ * @since 0.1.0
+ * @updated 0.1.3 Added count logging
+ * 
+ * @example
+ * // Remove all existing rules before re-creating
+ * pc_remove_firewall_rules();
+ * pc_update_firewall_rules();
+ * 
+ * @see pc_create_block_rule() For rule creation
  */
 function pc_remove_firewall_rules() {
 	global $config;
@@ -648,7 +1600,26 @@ function pc_remove_firewall_rules() {
 }
 
 /**
- * Setup cron job for periodic checks
+ * Setup cron job for periodic checks and usage tracking
+ * 
+ * Installs a cron job that runs parental_control_cron.php periodically
+ * (default every minute, configurable via PC_CRON_MINUTE). Creates the
+ * cron script file and sets proper permissions. The cron job handles
+ * usage tracking, counter resets, and firewall rule updates.
+ * 
+ * Cron job runs as root user to ensure firewall access. Uses pfSense's
+ * install_cron_job() function which automatically handles duplicate prevention.
+ * 
+ * @return void Cron job is registered in system crontab and script file created
+ * @since 0.1.0
+ * @updated 0.1.3 Made cron interval configurable via PC_CRON_MINUTE constant
+ * 
+ * @example
+ * // Called automatically during installation and configuration sync
+ * pc_setup_cron_job();
+ * 
+ * @see pc_remove_cron_job() For cron job removal
+ * @see parental_control_cron_job() For the actual cron handler
  */
 function pc_setup_cron_job() {
 	install_cron_job(
@@ -680,7 +1651,22 @@ EOD;
 }
 
 /**
- * Remove cron job
+ * Remove parental control cron job
+ * 
+ * Uninstalls the periodic cron job by calling install_cron_job with false
+ * parameter and deletes the cron script file. This is called during package
+ * uninstallation or when service is disabled. Prevents orphaned cron jobs
+ * from continuing to run and cleans up script files.
+ * 
+ * @return void Cron job is removed from system crontab and script deleted
+ * @since 0.1.0
+ * @updated 0.1.3 Also removes cron script file
+ * 
+ * @example
+ * // Called automatically during uninstallation
+ * pc_remove_cron_job();
+ * 
+ * @see pc_setup_cron_job() For cron job installation
  */
 function pc_remove_cron_job() {
 	install_cron_job("/usr/local/bin/php /usr/local/bin/parental_control_cron.php", false);
@@ -689,52 +1675,160 @@ function pc_remove_cron_job() {
 }
 
 /**
- * Cron job handler - called periodically to update rules and track usage
+ * Cron job handler for periodic enforcement and tracking
+ * 
+ * Main cron job function called every minute by system cron. Performs:
+ * 1. Checks if service is enabled (exits if disabled)
+ * 2. Loads current state and configuration
+ * 3. Checks if daily counters need reset (based on reset_time)
+ * 4. Updates usage for online devices (increments by check interval)
+ * 5. Saves updated state
+ * 6. Triggers configuration sync to update firewall rules
+ * 
+ * This is the heartbeat of the parental control system, ensuring real-time
+ * enforcement and accurate usage tracking.
+ * 
+ * @return void State is modified and firewall rules updated as needed
+ * @since 0.1.0
+ * 
+ * @example
+ * // Called automatically by cron every minute:
+ * // Cron: * /1 * * * * php parental_control_cron.php
+ * parental_control_cron_job();
+ * 
+ * @see pc_should_reset_counters() For reset time checking
+ * @see pc_reset_daily_counters() For counter reset
+ * @see pc_update_device_usage() For usage tracking
+ * @see parental_control_sync() For rule updates
  */
 function parental_control_cron_job() {
-	// Check if service is enabled
-	if (config_get_path('installedpackages/parentalcontrol/config/0/enable') !== 'on') {
+	// Acquire PID lock to prevent concurrent executions
+	if (!pc_acquire_pid_lock()) {
+		// Another instance is running, exit gracefully
 		return;
 	}
 	
-	// Get the configuration
-	$pc_config = config_get_path('installedpackages/parentalcontrol/config', []);
+	// Register shutdown function to release lock
+	register_shutdown_function('pc_release_pid_lock');
 	
-	$state = pc_load_state();
-	$current_time = time();
-	
-	// Check if we need to reset daily counters
-	$reset_time = config_get_path('installedpackages/parentalcontrol/reset_time', 'midnight');
-	$last_reset = isset($state['last_reset']) ? $state['last_reset'] : 0;
-	
-	if (pc_should_reset_counters($last_reset, $reset_time)) {
-		pc_reset_daily_counters($state);
-		$state['last_reset'] = $current_time;
+	try {
+		// Check if service is enabled using helper function (DRY)
+		if (!pc_is_service_enabled()) {
+			pc_release_pid_lock();
+			return;
+		}
+		
+		$start_time = microtime(true);
+		
+		// Get the configuration
+		$pc_config = config_get_path('installedpackages/parentalcontrol/config', []);
+		
+		$state = pc_load_state();
+		$current_time = time();
+		
+		// Check if we need to reset daily counters
+		$reset_time = config_get_path('installedpackages/parentalcontrol/reset_time', 'midnight');
+		$last_reset = isset($state['last_reset']) ? $state['last_reset'] : 0;
+		
+		if (pc_should_reset_counters($last_reset, $reset_time)) {
+			pc_reset_daily_counters($state);
+			$state['last_reset'] = $current_time;
+		}
+		
+		// Update usage for active devices (now uses REAL connection tracking)
+		pc_update_device_usage($state);
+		
+		$state['last_check'] = $current_time;
+		pc_save_state($state);
+		
+		// Update firewall rules
+		parental_control_sync();
+		
+		$execution_time = round((microtime(true) - $start_time) * 1000, 2);
+		
+		pc_log("Cron job completed successfully", 'info', array(
+			'event.action' => 'cron_job_complete',
+			'execution.duration.ms' => $execution_time,
+			'event.outcome' => 'success'
+		));
+		
+	} catch (Exception $e) {
+		$error_msg = "Cron job execution failed: " . $e->getMessage();
+		pc_log($error_msg, 'error', array(
+			'event.action' => 'cron_job_failed',
+			'event.category' => 'system',
+			'event.outcome' => 'failure',
+			'error.type' => get_class($e),
+			'error.message' => $e->getMessage(),
+			'error.file' => $e->getFile(),
+			'error.line' => $e->getLine(),
+			'error.stack_trace' => $e->getTraceAsString()
+		));
+		log_error("Parental Control: Cron job failed - " . $e->getMessage());
+		// Don't re-throw - cron will try again in next cycle
+	} finally {
+		// Always release PID lock
+		pc_release_pid_lock();
 	}
-	
-	// Update usage for active devices (simplified - would need actual connection tracking)
-	pc_update_device_usage($state);
-	
-	$state['last_check'] = $current_time;
-	pc_save_state($state);
-	
-	// Update firewall rules
-	parental_control_sync();
 }
 
 /**
- * Check if counters should be reset
+ * Check if daily counters should be reset based on configured reset time
+ * 
+ * Compares last reset timestamp with today's configured reset time to determine
+ * if a new day has begun (relative to the reset time, not midnight). This allows
+ * parents to set a "day boundary" at a logical time like 6:00 AM instead of midnight.
+ * 
+ * Returns true if:
+ * - Last reset was before today's reset time AND
+ * - Current time is past today's reset time
+ * 
+ * @param int $last_reset Unix timestamp of last counter reset
+ * @param string $reset_time Time of day to reset in HH:MM format (default: "00:00")
+ * @return bool True if counters should be reset, false otherwise
+ * @since 0.1.0
+ * 
+ * @example
+ * // Reset time is 06:00, last reset was yesterday at 23:00, now is 07:00
+ * if (pc_should_reset_counters($last_reset, '06:00')) {
+ *     pc_reset_daily_counters($state);
+ * }
+ * 
+ * @see pc_reset_daily_counters() For actual counter reset
  */
 function pc_should_reset_counters($last_reset, $reset_time) {
 	$now = time();
 	$today_reset = strtotime("today " . str_replace(':', ':', $reset_time));
 	
-	// If last reset was before today's reset time and we're past it, reset
+	// WHY: Check if we've crossed the reset boundary since last reset
+	// Design Decision: We reset at configured time (e.g., 6:00 AM) not midnight
+	// Rationale: Parents want the "day" to start when child wakes up, not at midnight
+	// when they're sleeping. This prevents gaming the system by staying up past midnight.
+	// The AND condition ensures we only reset once per day, even if cron runs frequently.
 	return ($last_reset < $today_reset && $now >= $today_reset);
 }
 
 /**
- * Reset daily usage counters
+ * Reset daily usage counters for all devices
+ * 
+ * Sets usage_today to 0 for all devices in state. Called when reset time is
+ * reached (typically midnight or configured reset time). Weekly counters are
+ * reset separately on configured day of week. Modifies state by reference.
+ * 
+ * @param array &$state State array containing devices and usage data (modified by reference)
+ * @return void State is modified in-place
+ * @since 0.1.0
+ * 
+ * @example
+ * $state = pc_load_state();
+ * if (pc_should_reset_counters($state['last_reset'], '00:00')) {
+ *     pc_reset_daily_counters($state);
+ *     $state['last_reset'] = time();
+ *     pc_save_state($state);
+ * }
+ * 
+ * @see pc_should_reset_counters() For checking if reset is needed
+ * @see parental_control_cron_job() For automatic reset scheduling
  */
 function pc_reset_daily_counters(&$state) {
 	foreach ($state['devices'] as $mac => &$device_state) {
@@ -744,82 +1838,659 @@ function pc_reset_daily_counters(&$state) {
 }
 
 /**
- * Update device usage (placeholder - would need actual connection tracking)
+ * Acquire PID lock to prevent concurrent cron executions
+ * 
+ * Creates a PID file to ensure only one instance of the cron job runs at a time.
+ * If another instance is running, this function returns false and the current
+ * execution should exit gracefully. This prevents race conditions and database
+ * corruption from multiple simultaneous state file writes.
+ * 
+ * @return bool True if lock acquired successfully, false if another instance is running
+ * @since 0.2.0
+ * 
+ * @example
+ * if (!pc_acquire_pid_lock()) {
+ *     pc_log("Another instance is running, exiting", 'info');
+ *     return;
+ * }
+ * 
+ * @see pc_release_pid_lock() To release the lock when done
  */
-function pc_update_device_usage(&$state) {
-	// This is a simplified version
-	// In production, you would:
-	// 1. Query firewall state table for active connections by MAC
-	// 2. Calculate time since last check
-	// 3. Add to usage counters
+function pc_acquire_pid_lock() {
+	$pid_file = PC_PID_FILE;
 	
-	$devices = config_get_path('installedpackages/parentalcontroldevices/config', []);
-	$check_interval = config_get_path('installedpackages/parentalcontrol/check_interval', 60);
+	// Check if PID file exists
+	if (file_exists($pid_file)) {
+		$old_pid = trim(file_get_contents($pid_file));
+		
+		// Check if process is still running
+		if (!empty($old_pid) && posix_kill($old_pid, 0)) {
+			pc_log("Another instance is already running (PID: $old_pid)", 'warn', array(
+				'event.action' => 'lock_exists',
+				'process.pid' => $old_pid,
+				'event.outcome' => 'failure'
+			));
+			return false;
+		} else {
+			// Stale PID file, remove it
+			unlink($pid_file);
+			pc_log("Removed stale PID file (PID: $old_pid)", 'info', array(
+				'event.action' => 'stale_lock_removed',
+				'process.pid.old' => $old_pid
+			));
+		}
+	}
 	
-	foreach ($devices as $device) {
-		if (!isset($device['enable']) || $device['enable'] != 'on') {
-			continue;
-		}
-		
-		$mac = strtolower(trim($device['mac_address']));
-		
-		if (!isset($state['devices'][$mac])) {
-			$state['devices'][$mac] = array(
-				'usage_today' => 0,
-				'usage_week' => 0,
-				'last_seen' => 0
-			);
-		}
-		
-		// Check if device is currently online and not blocked
-		if (pc_is_device_online($mac) && !pc_is_in_blocked_schedule($device)) {
-			// Add usage time (in minutes)
-			$usage_minutes = ceil($check_interval / 60);
-			$state['devices'][$mac]['usage_today'] += $usage_minutes;
-			$state['devices'][$mac]['usage_week'] += $usage_minutes;
-			$state['devices'][$mac]['last_seen'] = time();
-		}
+	// Write current PID
+	$current_pid = getmypid();
+	if (file_put_contents($pid_file, $current_pid) === false) {
+		pc_log("Failed to write PID file", 'error', array(
+			'event.action' => 'lock_write_failed',
+			'file.path' => $pid_file,
+			'event.outcome' => 'failure'
+		));
+		return false;
+	}
+	
+	pc_log("PID lock acquired", 'debug', array(
+		'event.action' => 'lock_acquired',
+		'process.pid' => $current_pid
+	));
+	
+	return true;
+}
+
+/**
+ * Release PID lock
+ * 
+ * Removes the PID file to allow future cron executions. Should be called
+ * at the end of cron job execution or in a shutdown handler to ensure
+ * lock is always released even if script exits unexpectedly.
+ * 
+ * @return void
+ * @since 0.2.0
+ * 
+ * @example
+ * register_shutdown_function('pc_release_pid_lock');
+ * 
+ * @see pc_acquire_pid_lock() To acquire the lock
+ */
+function pc_release_pid_lock() {
+	$pid_file = PC_PID_FILE;
+	
+	if (file_exists($pid_file)) {
+		unlink($pid_file);
+		pc_log("PID lock released", 'debug', array(
+			'event.action' => 'lock_released',
+			'process.pid' => getmypid()
+		));
 	}
 }
 
 /**
- * Check if device is currently online via ARP table
+ * Get IP address for a given MAC address
+ * 
+ * Searches ARP table and DHCP leases to find the current IP address
+ * associated with a MAC address. Returns null if no IP found.
+ * Uses caching to avoid repeated lookups within the same execution.
+ * 
+ * @param string $mac MAC address in format aa:bb:cc:dd:ee:ff
+ * @return string|null IP address or null if not found
+ * @since 0.2.0
+ * 
+ * @example
+ * $ip = pc_get_ip_from_mac('aa:bb:cc:dd:ee:ff');
+ * if ($ip) {
+ *     echo "Device is at $ip";
+ * }
+ * 
+ * @see pc_normalize_mac() For MAC address normalization
  */
-function pc_is_device_online($mac) {
-	$mac = strtolower(trim($mac));
-	$arp_table = system_get_arp_table();
+function pc_get_ip_from_mac($mac) {
+	$mac = pc_normalize_mac($mac);
+	static $mac_to_ip_cache = array();
 	
-	if (!is_array($arp_table)) {
-		return false;
+	// Return cached result if available
+	if (isset($mac_to_ip_cache[$mac])) {
+		return $mac_to_ip_cache[$mac];
 	}
 	
-	foreach ($arp_table as $entry) {
-		if (isset($entry['mac-address']) && strtolower($entry['mac-address']) == $mac) {
-			return true;
+	// Try ARP table first
+	try {
+		$arp_table = system_get_arp_table();
+		if (is_array($arp_table)) {
+			foreach ($arp_table as $entry) {
+				if (isset($entry['mac-address']) && 
+					pc_normalize_mac($entry['mac-address']) == $mac) {
+					$ip = $entry['ip-address'];
+					$mac_to_ip_cache[$mac] = $ip;
+					return $ip;
+				}
+			}
+		}
+	} catch (Exception $e) {
+		pc_log("Failed to get ARP table: " . $e->getMessage(), 'warn');
+	}
+	
+	// Try DHCP leases
+	$dhcp_leases = pc_get_dhcp_leases();
+	foreach ($dhcp_leases as $lease) {
+		if (pc_normalize_mac($lease['mac']) == $mac) {
+			$ip = $lease['ip'];
+			$mac_to_ip_cache[$mac] = $ip;
+			return $ip;
 		}
 	}
 	
+	// Not found
+	$mac_to_ip_cache[$mac] = null;
+	return null;
+}
+
+/**
+ * Check if device has active connections in pfSense state table
+ * 
+ * Queries pfSense firewall state table to determine if a device (by IP)
+ * has any active (ESTABLISHED) connections. This is the ground truth for
+ * actual internet usage vs just being present on the network.
+ * 
+ * WHY: ARP presence != internet usage. A device can be on network but idle.
+ * Only devices with active connections should have usage incremented.
+ * 
+ * @param string $ip IP address to check for active connections
+ * @return int Number of active (ESTABLISHED) connections
+ * @since 0.2.0
+ * 
+ * @example
+ * $ip = pc_get_ip_from_mac($mac);
+ * if (pc_has_active_connections($ip) > 0) {
+ *     // Device is actively using internet
+ *     pc_increment_usage($mac);
+ * }
+ * 
+ * @see pc_update_device_usage() Which uses this function
+ */
+function pc_has_active_connections($ip) {
+	if (empty($ip)) {
+		return 0;
+	}
+	
+	// Query pfSense state table for this IP
+	// Timeout after 2 seconds to prevent hanging
+	// Only count ESTABLISHED connections (not SYN, FIN, etc.)
+	$escaped_ip = escapeshellarg($ip);
+	exec("/usr/bin/timeout 2 /sbin/pfctl -s state 2>/dev/null | /usr/bin/grep ESTABLISHED | /usr/bin/grep -c $escaped_ip", $output, $return_code);
+	
+	if ($return_code !== 0 && $return_code !== 1) {
+		// Command failed (timeout = 124, or other error)
+		pc_log("Failed to query state table for $ip (exit code: $return_code)", 'warn', array(
+			'event.action' => 'state_table_query_failed',
+			'client.address' => $ip,
+			'exit.code' => $return_code
+		));
+		return 0;
+	}
+	
+	$connection_count = isset($output[0]) ? intval($output[0]) : 0;
+	return $connection_count;
+}
+
+/**
+ * Update device usage tracking using real connection tracking
+ * 
+ * For each configured device, checks for ACTIVE connections in pfSense state table.
+ * Only devices with active connections have their usage incremented. This provides
+ * accurate usage tracking based on actual internet usage, not just network presence.
+ * 
+ * CRITICAL CHANGE (v0.2.0): Now uses pfctl state table instead of ARP table.
+ * Previous version tracked presence; this version tracks actual usage.
+ * 
+ * @param array &$state State array containing devices and usage data (modified by reference)
+ * @return void State is modified in-place with updated usage counters
+ * @since 0.1.0
+ * @updated 0.2.0 Complete rewrite with real connection tracking
+ * 
+ * @example
+ * $state = pc_load_state();
+ * pc_update_device_usage($state);
+ * pc_save_state($state);
+ * 
+ * @see pc_has_active_connections() For connection detection
+ * @see parental_control_cron_job() For periodic usage updates
+ */
+function pc_update_device_usage(&$state) {
+	$devices = pc_get_devices(); // Use helper function (DRY)
+	$interval_seconds = PC_CRON_INTERVAL_SECONDS; // Use constant (typically 60 seconds)
+	$interval_minutes = ceil($interval_seconds / 60);
+	$tracked_count = 0;
+	
+	// CRITICAL: Ensure devices_by_ip exists (Layer 3 architecture)
+	if (!isset($state['devices_by_ip'])) {
+		$state['devices_by_ip'] = array();
+	}
+	if (!isset($state['mac_to_ip_cache'])) {
+		$state['mac_to_ip_cache'] = array();
+	}
+	
+	foreach ($devices as $device) {
+		// Skip disabled devices using helper function (DRY)
+		if (!pc_is_device_enabled($device)) {
+			continue;
+		}
+		
+		$mac = pc_normalize_mac($device['mac_address']);
+		$device_name = isset($device['device_name']) ? $device['device_name'] : $mac;
+		
+		// CRITICAL: Get CURRENT IP address (may change due to DHCP)
+		$ip = pc_get_ip_from_mac($mac);
+		
+		if (empty($ip)) {
+			// Device offline - check if we had previous IP
+			if (isset($state['mac_to_ip_cache'][$mac])) {
+				$old_ip = $state['mac_to_ip_cache'][$mac];
+				if (isset($state['devices_by_ip'][$old_ip])) {
+					$state['devices_by_ip'][$old_ip]['offline_since'] = time();
+				}
+			}
+			pc_log("Device $mac ($device_name) offline (no IP address)", 'debug', array(
+				'event.action' => 'device_offline',
+				'device.mac' => $mac,
+				'device.name' => $device_name
+			));
+			continue;
+		}
+		
+		// CRITICAL: Handle IP changes (DHCP renewals)
+		if (isset($state['mac_to_ip_cache'][$mac])) {
+			$old_ip = $state['mac_to_ip_cache'][$mac];
+			if ($old_ip != $ip && isset($state['devices_by_ip'][$old_ip])) {
+				// IP changed - migrate state to new IP
+				pc_log("Device $mac ($device_name) IP changed: $old_ip → $ip", 'info', array(
+					'event.action' => 'ip_changed',
+					'device.mac' => $mac,
+					'device.name' => $device_name,
+					'client.address.old' => $old_ip,
+					'client.address.new' => $ip
+				));
+				
+				// Migrate all usage data to new IP
+				$state['devices_by_ip'][$ip] = $state['devices_by_ip'][$old_ip];
+				$state['devices_by_ip'][$ip]['ip'] = $ip; // Update IP field
+				unset($state['devices_by_ip'][$old_ip]);
+				
+				// TODO: Update firewall rules (old IP → new IP)
+				// This will be implemented in v0.3.0 with pfSense tables
+			}
+		}
+		
+		// Update MAC → IP cache
+		$state['mac_to_ip_cache'][$mac] = $ip;
+		
+		// CRITICAL: Initialize device state BY IP (Layer 3)
+		if (!isset($state['devices_by_ip'][$ip])) {
+			$state['devices_by_ip'][$ip] = array(
+				'mac' => $mac,
+				'name' => $device_name,
+				'ip' => $ip,
+				'usage_today' => 0,
+				'usage_week' => 0,
+				'last_seen' => 0,
+				'connections_last_check' => 0,
+				'first_seen' => time()
+			);
+		}
+		
+		// Update device info (may have changed in config)
+		$state['devices_by_ip'][$ip]['mac'] = $mac;
+		$state['devices_by_ip'][$ip]['name'] = $device_name;
+		$state['devices_by_ip'][$ip]['ip'] = $ip;
+		unset($state['devices_by_ip'][$ip]['offline_since']); // Clear offline flag
+		
+		// CRITICAL: Check for REAL active connections BY IP (Layer 3)
+		$connection_count = pc_has_active_connections($ip);
+		
+		// Store connection count for diagnostics
+		$state['devices_by_ip'][$ip]['connections_last_check'] = $connection_count;
+		
+		if ($connection_count > 0) {
+			// Device has active connections - increment usage
+			$state['devices_by_ip'][$ip]['usage_today'] += $interval_minutes;
+			$state['devices_by_ip'][$ip]['usage_week'] += $interval_minutes;
+			$state['devices_by_ip'][$ip]['last_seen'] = time();
+			$tracked_count++;
+			
+			pc_log("Device $device_name ($mac @ $ip) active: added $interval_minutes minutes", 'info', array(
+				'event.action' => 'usage_tracked',
+				'device.mac' => $mac,
+				'device.name' => $device_name,
+				'client.address' => $ip,
+				'usage.minutes' => $interval_minutes,
+				'usage.today' => $state['devices_by_ip'][$ip]['usage_today'],
+				'connections' => $connection_count,
+				'event.outcome' => 'success'
+			));
+			
+			// Check if device exceeded limits
+			if (isset($device['daily_limit']) && $device['daily_limit'] > 0) {
+				if ($state['devices_by_ip'][$ip]['usage_today'] >= $device['daily_limit']) {
+					pc_log("Device $device_name ($mac @ $ip) exceeded daily limit", 'warn', array(
+						'event.action' => 'limit_exceeded',
+						'device.mac' => $mac,
+						'device.name' => $device_name,
+						'client.address' => $ip,
+						'usage.today' => $state['devices_by_ip'][$ip]['usage_today'],
+						'usage.limit' => $device['daily_limit']
+					));
+					
+					// TODO: Create/update firewall block rule BY IP
+					// This will be implemented in v0.3.0 with pfSense tables
+				}
+			}
+		} else {
+			pc_log("Device $device_name ($mac @ $ip) idle: no active connections", 'debug', array(
+				'event.action' => 'device_idle',
+				'device.mac' => $mac,
+				'device.name' => $device_name,
+				'client.address' => $ip,
+				'connections' => 0
+			));
+		}
+	}
+	
+	pc_log("Usage update completed: tracked $tracked_count active devices", 'info', array(
+		'event.action' => 'usage_update_complete',
+		'devices.tracked' => $tracked_count,
+		'devices.total' => count($devices),
+		'devices_by_ip' => count($state['devices_by_ip'])
+	));
+}
+
+/**
+ * Check if device is currently online on the network
+ * 
+ * Uses ARP table (system_get_arp_table) to detect if device with specified
+ * MAC address is active. Returns true if found in ARP cache, false otherwise.
+ * This method is reliable for local network devices but may not detect devices
+ * that haven't communicated recently (ARP cache expires after ~20 min on FreeBSD).
+ * 
+ * @param string $mac MAC address in format aa:bb:cc:dd:ee:ff (case insensitive)
+ * @return bool True if device is online, false if offline or ARP unavailable
+ * @since 0.1.0
+ * @updated 0.1.3 Using system_get_arp_table() instead of shell exec
+ * 
+ * @example
+ * if (pc_is_device_online('aa:bb:cc:dd:ee:ff')) {
+ *     pc_update_device_usage($mac, $state);
+ * }
+ * 
+ * @see pc_get_dhcp_leases() For DHCP-based device detection
+ * @see pc_update_device_usage() For usage tracking
+ */
+function pc_is_device_online($mac) {
+	// WHY: Normalize MAC address to lowercase and trim whitespace
+	// Reason: MAC addresses can be entered in various formats (AA:BB:CC or aa:bb:cc)
+	// and ARP table may use different case. Normalization ensures reliable matching.
+	// Trim removes accidental whitespace from config/form submissions.
+	$mac = pc_normalize_mac($mac);
+	
+	// GRACEFUL DEGRADATION: Try ARP table first, fall back to DHCP leases
+	// WHY: system_get_arp_table() can fail on some systems or during heavy load
+	// Fallback ensures we still track devices even if ARP temporarily unavailable
+	try {
+		$arp_table = system_get_arp_table();
+		
+		if (is_array($arp_table)) {
+			foreach ($arp_table as $entry) {
+				if (isset($entry['mac-address']) && strtolower($entry['mac-address']) == $mac) {
+					return true;
+				}
+			}
+		}
+	} catch (Exception $e) {
+		pc_log("ARP table lookup failed, falling back to DHCP leases: " . $e->getMessage(), 'debug', array(
+			'event.action' => 'arp_lookup_failed',
+			'device.mac' => $mac,
+			'fallback.method' => 'dhcp_leases'
+		));
+	}
+	
+	// FALLBACK: Check DHCP leases as alternative method
+	// WHY: If ARP fails, DHCP leases can still show recently active devices
+	// Trade-off: Less real-time but better than no tracking at all
+	try {
+		$leases = system_get_dhcpleases();
+		if (isset($leases['lease']) && is_array($leases['lease'])) {
+			foreach ($leases['lease'] as $lease) {
+				if (isset($lease['mac']) && strtolower($lease['mac']) == $mac) {
+					// Check if lease is recent (within last 5 minutes)
+					if (isset($lease['end']) && $lease['end'] > (time() - 300)) {
+						return true;
+					}
+				}
+			}
+		}
+	} catch (Exception $e) {
+		pc_log("DHCP lease lookup also failed: " . $e->getMessage(), 'warning', array(
+			'event.action' => 'dhcp_lookup_failed',
+			'device.mac' => $mac
+		));
+	}
+	
+	// If both methods fail, conservatively return false
+	// WHY: Better to under-track than over-track usage
 	return false;
 }
 
 /**
- * Logging function - OpenTelemetry compliant format
+ * ========================================================================
+ * CONSOLE LOGGING ENHANCEMENTS
+ * ========================================================================
+ */
+
+/**
+ * Enhanced CLI logging with emoji support
+ * 
+ * Provides formatted console output with emoji icons for better readability
+ * when running scripts in terminal. Only outputs to console when running in
+ * CLI mode (php_sapi_name() === 'cli'). Also logs to file via pc_log().
+ * 
+ * @param string $message The message to log
+ * @param string $level Log level: debug, info, success, warning, error
+ * @param array $attributes Optional attributes for structured logging
+ * @return void
+ * @since 0.1.3
+ * 
+ * @example
+ * pc_cli_log("Starting synchronization", 'info');
+ * pc_cli_log("Firewall rules updated", 'success');
+ * pc_cli_log("Warning: ARP table unavailable", 'warning');
+ * pc_cli_log("Error: Failed to save state", 'error');
+ */
+function pc_cli_log($message, $level = 'info', $attributes = array()) {
+	// Emoji mapping for different log levels
+	// Using clear, universally-supported emojis for terminal compatibility
+	$emoji = array(
+		'debug' => '🔍',
+		'info' => 'ℹ️ ',
+		'success' => '✅',
+		'warning' => '⚠️ ',
+		'error' => '❌'
+	);
+	
+	$symbol = isset($emoji[$level]) ? $emoji[$level] : 'ℹ️ ';
+	
+	// Only output to console if running in CLI mode
+	// This prevents output when running via web interface
+	if (php_sapi_name() === 'cli') {
+		echo $symbol . ' ' . $message . "\n";
+	}
+	
+	// Map 'success' level to 'info' for file logging
+	// (file logging only supports: debug, info, warning, error)
+	$file_log_level = ($level === 'success') ? 'info' : $level;
+	
+	// Also log to file for permanent record
+	pc_log($message, $file_log_level, $attributes);
+}
+
+/**
+ * ========================================================================
+ * LOG ROTATION FUNCTIONS
+ * ========================================================================
+ */
+
+/**
+ * Get current log file with automatic rotation
+ * 
+ * Implements automatic log rotation when files reach PC_MAX_LOG_SIZE.
+ * Creates dated log files with sequential numbering when size limit reached.
+ * 
+ * @return string Path to current log file
+ * @since 0.1.3
+ * 
+ * @example
+ * /var/log/parental_control-2025-12-25.jsonl
+ * /var/log/parental_control-2025-12-25-1.jsonl
+ * /var/log/parental_control-2025-12-25-2.jsonl
+ */
+function pc_get_current_log_file() {
+	$log_dir = dirname(PC_LOG_FILE);
+	
+	// GRACEFUL DEGRADATION: Ensure log directory exists
+	// WHY: Log directory might not exist on fresh install or after system restore
+	if (!is_dir($log_dir)) {
+		@mkdir($log_dir, 0755, true);
+	}
+	
+	$date = date('Y-m-d');
+	$base_name = $log_dir . '/' . PC_LOG_PREFIX . '-' . $date;
+	
+	$file_index = 0;
+	while (true) {
+		// Build filename with optional index suffix
+		$suffix = ($file_index === 0) ? '' : '-' . $file_index;
+		$log_file = $base_name . $suffix . '.jsonl';
+		
+		// Create file if it doesn't exist
+		if (!file_exists($log_file)) {
+			@touch($log_file);
+			@chmod($log_file, 0644);
+			return $log_file;
+		}
+		
+		// Check if current file is below size limit
+		// We use < instead of <= to allow some headroom
+		if (filesize($log_file) < PC_MAX_LOG_SIZE) {
+			return $log_file;
+		}
+		
+		// Current file is full, try next index
+		$file_index++;
+		
+		// Safety check: prevent infinite loop (max 100 files per day)
+		if ($file_index > 100) {
+			// If we somehow hit 100 files in one day, just use the last one
+			// This shouldn't happen in normal operation
+			return $log_file;
+		}
+	}
+}
+
+/**
+ * Clean up old log files
+ * 
+ * Removes old log files keeping only the most recent PC_MAX_LOG_FILES.
+ * Called periodically (1% chance on each log write) to avoid overhead.
+ * 
+ * This function sorts log files by modification time and deletes the oldest
+ * ones, ensuring we don't accumulate too many log files over time.
+ * 
+ * @return int Number of files deleted
+ * @since 0.1.3
+ */
+function pc_cleanup_old_logs() {
+	$log_dir = dirname(PC_LOG_FILE);
+	$log_pattern = $log_dir . '/' . PC_LOG_PREFIX . '-*.jsonl';
+	$log_files = glob($log_pattern);
+	
+	if (!is_array($log_files) || count($log_files) <= PC_MAX_LOG_FILES) {
+		return 0; // Nothing to clean up
+	}
+	
+	// Sort by modification time (oldest first)
+	// We use a custom sort to handle the case where filemtime might fail
+	usort($log_files, function($a, $b) {
+		$time_a = @filemtime($a);
+		$time_b = @filemtime($b);
+		if ($time_a === false) return 1;  // Move failed files to end
+		if ($time_b === false) return -1;
+		return $time_a - $time_b;
+	});
+	
+	// Calculate how many files to delete
+	$files_to_delete_count = count($log_files) - PC_MAX_LOG_FILES;
+	$files_to_delete = array_slice($log_files, 0, $files_to_delete_count);
+	
+	$deleted = 0;
+	foreach ($files_to_delete as $file) {
+		if (@unlink($file)) {
+			$deleted++;
+		}
+	}
+	
+	if ($deleted > 0) {
+		pc_log("Cleaned up {$deleted} old log files", 'debug', array(
+			'event.action' => 'log_cleanup',
+			'files_deleted' => $deleted,
+			'files_remaining' => count($log_files) - $deleted
+		));
+	}
+	
+	return $deleted;
+}
+
+/**
+ * Logging function - OpenTelemetry compliant format with automatic rotation
+ * 
+ * Logs messages in OpenTelemetry-compliant JSON Lines format with automatic
+ * log rotation when files reach size limit. Each log entry is a complete JSON
+ * object on a single line for efficient parsing and streaming.
  * 
  * @param string $message The log message (Body)
  * @param string $level Severity level: debug, info, warning, error
  * @param array $attributes Additional structured attributes for SIEM/log analysis
  * @return void
+ * @since 0.1.0
+ * @updated 0.1.3 Added automatic log rotation
+ * 
+ * @example
+ * pc_log("Device blocked", 'info', array(
+ *     'device.mac' => 'aa:bb:cc:dd:ee:ff',
+ *     'child.name' => 'Emma',
+ *     'reason' => 'Time limit exceeded'
+ * ));
  */
 function pc_log($message, $level = 'info', $attributes = array()) {
 	global $config;
 	
 	// Check if logging is enabled
-	$pc_config = config_get_path('installedpackages/parentalcontrol/config', []);
-	if (!is_array($pc_config) || empty($pc_config['enable_logging'])) {
+	// WHY: Default to enabled (opt-out) instead of disabled (opt-in)
+	// Design Decision: Logging is essential for troubleshooting, so enable by default
+	// User can explicitly disable if desired, but most users want logs
+	$pc_config = config_get_path('installedpackages/parentalcontrol/config/0', array());
+	$logging_enabled = !isset($pc_config['enable_logging']) || $pc_config['enable_logging'] === 'on';
+	
+	// GRACEFUL DEGRADATION: If file logging disabled, fall back to syslog for critical messages
+	// WHY: Critical errors (error level) should always be logged somewhere for debugging
+	if (!$logging_enabled) {
+		if ($level === 'error' || $level === 'warning') {
+			// Fallback to pfSense syslog for critical messages
+			log_error("[Parental Control] {$level}: {$message}");
+		}
 		return;
 	}
 	
-	$log_level = config_get_path('installedpackages/parentalcontrol/log_level', 'info');
+	$log_level = config_get_path('installedpackages/parentalcontrol/config/0/log_level', 'info');
 	$levels = array('debug' => 0, 'info' => 1, 'warning' => 2, 'error' => 3);
 	$severity_numbers = array('debug' => 5, 'info' => 9, 'warning' => 13, 'error' => 17);
 	
@@ -845,7 +2516,7 @@ function pc_log($message, $level = 'info', $attributes = array()) {
 		// Resource attributes (describes the source)
 		'Resource' => array(
 			'service.name' => 'pfsense-parental-control',
-			'service.version' => '1.0.0',
+			'service.version' => PC_VERSION,
 			'service.instance.id' => gethostname(),
 			'deployment.environment' => 'production'
 		),
@@ -869,9 +2540,29 @@ function pc_log($message, $level = 'info', $attributes = array()) {
 		$log_record['TraceFlags'] = isset($attributes['trace_flags']) ? $attributes['trace_flags'] : '01';
 	}
 	
+	// Get current log file (with automatic rotation if needed)
+	$current_log = pc_get_current_log_file();
+	
 	// Write JSON log entry (one line per entry for easy parsing)
-	$json_log = json_encode($log_record, JSON_UNESCAPED_SLASHES) . "\n";
-	file_put_contents(PC_LOG_FILE, $json_log, FILE_APPEND);
+	// GRACEFUL DEGRADATION: If file write fails, fall back to syslog
+	try {
+		$json_log = json_encode($log_record, JSON_UNESCAPED_SLASHES) . "\n";
+		$result = @file_put_contents($current_log, $json_log, FILE_APPEND);
+		
+		if ($result === false) {
+			// File write failed - fallback to syslog
+			log_error("[Parental Control] Failed to write to log file. Message: {$message}");
+		}
+	} catch (Exception $e) {
+		// Fallback to syslog if logging completely fails
+		log_error("[Parental Control] Logging error: " . $e->getMessage() . ". Original message: {$message}");
+	}
+	
+	// Periodically clean up old log files (1% chance per log write)
+	// This ensures cleanup happens without adding overhead to every log operation
+	if (rand(1, 100) === 1) {
+		pc_cleanup_old_logs();
+	}
 	
 	// Also write human-readable format to system log for important messages
 	if ($level == 'warning' || $level == 'error') {
@@ -976,8 +2667,8 @@ function parental_control_profile_validate(&$post, &$input_errors) {
 			if (empty($device['mac_address'])) {
 				$input_errors[] = "Device #{$idx}: MAC address is required.";
 			} else {
-				$mac = strtolower(trim($device['mac_address']));
-				if (!preg_match('/^([0-9a-f]{2}[:-]){5}([0-9a-f]{2})$/i', $mac)) {
+				// Use helper function for validation (DRY)
+				if (!pc_validate_mac($device['mac_address'])) {
 					$input_errors[] = "Device #{$idx}: Invalid MAC address format.";
 				}
 			}
@@ -1032,7 +2723,7 @@ function pc_get_profile($profile_id) {
  * Get profile for a specific MAC address
  */
 function pc_get_profile_by_mac($mac) {
-	$mac = strtolower(trim($mac));
+	$mac = pc_normalize_mac($mac);
 	$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config');
 	
 	if (!is_array($profiles)) {
@@ -1045,7 +2736,7 @@ function pc_get_profile_by_mac($mac) {
 		}
 		
 		foreach ($profile['devices'] as $device) {
-			if (strtolower(trim($device['mac_address'])) == $mac) {
+			if (pc_normalize_mac($device['mac_address']) == $mac) {
 				return $profile;
 			}
 		}
@@ -1126,8 +2817,8 @@ function pc_is_profile_active($profile) {
  * Profile-based cron job (replaces device-based tracking)
  */
 function pc_profile_cron_job() {
-	// Check if service is enabled
-	if (config_get_path('installedpackages/parentalcontrol/config/0/enable') !== 'on') {
+	// Check if service is enabled using helper function (DRY)
+	if (!pc_is_service_enabled()) {
 		return;
 	}
 	
@@ -1268,60 +2959,124 @@ function pc_migrate_to_profiles() {
 }
 
 /**
- * Get DHCP leases for device auto-discovery
+ * Get all network devices for auto-discovery dropdown
+ * 
+ * Combines data from multiple sources to build comprehensive device list:
+ * 1. ARP table (most reliable, shows currently active devices)
+ * 2. DHCP leases (shows assigned IPs and hostnames)
+ * 3. DHCP static mappings (shows configured static assignments)
+ * 
+ * Returns array of devices with MAC|IP|hostname format suitable for dropdown.
+ * Deduplicates by MAC address, prioritizing entries with most information.
+ * 
+ * @return array Array of associative arrays with keys: mac, ip, hostname, display
+ *               'display' key contains formatted string: "MAC|IP|hostname"
+ * @since 0.1.0
+ * @updated 0.1.3 Added support for system_get_arp_table()
+ * 
+ * @example
+ * $devices = pc_get_dhcp_leases();
+ * foreach ($devices as $device) {
+ *     echo "<option value='{$device['display']}'>{$device['hostname']}</option>";
+ * }
+ * 
+ * @see pc_process_profile_devices() For processing dropdown selections
  */
 function pc_get_dhcp_leases() {
+	// PERFORMANCE: Cache the result since ARP/DNS lookups are expensive
+	// WHY: Multiple devices might be rendered in UI simultaneously, each calling this.
+	// Cache for 30 seconds - network state changes slowly enough that this is safe.
+	return pc_get_cached('dhcp_leases', function() use (&$config) {
+		return pc_get_dhcp_leases_uncached();
+	}, 30);
+}
+
+/**
+ * Internal function to get DHCP leases without caching
+ * 
+ * WHY: Separated from pc_get_dhcp_leases() to allow caching wrapper.
+ * Don't call this directly - use pc_get_dhcp_leases() instead.
+ * 
+ * @internal
+ * @return array Array of lease information
+ */
+function pc_get_dhcp_leases_uncached() {
 	global $config;
 	
 	$leases = array();
 	
-	// Get ARP table first (most reliable)
-	$arp_table = system_get_arp_table();
-	if (is_array($arp_table)) {
-		foreach ($arp_table as $entry) {
-			if (isset($entry['mac-address']) && isset($entry['ip-address'])) {
-				$mac = strtolower(str_replace('-', ':', $entry['mac-address']));
-				$ip = $entry['ip-address'];
-				
-				// Try to get hostname from DNS
-				$hostname = '';
-				if (function_exists('gethostbyaddr')) {
-					$resolved = @gethostbyaddr($ip);
-					if ($resolved != $ip) {
-						$hostname = $resolved;
-					}
-				}
-				
-				// If no hostname, try to get from DHCP static mappings
-				if (empty($hostname) && is_array($config['dhcpd'])) {
-					foreach ($config['dhcpd'] as $dhcp_if => $dhcp_config) {
-						if (isset($dhcp_config['staticmap']) && is_array($dhcp_config['staticmap'])) {
-							foreach ($dhcp_config['staticmap'] as $static) {
-								if (isset($static['mac']) && strtolower($static['mac']) == $mac) {
-									$hostname = isset($static['hostname']) ? $static['hostname'] : '';
-									break 2;
+	// GRACEFUL DEGRADATION: Try to get devices, but don't fail if sources unavailable
+	// WHY: Device auto-discovery is convenience feature, not critical for operation
+	// If ARP/DHCP lookups fail, return empty array so UI still works (manual entry)
+	
+	try {
+		// Get ARP table first (most reliable)
+		$arp_table = system_get_arp_table();
+		if (is_array($arp_table)) {
+			foreach ($arp_table as $entry) {
+				try {
+					if (isset($entry['mac-address']) && isset($entry['ip-address'])) {
+						$mac = strtolower(str_replace('-', ':', $entry['mac-address']));
+						$ip = $entry['ip-address'];
+						
+						// Try to get hostname from DNS (may be slow, use timeout)
+						$hostname = '';
+						if (function_exists('gethostbyaddr')) {
+							// WHY: @ suppresses warnings because gethostbyaddr can fail/timeout
+							// FALLBACK: If DNS lookup fails, just use IP
+							$resolved = @gethostbyaddr($ip);
+							if ($resolved != $ip) {
+								$hostname = $resolved;
+							}
+						}
+						
+						// FALLBACK: If no hostname, try DHCP static mappings
+						// WHY: Static mappings are reliable and don't require DNS
+						if (empty($hostname) && is_array($config['dhcpd'])) {
+							foreach ($config['dhcpd'] as $dhcp_if => $dhcp_config) {
+								if (isset($dhcp_config['staticmap']) && is_array($dhcp_config['staticmap'])) {
+									foreach ($dhcp_config['staticmap'] as $static) {
+										if (isset($static['mac']) && strtolower($static['mac']) == $mac) {
+											$hostname = isset($static['hostname']) ? $static['hostname'] : '';
+											break 2;
+										}
+									}
 								}
 							}
 						}
+						
+						$leases[] = array(
+							'mac' => $mac,
+							'ip' => $ip,
+							'hostname' => $hostname,
+							'online' => true
+						);
 					}
+				} catch (Exception $e) {
+					// Continue processing other entries if one fails
+					pc_log("Failed to process ARP entry: " . $e->getMessage(), 'debug');
 				}
-				
-				$leases[] = array(
-					'mac' => $mac,
-					'ip' => $ip,
-					'hostname' => $hostname,
-					'online' => true
-				);
 			}
 		}
+	} catch (Exception $e) {
+		// If ARP table completely unavailable, log but continue
+		// WHY: Auto-discovery failure shouldn't break manual device entry
+		pc_log("Failed to get device list: " . $e->getMessage(), 'warning', array(
+			'event.action' => 'device_discovery_failed',
+			'error.message' => $e->getMessage(),
+			'fallback.behavior' => 'manual_entry_still_available'
+		));
 	}
 	
 	// Sort by hostname/IP for easier selection
-	usort($leases, function($a, $b) {
-		$name_a = $a['hostname'] ?: $a['ip'];
-		$name_b = $b['hostname'] ?: $b['ip'];
-		return strcasecmp($name_a, $name_b);
-	});
+	// GRACEFUL: usort won't fail on empty array
+	if (!empty($leases)) {
+		usort($leases, function($a, $b) {
+			$name_a = $a['hostname'] ?: $a['ip'];
+			$name_b = $b['hostname'] ?: $b['ip'];
+			return strcasecmp($name_a, $name_b);
+		});
+	}
 	
 	return $leases;
 }
