@@ -2,11 +2,22 @@
 # Format: MAJOR.MINOR.PATCH (two digits each)
 # Auto-increment PATCH on each .inc file update
 
-CURRENT_VERSION=0.2.2
+CURRENT_VERSION=0.2.3
 BUILD_DATE=2025-12-26
 AUTHOR=Mukesh Kesharwani
 
 # Version History:
+# 0.2.3 - 2025-12-26 - CRITICAL HOTFIXES: Config corruption fixed, Profiles page functional
+#                    - CRITICAL: Fixed config.xml corruption (was restoring from backup every minute)
+#                    - CRITICAL: Removed duplicate 'devices' key that invalidated XML structure
+#                    - CRITICAL: Fixed device selection in Profiles page (JavaScript value mismatch)
+#                    - FEATURE: Added IP Address column to Status page for transparency
+#                    - FEATURE: Days field now multi-select dropdown (Sun, Mon, Tue, etc)
+#                    - FEATURE: Time format examples (24-hour: 08:00=8am, 22:00=10pm)
+#                    - BUGFIX: Validation no longer modifies $post (prevents corruption)
+#                    - BUGFIX: Cleaned empty device entries from profiles
+#                    - RESULT: Profiles can now be saved without corruption
+#                    - RESULT: Device selection from dropdown now works correctly
 # 0.2.2 - 2025-12-26 - CRITICAL HOTFIXES: Device tracking now works correctly
 #                    - BUGFIX: pc_get_devices() now extracts devices from profiles (not separate section)
 #                    - BUGFIX: Added 'enable' key to devices so tracking code can detect enabled devices

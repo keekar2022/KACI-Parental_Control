@@ -1,8 +1,8 @@
 {
   "build_info": {
-    "version": "0.2.2",
-    "build_date": "2025-12-26T22:00:00Z",
-    "git_commit": "6038064",
+    "version": "0.2.3",
+    "build_date": "2025-12-26T22:45:00Z",
+    "git_commit": "acc5cd4",
     "git_branch": "main",
     "built_by": "development",
     "build_environment": "local"
@@ -69,6 +69,25 @@
     }
   },
   "changelog": [
+    {
+      "version": "0.2.3",
+      "date": "2025-12-26",
+      "type": "critical",
+      "changes": [
+        "CRITICAL: Fixed config.xml corruption that caused backup restore every minute",
+        "CRITICAL: Removed duplicate 'devices' key alongside 'row' that invalidated XML",
+        "CRITICAL: Fixed device selection in Profiles page (JavaScript value mismatch)",
+        "FEATURE: Added IP Address column to Status page showing tracked device IPs",
+        "FEATURE: Days field now multi-select dropdown (Sunday-Saturday)",
+        "FEATURE: Added time format examples (24-hour: 08:00=8am, 22:00=10pm)",
+        "BUGFIX: Validation no longer modifies $post array preventing corruption",
+        "BUGFIX: pc_process_profile_devices() no longer adds duplicate keys",
+        "BUGFIX: Cleaned empty device entries from existing profiles",
+        "RESULT: Profiles page fully functional - can add/edit devices without errors",
+        "RESULT: Configuration persists correctly without backup restores",
+        "RESULT: Device dropdown auto-populates all fields correctly"
+      ]
+    },
     {
       "version": "0.2.2",
       "date": "2025-12-26",
