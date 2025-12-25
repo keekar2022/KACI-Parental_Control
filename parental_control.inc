@@ -712,12 +712,10 @@ function pc_process_profile_devices() {
 			continue;
 		}
 		
-		// CRITICAL FIX: Normalize row to devices for rest of code
-		// WHY: pfSense rowhelper stores as 'row', but our code expects 'devices'
-		if (!isset($profile['devices'])) {
-			$profile['devices'] = $profile['row'];
-			$modified = true;
-		}
+		// CRITICAL: Do NOT add 'devices' key here - it corrupts XML!
+		// WHY: pfSense stores rowhelper as 'row' ONLY. Adding 'devices' creates
+		// duplicate data that makes XML invalid. Normalization should happen
+		// during READ (pc_get_profiles/pc_get_devices), not during WRITE/SAVE.
 		
 		foreach ($profile['row'] as $didx => &$device) {
 			if (isset($device['device_selector']) && !empty($device['device_selector'])) {
@@ -758,6 +756,16 @@ function pc_process_profile_devices() {
 	
 	// Save back to config if modified
 	if ($modified) {
+		// CRITICAL: Remove any 'devices' keys before saving to prevent XML corruption
+		// WHY: pfSense expects ONLY 'row' for rowhelper fields. 'devices' key causes
+		// duplicate data in XML that makes it invalid and triggers constant restores.
+		foreach ($profiles as &$profile) {
+			if (isset($profile['devices'])) {
+				unset($profile['devices']);
+			}
+		}
+		unset($profile);
+		
 		config_set_path('installedpackages/parentalcontrolprofiles/config', $profiles);
 		write_config('Auto-populated device information from DHCP/ARP');
 		
@@ -2714,11 +2722,12 @@ function parental_control_profile_validate(&$post, &$input_errors) {
 			}
 		}
 		unset($device); // Break reference
-		
-		// CRITICAL: Copy processed 'row' data to 'devices' for validation
-		// WHY: Validation below checks 'devices' array, but form submits as 'row'
-		$post['devices'] = $post['row'];
 	}
+	
+	// CRITICAL: For validation, use 'row' as 'devices' but don't modify $post
+	// WHY: Validation checks 'devices', but we must NOT add 'devices' key to $post
+	// because that corrupts XML. Use a local reference instead.
+	$devices_to_validate = isset($post['row']) ? $post['row'] : (isset($post['devices']) ? $post['devices'] : array());
 	
 	// Validate profile name
 	if (empty($post['name'])) {
@@ -2746,9 +2755,9 @@ function parental_control_profile_validate(&$post, &$input_errors) {
 		}
 	}
 	
-	// Validate devices
-	if (isset($post['devices']) && is_array($post['devices'])) {
-		foreach ($post['devices'] as $idx => $device) {
+	// Validate devices (use local variable, don't modify $post)
+	if (!empty($devices_to_validate) && is_array($devices_to_validate)) {
+		foreach ($devices_to_validate as $idx => $device) {
 			if (empty($device['device_name'])) {
 				$input_errors[] = "Device #{$idx}: Device name is required.";
 			}
