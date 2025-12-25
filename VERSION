@@ -2,11 +2,12 @@
 # Format: MAJOR.MINOR.PATCH (two digits each)
 # Auto-increment PATCH on each .inc file update
 
-CURRENT_VERSION=0.2.4
+CURRENT_VERSION=0.2.5
 BUILD_DATE=2025-12-26
 AUTHOR=Mukesh Kesharwani
 
 # Version History:
+# 0.2.5 - 2025-12-26 - Fixed +Add button adding schedule fields instead of device fields
 # 0.2.4 - 2025-12-26 - BUGFIX: Fixed +Add button in Profiles page not adding device rows
 # 0.2.3 - 2025-12-26 - CRITICAL HOTFIXES: Config corruption fixed, Profiles page functional
 #                    - CRITICAL: Fixed config.xml corruption (was restoring from backup every minute)

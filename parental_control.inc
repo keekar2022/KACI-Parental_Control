@@ -18,7 +18,7 @@ require_once("shaper.inc");
 require_once("notices.inc");
 
 // Package version - Auto-increment on each .inc update
-define('PC_VERSION', '0.2.4');
+define('PC_VERSION', '0.2.5');
 define('PC_AUTHOR', 'Mukesh Kesharwani');
 define('PC_BUILD_DATE', '2025-12-26');
 
@@ -409,10 +409,17 @@ function pc_get_profiles($no_cache = false) {
 		}, 30);
 	}
 	
-	// CRITICAL FIX: Normalize 'row' to 'devices' for compatibility
-	// WHY: pfSense rowhelper stores as 'row', but our code expects 'devices'
+	// CRITICAL FIX: Normalize 'row' or 'devices' for compatibility
+	// WHY: Older configs use 'row', newer configs use 'devices' as fieldname
+	// Our code expects 'devices' for consistency
 	foreach ($profiles as &$profile) {
-		if (isset($profile['row']) && !isset($profile['devices'])) {
+		// If we have 'devices', ensure our code can use it
+		if (isset($profile['devices']) && is_array($profile['devices'])) {
+			// Already in correct format
+			continue;
+		}
+		// If we have 'row', normalize to 'devices'
+		if (isset($profile['row']) && is_array($profile['row'])) {
 			$profile['devices'] = $profile['row'];
 		}
 	}
@@ -708,16 +715,20 @@ function pc_process_profile_devices() {
 	
 	$modified = false;
 	foreach ($profiles as $pidx => &$profile) {
-		if (!isset($profile['row']) || !is_array($profile['row'])) {
+		// Handle both 'row' (old format) and 'devices' (new format)
+		// WHY: Some configs might have 'row', newer ones have 'devices'
+		$device_array = null;
+		if (isset($profile['devices']) && is_array($profile['devices'])) {
+			$device_array = &$profile['devices'];
+		} elseif (isset($profile['row']) && is_array($profile['row'])) {
+			$device_array = &$profile['row'];
+		}
+		
+		if ($device_array === null) {
 			continue;
 		}
 		
-		// CRITICAL: Do NOT add 'devices' key here - it corrupts XML!
-		// WHY: pfSense stores rowhelper as 'row' ONLY. Adding 'devices' creates
-		// duplicate data that makes XML invalid. Normalization should happen
-		// during READ (pc_get_profiles/pc_get_devices), not during WRITE/SAVE.
-		
-		foreach ($profile['row'] as $didx => &$device) {
+		foreach ($device_array as $didx => &$device) {
 			if (isset($device['device_selector']) && !empty($device['device_selector'])) {
 				$selector_value = trim($device['device_selector']);
 				
@@ -756,16 +767,6 @@ function pc_process_profile_devices() {
 	
 	// Save back to config if modified
 	if ($modified) {
-		// CRITICAL: Remove any 'devices' keys before saving to prevent XML corruption
-		// WHY: pfSense expects ONLY 'row' for rowhelper fields. 'devices' key causes
-		// duplicate data in XML that makes it invalid and triggers constant restores.
-		foreach ($profiles as &$profile) {
-			if (isset($profile['devices'])) {
-				unset($profile['devices']);
-			}
-		}
-		unset($profile);
-		
 		config_set_path('installedpackages/parentalcontrolprofiles/config', $profiles);
 		write_config('Auto-populated device information from DHCP/ARP');
 		
