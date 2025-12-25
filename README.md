@@ -3,7 +3,7 @@
 A comprehensive parental control package for pfSense that helps parents manage and limit their children's internet access time.
 
 **Package ID:** KACI-Parental_Control  
-**Version:** 0.1.2  
+**Version:** 0.2.1  
 **Author:** Mukesh Kesharwani (Keekar)  
 **Built with Passion**  
 **© 2025 Keekar**
@@ -339,10 +339,19 @@ php -l parental_control.inc
 
 ## 🆘 Support & Resources
 
-### Documentation in This Directory
-- **README.md** (this file) - Complete package documentation
-- **LOGGING.md** - OpenTelemetry logging format and SIEM integration
-- **JSON_VS_JSONL.md** - Why JSONL? Format comparison and best practices
+### 📚 Documentation
+
+**Quick Links:**
+- **[Quick Start Guide](docs/QUICKSTART.md)** - Get started in 5 minutes
+- **[Development Workflow](docs/DEVELOPMENT.md)** - Git branching and contribution guide
+- **[API Documentation](docs/API.md)** - REST API reference
+- **[Configuration Guide](docs/CONFIGURATION.md)** - All configuration options
+- **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** - Common issues and solutions
+
+**Release Information:**
+- **[Latest Release Notes](docs/RELEASE_v0.2.1_CRITICAL_FIX.md)** - v0.2.1 details
+- **[Architecture Documentation](docs/ARCHITECTURE_FIX_v0.2.1.md)** - Layer 3 architecture
+- **[Project Status](docs/PROJECT_STATUS_v0.2.1.md)** - Current project status
 
 ### Related Directories
 - **`../test_environment/`** - How to set up pfSense VM for testing
@@ -414,21 +423,18 @@ ssh admin@192.168.64.10 "cat /var/log/parental_control.jsonl | jq 'select(.Sever
 ```
 
 **SIEM Integration:**  
-See **`LOGGING.md`** for complete documentation on:
-- OpenTelemetry log format specification
-- Why `.jsonl` instead of `.log` or `.json`
-- SIEM integration (Splunk, Elasticsearch, Grafana, Graylog)
-- Log parsing examples
-- Query patterns
-
-See **`JSON_VS_JSONL.md`** for format comparison and best practices.
+The package uses OpenTelemetry-compliant JSONL format for logs:
+- Compatible with Splunk, Elasticsearch, Grafana Loki, Graylog
+- Stream-friendly format (works with `tail -f`)
+- One JSON object per line for efficient parsing
+- See [Configuration Guide](docs/CONFIGURATION.md) for advanced logging options
 
 ---
 
 ## 📝 License & Credits
 
 **Package:** Parental Control for pfSense  
-**Version:** 1.0.0  
+**Version:** 0.2.1  
 **Compatibility:** pfSense 2.7.0+  
 **Platform:** FreeBSD 13.0+
 
