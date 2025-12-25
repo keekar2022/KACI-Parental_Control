@@ -18,7 +18,7 @@ require_once("shaper.inc");
 require_once("notices.inc");
 
 // Package version - Auto-increment on each .inc update
-define('PC_VERSION', '0.2.3');
+define('PC_VERSION', '0.2.4');
 define('PC_AUTHOR', 'Mukesh Kesharwani');
 define('PC_BUILD_DATE', '2025-12-26');
 
@@ -3271,17 +3271,39 @@ function pc_generate_device_selector_js() {
 	
 	$js .= "// Initialize on page load\n";
 	$js .= "if (document.readyState === 'loading') {\n";
-	$js .= "    document.addEventListener('DOMContentLoaded', initDeviceSelectors);\n";
+	$js .= "    document.addEventListener('DOMContentLoaded', function() {\n";
+	$js .= "        initDeviceSelectors();\n";
+	$js .= "        setupRowhelperObserver();\n";
+	$js .= "    });\n";
 	$js .= "} else {\n";
 	$js .= "    initDeviceSelectors();\n";
+	$js .= "    setupRowhelperObserver();\n";
 	$js .= "}\n\n";
 	
-	$js .= "// Re-initialize when clicking buttons (for dynamic rows)\n";
-	$js .= "document.addEventListener('click', function(e) {\n";
-	$js .= "    if (e.target.classList.contains('btn') || e.target.closest('.btn')) {\n";
-	$js .= "        setTimeout(initDeviceSelectors, 300);\n";
-	$js .= "    }\n";
-	$js .= "});\n";
+	$js .= "// Monitor for new rows added by rowhelper\n";
+	$js .= "function setupRowhelperObserver() {\n";
+	$js .= "    // Use MutationObserver to detect when new rows are added\n";
+	$js .= "    var targetNode = document.body;\n";
+	$js .= "    var config = { childList: true, subtree: true };\n";
+	$js .= "    var observer = new MutationObserver(function(mutations) {\n";
+	$js .= "        mutations.forEach(function(mutation) {\n";
+	$js .= "            if (mutation.addedNodes.length > 0) {\n";
+	$js .= "                // Check if added nodes contain device selector dropdowns\n";
+	$js .= "                mutation.addedNodes.forEach(function(node) {\n";
+	$js .= "                    if (node.nodeType === 1) { // Element node\n";
+	$js .= "                        var selects = node.querySelectorAll ? node.querySelectorAll('select[name*=\"device_selector\"]') : [];\n";
+	$js .= "                        if (selects.length > 0 || (node.tagName === 'SELECT' && node.name && node.name.indexOf('device_selector') > -1)) {\n";
+	$js .= "                            console.log('New device row detected, re-initializing selectors');\n";
+	$js .= "                            setTimeout(initDeviceSelectors, 100);\n";
+	$js .= "                        }\n";
+	$js .= "                    }\n";
+	$js .= "                });\n";
+	$js .= "            }\n";
+	$js .= "        });\n";
+	$js .= "    });\n";
+	$js .= "    observer.observe(targetNode, config);\n";
+	$js .= "    console.log('Rowhelper observer initialized');\n";
+	$js .= "}\n";
 	
 	$js .= "//]]>\n";
 	$js .= "</script>\n";

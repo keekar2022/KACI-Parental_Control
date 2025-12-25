@@ -190,7 +190,7 @@ she gets 2 hours total across both devices, not 2 hours per device.<br/><br/>
 		
 	<field>
 		<fielddescr>Devices</fielddescr>
-		<fieldname>devices</fieldname>
+		<fieldname>row</fieldname>
 		<type>rowhelper</type>
 		<rowhelper>
 			<rowhelperfield>

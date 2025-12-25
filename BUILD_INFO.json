@@ -1,8 +1,8 @@
 {
   "build_info": {
-    "version": "0.2.3",
-    "build_date": "2025-12-26T22:45:00Z",
-    "git_commit": "acc5cd4",
+    "version": "0.2.4",
+    "build_date": "2025-12-26T23:00:00Z",
+    "git_commit": "2d50d29",
     "git_branch": "main",
     "built_by": "development",
     "build_environment": "local"
@@ -69,6 +69,17 @@
     }
   },
   "changelog": [
+    {
+      "version": "0.2.4",
+      "date": "2025-12-26",
+      "type": "bugfix",
+      "changes": [
+        "BUGFIX: Fixed +Add button in Profiles page not adding device rows",
+        "BUGFIX: Replaced generic click handler with MutationObserver",
+        "BUGFIX: Changed rowhelper fieldname from 'devices' to 'row' (pfSense convention)",
+        "RESULT: +Add button now properly adds new device entry rows"
+      ]
+    },
     {
       "version": "0.2.3",
       "date": "2025-12-26",
