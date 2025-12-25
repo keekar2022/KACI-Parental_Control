@@ -359,13 +359,25 @@ function pc_get_devices($enabled_only = false, $no_cache = false) {
 function pc_get_profiles($no_cache = false) {
 	$cache_key = 'profiles_all';
 	
+	$profiles = [];
 	if ($no_cache) {
-		return config_get_path('installedpackages/parentalcontrolprofiles/config', []);
+		$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', []);
+	} else {
+		$profiles = pc_get_cached($cache_key, function() {
+			return config_get_path('installedpackages/parentalcontrolprofiles/config', []);
+		}, 30);
 	}
 	
-	return pc_get_cached($cache_key, function() {
-		return config_get_path('installedpackages/parentalcontrolprofiles/config', []);
-	}, 30);
+	// CRITICAL FIX: Normalize 'row' to 'devices' for compatibility
+	// WHY: pfSense rowhelper stores as 'row', but our code expects 'devices'
+	foreach ($profiles as &$profile) {
+		if (isset($profile['row']) && !isset($profile['devices'])) {
+			$profile['devices'] = $profile['row'];
+		}
+	}
+	unset($profile);
+	
+	return $profiles;
 }
 
 /**
@@ -657,6 +669,13 @@ function pc_process_profile_devices() {
 	foreach ($profiles as $pidx => &$profile) {
 		if (!isset($profile['row']) || !is_array($profile['row'])) {
 			continue;
+		}
+		
+		// CRITICAL FIX: Normalize row to devices for rest of code
+		// WHY: pfSense rowhelper stores as 'row', but our code expects 'devices'
+		if (!isset($profile['devices'])) {
+			$profile['devices'] = $profile['row'];
+			$modified = true;
 		}
 		
 		foreach ($profile['row'] as $didx => &$device) {
