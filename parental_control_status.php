@@ -126,6 +126,7 @@ if (is_array($profiles)) {
 						<th><?=gettext("Profile")?></th>
 						<th><?=gettext("Device")?></th>
 						<th><?=gettext("MAC Address")?></th>
+						<th><?=gettext("IP Address")?></th>
 						<th><?=gettext("Status")?></th>
 						<th><?=gettext("Daily Limit")?></th>
 						<th><?=gettext("Usage Today")?></th>
@@ -158,7 +159,7 @@ if (is_array($profiles)) {
 							if (empty($devices)): ?>
 								<tr>
 									<td><?=$profile_name?></td>
-									<td colspan="6"><em><?=gettext("No devices configured")?></em></td>
+									<td colspan="7"><em><?=gettext("No devices configured")?></em></td>
 								</tr>
 							<?php continue;
 							endif;
@@ -215,6 +216,13 @@ if (is_array($profiles)) {
 							<td><?=$profile_name?></td>
 							<td><?=$device_name?></td>
 							<td><code><?=$mac_display?></code></td>
+							<td><?php 
+								if ($device_ip) {
+									echo '<code>' . htmlspecialchars($device_ip) . '</code>';
+								} else {
+									echo '<em style="color: #999;">Not Found</em>';
+								}
+							?></td>
 							<td><?=$status?></td>
 							<td><?=$limit_formatted?></td>
 							<td><?=$usage_formatted?></td>
