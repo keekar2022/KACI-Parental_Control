@@ -2692,6 +2692,8 @@ function pc_send_notification($subject, $message) {
  */
 function parental_control_profile_validate(&$post, &$input_errors) {
 	// Pre-process device_selector to populate device fields
+	// WHY: pfSense rowhelper submits data as 'row' array, not 'devices'
+	// We need to process this BEFORE validation to ensure fields are populated
 	if (isset($post['row']) && is_array($post['row'])) {
 		foreach ($post['row'] as $idx => &$device) {
 			if (isset($device['device_selector']) && !empty($device['device_selector'])) {
@@ -2712,6 +2714,10 @@ function parental_control_profile_validate(&$post, &$input_errors) {
 			}
 		}
 		unset($device); // Break reference
+		
+		// CRITICAL: Copy processed 'row' data to 'devices' for validation
+		// WHY: Validation below checks 'devices' array, but form submits as 'row'
+		$post['devices'] = $post['row'];
 	}
 	
 	// Validate profile name
@@ -2764,23 +2770,38 @@ function parental_control_profile_validate(&$post, &$input_errors) {
 	
 	// Validate schedules
 	if (isset($post['schedules']) && is_array($post['schedules'])) {
-		foreach ($post['schedules'] as $idx => $schedule) {
+		foreach ($post['schedules'] as $idx => &$schedule) {
 			if (empty($schedule['name'])) {
 				$input_errors[] = "Schedule #{$idx}: Name is required.";
 			}
 			
+			// Handle days field (can be array from multi-select or comma-separated string)
 			if (empty($schedule['days'])) {
-				$input_errors[] = "Schedule #{$idx}: Days are required.";
+				$input_errors[] = "Schedule #{$idx}: At least one day is required.";
+			} else {
+				// Convert array to comma-separated string for storage
+				if (is_array($schedule['days'])) {
+					$schedule['days'] = implode(',', $schedule['days']);
+				}
+				// Validate day values
+				$valid_days = array('sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat');
+				$selected_days = array_map('trim', explode(',', $schedule['days']));
+				foreach ($selected_days as $day) {
+					if (!in_array(strtolower($day), $valid_days)) {
+						$input_errors[] = "Schedule #{$idx}: Invalid day value '{$day}'.";
+					}
+				}
 			}
 			
 			if (empty($schedule['start_time']) || !preg_match('/^\d{2}:\d{2}$/', $schedule['start_time'])) {
-				$input_errors[] = "Schedule #{$idx}: Valid start time required (HH:MM format).";
+				$input_errors[] = "Schedule #{$idx}: Valid start time required (HH:MM format, e.g., 08:00 or 22:30).";
 			}
 			
 			if (empty($schedule['end_time']) || !preg_match('/^\d{2}:\d{2}$/', $schedule['end_time'])) {
-				$input_errors[] = "Schedule #{$idx}: Valid end time required (HH:MM format).";
+				$input_errors[] = "Schedule #{$idx}: Valid end time required (HH:MM format, e.g., 17:00 or 23:45).";
 			}
 		}
+		unset($schedule); // Break reference
 	}
 }
 
@@ -3188,7 +3209,8 @@ function pc_generate_device_selector_js() {
 	$js .= "            var label = (device.hostname || device.ip) + ' (' + device.mac + ')';\n";
 	$js .= "            if (device.online) label += ' [ONLINE]';\n";
 	$js .= "            var option = document.createElement('option');\n";
-	$js .= "            option.value = device.mac;\n";
+	$js .= "            // CRITICAL: Value must be 'mac|ip|hostname' format to match XML and parsing logic\n";
+	$js .= "            option.value = device.mac + '|' + device.ip + '|' + (device.hostname || device.ip);\n";
 	$js .= "            option.text = label;\n";
 	$js .= "            select.add(option);\n";
 	$js .= "        });\n";

@@ -266,15 +266,25 @@ she gets 2 hours total across both devices, not 2 hours per device.<br/><br/>
 				<rowhelperfield>
 					<fielddescr>Days</fielddescr>
 					<fieldname>days</fieldname>
-					<description>Days (comma separated: mon,tue,wed,thu,fri,sat,sun)</description>
-					<type>input</type>
-					<size>25</size>
+					<description>Select days when this schedule is active</description>
+					<type>select</type>
+					<multiple/>
+					<size>7</size>
+					<options>
+						<option><name>Sunday</name><value>sun</value></option>
+						<option><name>Monday</name><value>mon</value></option>
+						<option><name>Tuesday</name><value>tue</value></option>
+						<option><name>Wednesday</name><value>wed</value></option>
+						<option><name>Thursday</name><value>thu</value></option>
+						<option><name>Friday</name><value>fri</value></option>
+						<option><name>Saturday</name><value>sat</value></option>
+					</options>
 					<required/>
 				</rowhelperfield>
 				<rowhelperfield>
 					<fielddescr>Start Time</fielddescr>
 					<fieldname>start_time</fieldname>
-					<description>Start time (HH:MM format, 24-hour)</description>
+					<description>24-hour format. Examples: 08:00 (8am), 13:30 (1:30pm), 22:00 (10pm)</description>
 					<type>input</type>
 					<size>8</size>
 					<required/>
@@ -282,7 +292,7 @@ she gets 2 hours total across both devices, not 2 hours per device.<br/><br/>
 				<rowhelperfield>
 					<fielddescr>End Time</fielddescr>
 					<fieldname>end_time</fieldname>
-					<description>End time (HH:MM format, 24-hour)</description>
+					<description>24-hour format. Examples: 17:00 (5pm), 20:30 (8:30pm), 07:00 (7am)</description>
 					<type>input</type>
 					<size>8</size>
 					<required/>
@@ -314,7 +324,8 @@ she gets 2 hours total across both devices, not 2 hours per device.<br/><br/>
 			<fieldname>reset_time</fieldname>
 			<description>
 				<![CDATA[
-				Time when daily counters reset (HH:MM format, 24-hour).<br/>
+				Time when daily counters reset. 24-hour format: HH:MM<br/>
+				Examples: 00:00 (midnight), 06:00 (6am), 18:00 (6pm)<br/>
 				Leave empty to use global setting (midnight).
 				]]>
 			</description>
