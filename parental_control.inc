@@ -358,6 +358,13 @@ function pc_get_devices($enabled_only = false, $no_cache = false) {
 			$device['weekend_bonus'] = $profile['weekend_bonus'] ?? 0;
 			$device['profile_enabled'] = $profile['enabled'] ?? 'off';
 			
+			// CRITICAL FIX: Set device 'enable' key for tracking code
+			// WHY: pc_update_device_usage() checks $device['enable'] to determine if device should be tracked
+			// If device row has explicit enable key, use it, otherwise default to 'on' if profile is enabled
+			if (!isset($device['enable'])) {
+				$device['enable'] = 'on'; // Profile is enabled (we're in the enabled profile loop), so enable device
+			}
+			
 			$all_devices[] = $device;
 		}
 	}
