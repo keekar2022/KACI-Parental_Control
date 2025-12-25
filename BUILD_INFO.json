@@ -1,8 +1,8 @@
 {
   "build_info": {
-    "version": "0.2.1",
-    "build_date": "2025-12-26T20:00:00Z",
-    "git_commit": "c9e1f2a",
+    "version": "0.2.2",
+    "build_date": "2025-12-26T22:00:00Z",
+    "git_commit": "6038064",
     "git_branch": "main",
     "built_by": "development",
     "build_environment": "local"
@@ -69,6 +69,22 @@
     }
   },
   "changelog": [
+    {
+      "version": "0.2.2",
+      "date": "2025-12-26",
+      "type": "hotfix",
+      "changes": [
+        "CRITICAL BUGFIX: pc_get_devices() now correctly extracts devices from nested profiles",
+        "CRITICAL BUGFIX: Added missing 'enable' key to devices so tracking logic works",
+        "CRITICAL BUGFIX: Normalize 'row' to 'devices' for pfSense rowhelper XML compatibility",
+        "RESULT: Usage tracking now works correctly - time counters increment properly",
+        "RESULT: State file now populates with device data as expected",
+        "RESULT: GUI now displays accurate usage and remaining time",
+        "TESTED: All fixes verified on production system (fw.keekar.com)",
+        "ARCHITECTURE: Devices are now correctly extracted from profile hierarchy",
+        "RELIABILITY: Profile 'enable' status properly propagates to devices"
+      ]
+    },
     {
       "version": "0.2.1",
       "date": "2025-12-26",

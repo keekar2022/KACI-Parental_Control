@@ -2,11 +2,18 @@
 # Format: MAJOR.MINOR.PATCH (two digits each)
 # Auto-increment PATCH on each .inc file update
 
-CURRENT_VERSION=0.2.1
+CURRENT_VERSION=0.2.2
 BUILD_DATE=2025-12-26
 AUTHOR=Mukesh Kesharwani
 
 # Version History:
+# 0.2.2 - 2025-12-26 - CRITICAL HOTFIXES: Device tracking now works correctly
+#                    - BUGFIX: pc_get_devices() now extracts devices from profiles (not separate section)
+#                    - BUGFIX: Added 'enable' key to devices so tracking code can detect enabled devices
+#                    - BUGFIX: Normalize 'row' to 'devices' for pfSense rowhelper compatibility
+#                    - RESULT: Usage tracking and time counters now work correctly
+#                    - All 3 bugs that prevented tracking from working are now fixed
+#                    - Tested and verified on production system (fw.keekar.com)
 # 0.2.1 - 2025-12-26 - CRITICAL FIX: Layer 3 compliance (IP-based architecture)
 #                    - CRITICAL: Complete rewrite to use IP addresses for operational logic
 #                    -      pfSense operates at Layer 3 (IP layer), not Layer 2 (MAC layer)
