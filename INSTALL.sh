@@ -440,6 +440,46 @@ PHPEOF
 }
 
 #############################################
+# Setup cron job
+#############################################
+setup_cron_job() {
+    print_info "Setting up cron job for usage tracking..."
+    
+    # Create cron setup script
+    cat > /tmp/setup_cron_$$.php << 'PHPEOF'
+<?php
+require_once('/usr/local/pkg/parental_control.inc');
+
+echo "Installing cron job...\n";
+pc_setup_cron_job();
+echo "Cron job installed successfully!\n";
+?>
+PHPEOF
+
+    # Copy and execute cron setup script
+    if scp -q /tmp/setup_cron_$$.php $PFSENSE_USER@$PFSENSE_IP:/tmp/setup_cron.php 2>/dev/null; then
+        ssh $PFSENSE_USER@$PFSENSE_IP "sudo /usr/local/bin/php /tmp/setup_cron.php 2>&1" 2>/dev/null
+        
+        # Verify cron job was created
+        CRON_CHECK=$(ssh $PFSENSE_USER@$PFSENSE_IP "sudo crontab -l 2>/dev/null | grep -c 'parental_control'" 2>/dev/null || echo "0")
+        
+        if [ "$CRON_CHECK" -gt 0 ]; then
+            print_success "Cron job installed and verified"
+        else
+            print_warning "Cron job may not be installed - verify manually"
+            print_info "  Run: sudo php -r \"require_once('/usr/local/pkg/parental_control.inc'); pc_setup_cron_job();\""
+        fi
+        
+        # Cleanup
+        ssh $PFSENSE_USER@$PFSENSE_IP "rm -f /tmp/setup_cron.php" 2>/dev/null || true
+    else
+        print_warning "Could not copy cron setup script"
+    fi
+    
+    rm -f /tmp/setup_cron_$$.php
+}
+
+#############################################
 # Verify installation
 #############################################
 verify_installation() {
@@ -528,6 +568,19 @@ verify_installation() {
         echo "  require_once(\"pkg-utils.inc\");"
         echo "  install_package_xml(\"parental_control\");"
         echo "  exit"
+    fi
+    
+    # Check cron job
+    print_info "Checking cron job..."
+    CRON_COUNT=$(ssh $PFSENSE_USER@$PFSENSE_IP 'sudo crontab -l 2>/dev/null | grep -c "parental_control" || echo 0')
+    if [ "$CRON_COUNT" -gt 0 ] 2>/dev/null; then
+        print_success "Cron job installed and active"
+    else
+        print_warning "Cron job not found - usage tracking won't work!"
+        echo ""
+        echo "To install the cron job manually, run:"
+        echo "  ssh $PFSENSE_USER@$PFSENSE_IP"
+        echo "  sudo php -r \"require_once('/usr/local/pkg/parental_control.inc'); pc_setup_cron_job();\""
     fi
     
     return 0
@@ -723,6 +776,9 @@ do_install() {
     
     # Register package and initialize configuration
     register_package
+    
+    # Setup cron job for usage tracking
+    setup_cron_job
     
     # Verify
     if [ "$MODE" = "install" ] || [ "$MODE" = "verify" ]; then
