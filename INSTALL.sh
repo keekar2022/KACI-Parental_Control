@@ -250,7 +250,6 @@ upload_files() {
         "$PACKAGE_DIR/info.xml" \
         "$PACKAGE_DIR/parental_control.xml" \
         "$PACKAGE_DIR/parental_control_profiles.xml" \
-        "$PACKAGE_DIR/parental_control_schedules.xml" \
         "$PACKAGE_DIR/parental_control.inc" \
         "$PACKAGE_DIR/parental_control_status.php" \
         "$PACKAGE_DIR/parental_control_schedules.php" \
@@ -284,7 +283,6 @@ upload_files() {
         sudo -n mv /tmp/info.xml /usr/local/share/pfSense-pkg-KACI-Parental_Control/ && \
         sudo -n mv /tmp/parental_control.xml /usr/local/pkg/ && \
         sudo -n mv /tmp/parental_control_profiles.xml /usr/local/pkg/ && \
-        sudo -n mv /tmp/parental_control_schedules.xml /usr/local/pkg/ && \
         sudo -n mv /tmp/parental_control.inc /usr/local/pkg/ && \
         sudo -n mv /tmp/parental_control_status.php /usr/local/www/ && \
         sudo -n mv /tmp/parental_control_schedules.php /usr/local/www/ && \
@@ -310,7 +308,6 @@ upload_files() {
             sudo mv /tmp/info.xml /usr/local/share/pfSense-pkg-KACI-Parental_Control/ && \
             sudo mv /tmp/parental_control.xml /usr/local/pkg/ && \
             sudo mv /tmp/parental_control_profiles.xml /usr/local/pkg/ && \
-            sudo mv /tmp/parental_control_schedules.xml /usr/local/pkg/ && \
             sudo mv /tmp/parental_control.inc /usr/local/pkg/ && \
             sudo mv /tmp/parental_control_status.php /usr/local/www/ && \
             sudo mv /tmp/parental_control_schedules.php /usr/local/www/ && \
@@ -503,7 +500,6 @@ verify_installation() {
     for FILE in \
             "/usr/local/pkg/parental_control.xml" \
             "/usr/local/pkg/parental_control_profiles.xml" \
-            "/usr/local/pkg/parental_control_schedules.xml" \
             "/usr/local/pkg/parental_control.inc" \
             "/usr/local/www/parental_control_status.php" \
             "/usr/local/www/parental_control_schedules.php" \
@@ -656,8 +652,8 @@ UNREGISTER_EOF
     if ssh $PFSENSE_USER@$PFSENSE_IP "
         sudo rm -f /usr/local/pkg/parental_control.xml 2>/dev/null
         sudo rm -f /usr/local/pkg/parental_control_profiles.xml 2>/dev/null
-        sudo rm -f /usr/local/pkg/parental_control_schedules.xml 2>/dev/null
         sudo rm -f /usr/local/pkg/parental_control_devices.xml 2>/dev/null
+        sudo rm -f /usr/local/pkg/parental_control_schedules.xml 2>/dev/null
         sudo rm -f /usr/local/pkg/parental_control.inc 2>/dev/null
         sudo rm -f /usr/local/www/parental_control_status.php 2>/dev/null
         sudo rm -f /usr/local/www/parental_control_schedules.php 2>/dev/null
