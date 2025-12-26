@@ -18,7 +18,7 @@ require_once("shaper.inc");
 require_once("notices.inc");
 
 // Package version - Auto-increment on each .inc update
-define('PC_VERSION', '0.5.2');
+define('PC_VERSION', '0.5.3');
 define('PC_AUTHOR', 'Mukesh Kesharwani');
 define('PC_BUILD_DATE', '2025-12-26');
 
@@ -3004,71 +3004,53 @@ function pc_get_profile_options() {
 }
 
 /**
- * Discover devices from DHCP leases and ARP table
+ * Discover devices from DHCP leases
  * 
- * Scans the network for active devices and returns their information
+ * Gets active devices from DHCP leases (same data as status_dhcp_leases.php)
  * Used for auto-populating device lists in profiles
+ * 
+ * NOTE: ARP table is NOT used because ARP resolution doesn't work reliably
+ * in this environment. Only DHCP leases are used.
  * 
  * @return array Array of discovered devices with MAC, IP, hostname, and device_name
  * @since 0.5.1
+ * @updated 0.5.3 Removed ARP table scanning, only use DHCP leases
  */
 function pc_discover_devices() {
 	$devices = [];
 	$seen_macs = [];
 	
-	// Method 1: Get devices from DHCP leases
+	// Get devices from DHCP leases (same as status_dhcp_leases.php)
 	$leases = system_get_dhcpleases();
 	
+	// Process active leases
 	if (isset($leases['lease']) && is_array($leases['lease'])) {
 		foreach ($leases['lease'] as $lease) {
 			if (isset($lease['mac']) && !empty($lease['mac'])) {
 				$mac = pc_normalize_mac($lease['mac']);
 				
-				if (!isset($seen_macs[$mac])) {
-					$hostname = isset($lease['hostname']) ? $lease['hostname'] : '';
-					$ip = isset($lease['ip']) ? $lease['ip'] : '';
-					
-					// Generate friendly device name
-					$device_name = $hostname;
-					if (empty($device_name)) {
-						$device_name = $ip;
-					}
-					if (empty($device_name)) {
-						$device_name = strtoupper($mac);
-					}
-					
-					$devices[] = [
-						'device_name' => $device_name,
-						'mac_address' => $mac,
-						'ip_address' => $ip,
-						'hostname' => $hostname
-					];
-					
-					$seen_macs[$mac] = true;
+				// Skip if already seen or invalid
+				if (isset($seen_macs[$mac]) || $mac === '00:00:00:00:00:00') {
+					continue;
 				}
-			}
-		}
-	}
-	
-	// Method 2: Get devices from ARP table
-	exec("/usr/sbin/arp -an", $arp_output);
-	foreach ($arp_output as $line) {
-		// Parse ARP line: hostname (192.168.1.100) at aa:bb:cc:dd:ee:ff on em0
-		if (preg_match('/\(([0-9\.]+)\)\s+at\s+([0-9a-f:]+)/i', $line, $matches)) {
-			$ip = $matches[1];
-			$mac = pc_normalize_mac($matches[2]);
-			
-			if (!isset($seen_macs[$mac]) && $mac !== '00:00:00:00:00:00') {
-				// Try to get hostname from DNS
-				$hostname = gethostbyaddr($ip);
-				if ($hostname === $ip) {
-					$hostname = '';
+				
+				// Get lease information
+				$hostname = isset($lease['hostname']) ? $lease['hostname'] : '';
+				$ip = isset($lease['ip']) ? $lease['ip'] : '';
+				
+				// Only include leases with valid IP addresses
+				if (empty($ip)) {
+					continue;
 				}
 				
 				// Generate friendly device name
+				// Priority: Hostname > IP > MAC
 				$device_name = $hostname;
 				if (empty($device_name)) {
 					$device_name = $ip;
+				}
+				if (empty($device_name)) {
+					$device_name = strtoupper($mac);
 				}
 				
 				$devices[] = [
@@ -3083,9 +3065,55 @@ function pc_discover_devices() {
 		}
 	}
 	
-	pc_log("Discovered " . count($devices) . " devices from DHCP/ARP", 'info', array(
+	// Also check for static DHCP mappings
+	$config = config_get_path('dhcpd', []);
+	if (is_array($config)) {
+		foreach ($config as $dhcp_if => $dhcp_config) {
+			if (isset($dhcp_config['staticmap']) && is_array($dhcp_config['staticmap'])) {
+				foreach ($dhcp_config['staticmap'] as $static) {
+					if (isset($static['mac']) && !empty($static['mac'])) {
+						$mac = pc_normalize_mac($static['mac']);
+						
+						// Skip if already seen
+						if (isset($seen_macs[$mac])) {
+							continue;
+						}
+						
+						$hostname = isset($static['hostname']) ? $static['hostname'] : '';
+						$ip = isset($static['ipaddr']) ? $static['ipaddr'] : '';
+						
+						// Only include if has IP
+						if (empty($ip)) {
+							continue;
+						}
+						
+						// Generate friendly device name
+						$device_name = $hostname;
+						if (empty($device_name)) {
+							$device_name = $ip;
+						}
+						if (empty($device_name)) {
+							$device_name = strtoupper($mac);
+						}
+						
+						$devices[] = [
+							'device_name' => $device_name,
+							'mac_address' => $mac,
+							'ip_address' => $ip,
+							'hostname' => $hostname
+						];
+						
+						$seen_macs[$mac] = true;
+					}
+				}
+			}
+		}
+	}
+	
+	pc_log("Discovered " . count($devices) . " devices from DHCP leases", 'info', array(
 		'event.action' => 'devices_discovered',
-		'device.count' => count($devices)
+		'device.count' => count($devices),
+		'source' => 'dhcp_leases_only'
 	));
 	
 	return $devices;
