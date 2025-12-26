@@ -108,12 +108,16 @@
 			foreach ($schedules as &$schedule) {
 				// Format profile names display (handle both old singular and new plural format)
 				if (isset($schedule['profile_names'])) {
+					// New format: profile_names (array or comma-separated string)
 					if (is_array($schedule['profile_names'])) {
 						$schedule['profile_name'] = implode(', ', $schedule['profile_names']);
 					} else {
 						$schedule['profile_name'] = $schedule['profile_names'];
 					}
-				} elseif (!isset($schedule['profile_name'])) {
+				} elseif (isset($schedule['profile_name']) && !empty($schedule['profile_name'])) {
+					// Old format: profile_name (single value) - keep as is for display
+					// Already set, no action needed
+				} else {
 					$schedule['profile_name'] = '';
 				}
 				
