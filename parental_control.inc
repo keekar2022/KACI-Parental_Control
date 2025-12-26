@@ -18,7 +18,7 @@ require_once("shaper.inc");
 require_once("notices.inc");
 
 // Package version - Auto-increment on each .inc update
-define('PC_VERSION', '0.2.7');
+define('PC_VERSION', '0.2.8');
 define('PC_AUTHOR', 'Mukesh Kesharwani');
 define('PC_BUILD_DATE', '2025-12-26');
 
@@ -27,13 +27,14 @@ define('PC_BUILD_DATE', '2025-12-26');
 define('PC_LOG_FILE', getenv('PC_LOG_FILE') ?: '/var/log/parental_control.jsonl');
 define('PC_STATE_FILE', getenv('PC_STATE_FILE') ?: '/var/db/parental_control_state.json');
 define('PC_PID_FILE', getenv('PC_PID_FILE') ?: '/var/run/parental_control.pid');
-// WHY: Default to 1-minute cron interval for responsive enforcement
-// Design Decision: Check every minute instead of every 5 or 10 minutes
-// Rationale: Parents expect near-immediate blocking when limits hit. Kids will exploit
-// longer intervals. 1-minute provides good balance between responsiveness and system load.
-// Trade-off: Slight CPU overhead vs better user experience and harder to game the system.
-define('PC_CRON_MINUTE', getenv('PC_CRON_MINUTE') ?: '*/1');  // Check every minute
-define('PC_CRON_INTERVAL_SECONDS', 60);  // Match the cron interval (1 minute = 60 seconds)
+// WHY: Default to 5-minute cron interval to prevent AQM flowset errors
+// Design Decision: Check every 5 minutes instead of every minute
+// Rationale: Every-minute checks caused "config_aqm flowset busy" kernel errors
+// due to excessive firewall rule updates. 5 minutes provides good balance between
+// responsiveness and system stability. Usage tracking still accurate.
+// Trade-off: Slightly less responsive blocking vs system stability.
+define('PC_CRON_MINUTE', getenv('PC_CRON_MINUTE') ?: '*/5');  // Check every 5 minutes
+define('PC_CRON_INTERVAL_SECONDS', 300);  // Match the cron interval (5 minutes = 300 seconds)
 
 // Log rotation settings - Environment overridable for different deployment scenarios
 define('PC_MAX_LOG_SIZE', getenv('PC_MAX_LOG_SIZE') ?: (5 * 1024 * 1024));  // 5MB per log file
@@ -646,7 +647,10 @@ function parental_control_sync() {
 	// Initialize state file if needed
 	pc_init_state();
 	
-	// Filter reload
+	// Filter reload - ONLY when config changes via GUI, not on every cron run
+	// WHY: Excessive filter_configure() calls cause AQM flowset errors
+	// This function (parental_control_sync) is called when user saves config changes
+	// Firewall reload is appropriate here, but NOT during cron execution
 	filter_configure();
 	
 	pc_log("Configuration sync completed", 'info', array(
@@ -1793,13 +1797,21 @@ function parental_control_cron_job() {
 		}
 		
 		// Update usage for active devices (now uses REAL connection tracking)
-		pc_update_device_usage($state);
+		$state_changed = pc_update_device_usage($state);
 		
 		$state['last_check'] = $current_time;
 		pc_save_state($state);
 		
-		// Update firewall rules
-		parental_control_sync();
+		// CRITICAL FIX: Do NOT call parental_control_sync() on every cron run
+		// WHY: parental_control_sync() calls filter_configure() which causes
+		// "config_aqm Unable to configure flowset, flowset busy" kernel errors
+		// when called too frequently. Firewall rules should only be updated when:
+		// 1. User changes config via GUI (handled by custom_php_resync_config_command)
+		// 2. A device hits its limit (firewall rules need to block it)
+		// 
+		// For now, rely on GUI saves to update firewall rules. Future enhancement:
+		// Track which devices changed state and only update rules for those devices.
+		// parental_control_sync();  // REMOVED - causes AQM errors
 		
 		$execution_time = round((microtime(true) - $start_time) * 1000, 2);
 		

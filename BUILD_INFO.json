@@ -1,8 +1,8 @@
 {
   "build_info": {
-    "version": "0.2.7",
-    "build_date": "2025-12-26T01:58:35Z",
-    "git_commit": "27fa28f",
+    "version": "0.2.8",
+    "build_date": "2025-12-26T02:04:41Z",
+    "git_commit": "afc804f",
     "git_branch": "main",
     "built_by": "development",
     "build_environment": "local"
@@ -70,7 +70,15 @@
   },
   "changelog": [
     {
-      "version": "0.2.7",
+      "version": "0.2.8",
+      "date": "2025-12-26",
+      "type": "update",
+      "changes": [
+        "Fixed AQM flowset busy errors - reduced cron frequency and removed excessive filter reloads"
+      ]
+    },
+    {
+      "version": "0.2.8",
       "date": "2025-12-26",
       "type": "update",
       "changes": [
@@ -78,7 +86,7 @@
       ]
     },
     {
-      "version": "0.2.7",
+      "version": "0.2.8",
       "date": "2025-12-26",
       "type": "update",
       "changes": [
@@ -86,7 +94,7 @@
       ]
     },
     {
-      "version": "0.2.7",
+      "version": "0.2.8",
       "date": "2025-12-26",
       "type": "update",
       "changes": [
@@ -94,7 +102,7 @@
       ]
     },
     {
-      "version": "0.2.7",
+      "version": "0.2.8",
       "date": "2025-12-26",
       "type": "bugfix",
       "changes": [
@@ -105,7 +113,7 @@
       ]
     },
     {
-      "version": "0.2.7",
+      "version": "0.2.8",
       "date": "2025-12-26",
       "type": "critical",
       "changes": [
@@ -124,7 +132,7 @@
       ]
     },
     {
-      "version": "0.2.7",
+      "version": "0.2.8",
       "date": "2025-12-26",
       "type": "hotfix",
       "changes": [
@@ -140,7 +148,7 @@
       ]
     },
     {
-      "version": "0.2.7",
+      "version": "0.2.8",
       "date": "2025-12-26",
       "type": "major",
       "changes": [
@@ -165,7 +173,7 @@
       ]
     },
     {
-      "version": "0.2.7",
+      "version": "0.2.8",
       "date": "2025-12-26",
       "type": "hotfix",
       "changes": [
@@ -181,7 +189,7 @@
       ]
     },
     {
-      "version": "0.2.7",
+      "version": "0.2.8",
       "date": "2025-12-25",
       "type": "major",
       "changes": [
@@ -204,7 +212,7 @@
       ]
     },
     {
-      "version": "0.2.7",
+      "version": "0.2.8",
       "date": "2025-12-25",
       "type": "minor",
       "changes": [
@@ -224,7 +232,7 @@
       ]
     },
     {
-      "version": "0.2.7",
+      "version": "0.2.8",
       "date": "2025-12-24",
       "changes": [
         "Version sync across all files",
@@ -232,7 +240,7 @@
       ]
     },
     {
-      "version": "0.2.7",
+      "version": "0.2.8",
       "date": "2025-12-24",
       "changes": [
         "Backend parsing of device_selector dropdown",
