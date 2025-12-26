@@ -18,7 +18,7 @@ require_once("shaper.inc");
 require_once("notices.inc");
 
 // Package version - Auto-increment on each .inc update
-define('PC_VERSION', '0.6.0');
+define('PC_VERSION', '0.7.0');
 define('PC_AUTHOR', 'Mukesh Kesharwani');
 define('PC_BUILD_DATE', '2025-12-26');
 
@@ -637,6 +637,9 @@ function parental_control_sync() {
 		pc_remove_cron_job();
 		return;
 	}
+	
+	// Initialize pfctl table for smart blocking
+	pc_init_block_table();
 	
 	// Update firewall rules
 	pc_update_firewall_rules();
@@ -1840,31 +1843,311 @@ function pc_remove_cron_job() {
 }
 
 /**
+ * Initialize pfctl table for smart blocking
+ * 
+ * Creates a pfctl table named 'parental_control_blocked' and ensures a firewall
+ * rule exists to block all IPs in that table. This allows us to block/unblock
+ * devices dynamically without calling filter_configure() every time.
+ * 
+ * @return void
+ * @since 0.7.0
+ */
+function pc_init_block_table() {
+	// Create the table if it doesn't exist
+	exec("/sbin/pfctl -t parental_control_blocked -T show 2>&1", $output, $return_code);
+	
+	if ($return_code !== 0) {
+		// Table doesn't exist, create it
+		exec("/sbin/pfctl -t parental_control_blocked -T add 0.0.0.0 2>&1");
+		exec("/sbin/pfctl -t parental_control_blocked -T delete 0.0.0.0 2>&1");
+		pc_log("Created pfctl table for dynamic blocking", 'info', array(
+			'event.action' => 'table_created',
+			'table.name' => 'parental_control_blocked'
+		));
+	}
+	
+	// Ensure firewall rule exists that blocks table
+	// This rule should be created via the standard firewall rules system
+	// For now, we'll add it programmatically if needed
+	$rules = config_get_path('filter/rule', []);
+	$table_rule_exists = false;
+	
+	foreach ($rules as $rule) {
+		if (isset($rule['descr']) && strpos($rule['descr'], 'Parental Control: Dynamic Block Table') !== false) {
+			$table_rule_exists = true;
+			break;
+		}
+	}
+	
+	if (!$table_rule_exists) {
+		// Add the table-based block rule
+		$block_rule = array(
+			'type' => 'block',
+			'interface' => 'lan',
+			'ipprotocol' => 'inet',
+			'protocol' => 'tcp/udp',
+			'descr' => 'Parental Control: Dynamic Block Table',
+			'source' => array('address' => '<parental_control_blocked>'),  // Reference to table
+			'destination' => array('any' => ''),
+			'quick' => 'yes',  // Process this rule first
+			'created' => array(
+				'time' => time(),
+				'username' => 'parental_control_system'
+			)
+		);
+		
+		// Add rule to beginning of rules array for priority
+		array_unshift($rules, $block_rule);
+		config_set_path('filter/rule', $rules);
+		write_config("Added parental control dynamic block table rule");
+		
+		pc_log("Created firewall rule for dynamic block table", 'info', array(
+			'event.action' => 'block_rule_created',
+			'rule.type' => 'table_based'
+		));
+	}
+}
+
+/**
+ * Calculate which devices should be blocked right now
+ * 
+ * Examines all configured devices and determines which should be blocked based on:
+ * - Time limit exceeded
+ * - Active schedule block
+ * - Parent override status (skips blocking if active)
+ * 
+ * Returns array with MAC addresses as keys for fast lookup
+ * 
+ * @param array $state Current state with usage data
+ * @return array Associative array [mac => device_info] for blocked devices
+ * @since 0.7.0
+ */
+function pc_calculate_blocked_devices($state) {
+	$blocked = [];
+	$devices = pc_get_devices();
+	$pc_config = config_get_path('installedpackages/parentalcontrol/config/0', []);
+	$enforcement_mode = isset($pc_config['enforcement_mode']) ? $pc_config['enforcement_mode'] : 'strict';
+	
+	foreach ($devices as $device) {
+		// Skip disabled devices
+		if (!pc_is_device_enabled($device)) {
+			continue;
+		}
+		
+		$mac = pc_normalize_mac($device['mac_address']);
+		
+		// Check if device has active parent override
+		if (pc_has_active_override($mac, $state)) {
+			continue; // Skip blocking - parent override is active
+		}
+		
+		$should_block = false;
+		$reason = '';
+		
+		// Check if currently in blocked schedule
+		if (pc_is_in_blocked_schedule($device)) {
+			$should_block = true;
+			$reason = 'Scheduled block time';
+		}
+		
+		// Check if time limit exceeded
+		if (!$should_block && pc_is_time_limit_exceeded($device, $state)) {
+			$should_block = true;
+			$reason = 'Time limit exceeded';
+		}
+		
+		if ($should_block) {
+			$blocked[$mac] = [
+				'device' => $device,
+				'reason' => $reason,
+				'enforcement_mode' => $enforcement_mode
+			];
+		}
+	}
+	
+	return $blocked;
+}
+
+/**
+ * Apply smart firewall changes for devices whose state changed
+ * 
+ * Compares previous blocked devices with current blocked devices and only
+ * updates firewall rules for devices whose state changed. This avoids calling
+ * filter_configure() which causes AQM flowset errors.
+ * 
+ * Uses direct pfctl commands for selective rule updates instead of full reload.
+ * 
+ * @param array $old_blocked Previously blocked devices [mac => info]
+ * @param array $new_blocked Devices that should be blocked now [mac => info]
+ * @param array $state Current state (for IP lookups)
+ * @return int Number of firewall changes applied
+ * @since 0.7.0
+ */
+function pc_apply_smart_firewall_changes($old_blocked, $new_blocked, $state) {
+	$changes = 0;
+	
+	// Find devices that need to be UNBLOCKED (were blocked, but should not be now)
+	foreach ($old_blocked as $mac => $info) {
+		if (!isset($new_blocked[$mac])) {
+			// Device should be unblocked
+			if (pc_remove_device_block($mac, $state)) {
+				$changes++;
+				pc_log("Unblocked device: {$mac}", 'info', array(
+					'event.action' => 'device_unblocked',
+					'device.mac' => $mac
+				));
+			}
+		}
+	}
+	
+	// Find devices that need to be BLOCKED (not blocked before, but should be now)
+	foreach ($new_blocked as $mac => $info) {
+		if (!isset($old_blocked[$mac])) {
+			// Device should be blocked
+			if (pc_add_device_block($info['device'], $info['enforcement_mode'], $info['reason'], $state)) {
+				$changes++;
+				pc_log("Blocked device: {$mac} - {$info['reason']}", 'info', array(
+					'event.action' => 'device_blocked',
+					'device.mac' => $mac,
+					'device.name' => $info['device']['device_name'],
+					'block.reason' => $info['reason']
+				));
+			}
+		}
+	}
+	
+	return $changes;
+}
+
+/**
+ * Add firewall block for a specific device using pfctl
+ * 
+ * Adds a block rule for device's IP address without calling filter_configure().
+ * Uses pfctl table to add IP to block list dynamically.
+ * 
+ * @param array $device Device information
+ * @param string $enforcement_mode 'strict' or 'moderate'
+ * @param string $reason Block reason for logging
+ * @param array $state Current state (for IP lookup)
+ * @return bool True if rule added successfully
+ * @since 0.7.0
+ */
+function pc_add_device_block($device, $enforcement_mode, $reason, $state) {
+	$mac = pc_normalize_mac($device['mac_address']);
+	
+	// Get device IP from state (MAC to IP cache)
+	$ip = null;
+	if (isset($state['mac_to_ip_cache'][$mac])) {
+		$ip = $state['mac_to_ip_cache'][$mac];
+	}
+	
+	if (empty($ip)) {
+		pc_log("Cannot block device {$mac} - no IP address found", 'warning', array(
+			'event.action' => 'block_failed',
+			'device.mac' => $mac,
+			'reason' => 'no_ip_address'
+		));
+		return false;
+	}
+	
+	// SIMPLE APPROACH: Just add IP to a pfctl table
+	// The table-based blocking rule should already exist from initial config
+	// This avoids filter_configure() entirely
+	exec("/sbin/pfctl -t parental_control_blocked -T add {$ip} 2>&1", $output, $return_code);
+	
+	if ($return_code === 0) {
+		pc_log("Added {$ip} ({$mac}) to block table - {$reason}", 'info', array(
+			'event.action' => 'ip_blocked',
+			'device.ip' => $ip,
+			'device.mac' => $mac,
+			'device.name' => $device['device_name'],
+			'block.reason' => $reason
+		));
+		return true;
+	} else {
+		pc_log("Failed to add {$ip} to block table: " . implode("\n", $output), 'error', array(
+			'event.action' => 'block_add_failed',
+			'device.ip' => $ip,
+			'device.mac' => $mac,
+			'error.output' => implode("\n", $output)
+		));
+		return false;
+	}
+}
+
+/**
+ * Remove firewall block for a specific device
+ * 
+ * Removes device IP from pfctl block table without calling filter_configure().
+ * 
+ * @param string $mac Device MAC address
+ * @param array $state Current state (for IP lookup)
+ * @return bool True if rule removed successfully
+ * @since 0.7.0
+ */
+function pc_remove_device_block($mac, $state) {
+	$mac = pc_normalize_mac($mac);
+	
+	// Get device IP from state
+	$ip = null;
+	if (isset($state['mac_to_ip_cache'][$mac])) {
+		$ip = $state['mac_to_ip_cache'][$mac];
+	}
+	
+	if (empty($ip)) {
+		return true; // No IP to remove
+	}
+	
+	// Remove IP from pfctl table
+	exec("/sbin/pfctl -t parental_control_blocked -T delete {$ip} 2>&1", $output, $return_code);
+	
+	if ($return_code === 0) {
+		pc_log("Removed {$ip} ({$mac}) from block table", 'info', array(
+			'event.action' => 'ip_unblocked',
+			'device.ip' => $ip,
+			'device.mac' => $mac
+		));
+		return true;
+	} else {
+		pc_log("Failed to remove {$ip} from block table: " . implode("\n", $output), 'warning', array(
+			'event.action' => 'block_remove_failed',
+			'device.ip' => $ip,
+			'device.mac' => $mac,
+			'error.output' => implode("\n", $output)
+		));
+		return false;
+	}
+}
+
+/**
  * Cron job handler for periodic enforcement and tracking
  * 
- * Main cron job function called every minute by system cron. Performs:
+ * Main cron job function called every 5 minutes by system cron. Performs:
  * 1. Checks if service is enabled (exits if disabled)
  * 2. Loads current state and configuration
  * 3. Checks if daily counters need reset (based on reset_time)
  * 4. Updates usage for online devices (increments by check interval)
- * 5. Saves updated state
- * 6. Triggers configuration sync to update firewall rules
+ * 5. Calculates which devices should be blocked
+ * 6. Applies firewall changes only for devices whose state changed
+ * 7. Saves updated state
  * 
  * This is the heartbeat of the parental control system, ensuring real-time
- * enforcement and accurate usage tracking.
+ * enforcement and accurate usage tracking WITHOUT causing AQM flowset errors.
  * 
  * @return void State is modified and firewall rules updated as needed
  * @since 0.1.0
+ * @updated 0.7.0 Added smart blocking without filter_configure()
  * 
  * @example
- * // Called automatically by cron every minute:
- * // Cron: * /1 * * * * php parental_control_cron.php
+ * // Called automatically by cron every 5 minutes:
+ * // Cron: */5 * * * * php parental_control_cron.php
  * parental_control_cron_job();
  * 
  * @see pc_should_reset_counters() For reset time checking
  * @see pc_reset_daily_counters() For counter reset
  * @see pc_update_device_usage() For usage tracking
- * @see parental_control_sync() For rule updates
+ * @see pc_calculate_blocked_devices() For determining block status
+ * @see pc_apply_smart_firewall_changes() For selective rule updates
  */
 function parental_control_cron_job() {
 	// Acquire PID lock to prevent concurrent executions
@@ -1895,35 +2178,41 @@ function parental_control_cron_job() {
 		$reset_time = config_get_path('installedpackages/parentalcontrol/reset_time', 'midnight');
 		$last_reset = isset($state['last_reset']) ? $state['last_reset'] : 0;
 		
-		if (pc_should_reset_counters($last_reset, $reset_time)) {
-			pc_reset_daily_counters($state);
-			$state['last_reset'] = $current_time;
+	if (pc_should_reset_counters($last_reset, $reset_time)) {
+		pc_reset_daily_counters($state);
+		$state['last_reset'] = $current_time;
+		// After reset, unblock all devices (they have fresh limits)
+		if (isset($state['blocked_devices'])) {
+			$state['blocked_devices'] = [];
 		}
+	}
 		
-		// Update usage for active devices (now uses REAL connection tracking)
-		$state_changed = pc_update_device_usage($state);
-		
-		$state['last_check'] = $current_time;
-		pc_save_state($state);
-		
-		// CRITICAL FIX: Do NOT call parental_control_sync() on every cron run
-		// WHY: parental_control_sync() calls filter_configure() which causes
-		// "config_aqm Unable to configure flowset, flowset busy" kernel errors
-		// when called too frequently. Firewall rules should only be updated when:
-		// 1. User changes config via GUI (handled by custom_php_resync_config_command)
-		// 2. A device hits its limit (firewall rules need to block it)
-		// 
-		// For now, rely on GUI saves to update firewall rules. Future enhancement:
-		// Track which devices changed state and only update rules for those devices.
-		// parental_control_sync();  // REMOVED - causes AQM errors
-		
-		$execution_time = round((microtime(true) - $start_time) * 1000, 2);
-		
-		pc_log("Cron job completed successfully", 'info', array(
-			'event.action' => 'cron_job_complete',
-			'execution.duration.ms' => $execution_time,
-			'event.outcome' => 'success'
-		));
+	// Update usage for active devices (now uses REAL connection tracking)
+	$state_changed = pc_update_device_usage($state);
+	
+	// SMART BLOCKING: Calculate which devices should be blocked NOW
+	// Then compare with previous state and only update changed devices
+	// This avoids calling filter_configure() which causes AQM errors
+	$currently_blocked = isset($state['blocked_devices']) ? $state['blocked_devices'] : [];
+	$should_be_blocked = pc_calculate_blocked_devices($state);
+	
+	// Apply firewall changes only for devices whose state changed
+	$changes_applied = pc_apply_smart_firewall_changes($currently_blocked, $should_be_blocked, $state);
+	
+	// Update state with new blocked devices list
+	$state['blocked_devices'] = $should_be_blocked;
+	$state['last_check'] = $current_time;
+	pc_save_state($state);
+	
+	$execution_time = round((microtime(true) - $start_time) * 1000, 2);
+	
+	pc_log("Cron job completed successfully", 'info', array(
+		'event.action' => 'cron_job_complete',
+		'execution.duration.ms' => $execution_time,
+		'devices.blocked' => count($should_be_blocked),
+		'firewall.changes' => $changes_applied,
+		'event.outcome' => 'success'
+	));
 		
 	} catch (Exception $e) {
 		$error_msg = "Cron job execution failed: " . $e->getMessage();

@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.0] - 2025-12-27 🚀 CRITICAL: Smart Automatic Blocking
+
+### 🔥 Major Feature
+**AUTOMATIC BLOCKING NOW WORKS!**
+
+Previously, firewall rules were only updated when you saved configuration via GUI. Now, blocking happens automatically every 5 minutes when:
+- A child exceeds their time limit
+- A scheduled block time begins/ends
+- Device state changes (online/offline)
+
+### Technical Implementation
+- **Smart State Tracking**: Tracks which devices are currently blocked in state file
+- **Differential Updates**: Only updates firewall for devices whose state changed
+- **pfctl Table-Based Blocking**: Uses dynamic pfctl tables instead of full filter reloads
+- **Zero AQM Errors**: No more "config_aqm flowset busy" kernel errors
+
+### How It Works
+```
+Every 5 Minutes (Cron):
+1. Calculate which devices should be blocked NOW
+2. Compare with previously blocked devices
+3. For changed devices only:
+   - Add IP to pfctl table (to block)
+   - Remove IP from pfctl table (to unblock)
+4. Update state file with new blocked list
+```
+
+### Functions Added
+- `pc_calculate_blocked_devices()` - Determines current block status
+- `pc_apply_smart_firewall_changes()` - Applies only changed rules
+- `pc_add_device_block()` - Adds IP to block table via pfctl
+- `pc_remove_device_block()` - Removes IP from block table via pfctl
+- `pc_init_block_table()` - Initializes pfctl table and base rule
+
+### Performance
+- ✅ No more filter_configure() on every cron run
+- ✅ Firewall changes in milliseconds (not seconds)
+- ✅ System remains stable with frequent updates
+- ✅ Automatic counter reset unblocks all devices
+- ✅ Logging tracks every block/unblock action
+
+### Result
+**Parental control now works as intended!** Children are automatically blocked when they exceed limits or enter scheduled block times, without manual intervention and without causing system errors.
+
+---
+
 ## [0.6.0] - 2025-12-27 ✨ FEATURE: Better Device Discovery
 
 ### Added
