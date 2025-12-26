@@ -123,18 +123,10 @@ regardless of whether they have remaining time in their daily limit.
 		<field>
 			<fielddescr>Profile</fielddescr>
 			<fieldname>profile_name</fieldname>
-			<description>Which child profile this schedule applies to</description>
-			<type>select</type>
+			<description>Which child profile this schedule applies to (enter profile name manually)</description>
+			<type>input</type>
+			<size>30</size>
 			<required/>
-			<options>
-				<?php
-				require_once("/usr/local/pkg/parental_control.inc");
-				$profiles = pc_get_profiles();
-				foreach ($profiles as $profile) {
-					echo '<option><name>' . htmlspecialchars($profile['name']) . '</name><value>' . htmlspecialchars($profile['name']) . '</value></option>';
-				}
-				?>
-			</options>
 		</field>
 		
 		<field>
