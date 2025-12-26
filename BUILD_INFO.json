@@ -1,8 +1,8 @@
 {
   "build_info": {
-    "version": "0.3.2",
-    "build_date": "2025-12-27T06:30:00Z",
-    "git_commit": "339451c",
+    "version": "0.3.3",
+    "build_date": "2025-12-27T07:00:00Z",
+    "git_commit": "7d67f1b",
     "git_branch": "main",
     "built_by": "development",
     "build_environment": "local"
@@ -69,6 +69,27 @@
     }
   },
   "changelog": [
+    {
+      "version": "0.3.3",
+      "date": "2025-12-27",
+      "type": "feature",
+      "changes": [
+        "MAJOR: Added user-friendly block page (parental_control_blocked.php)",
+        "Block page shows why user is blocked (time limit/schedule)",
+        "Displays usage stats, profile info, and next reset time",
+        "Parent override feature with password authentication",
+        "Temporary access grants (configurable duration, default 30 min)",
+        "Countdown timer for active overrides",
+        "Beautiful gradient UI with animations",
+        "Auto-refresh when override expires",
+        "Firewall rules updated to allow access to block page",
+        "Added pc_has_active_override() function",
+        "Override state tracking in state.json",
+        "Detailed logging of override attempts (success/failure)",
+        "Updated INSTALL.sh to deploy block page",
+        "Changed block rules from 'block' to 'reject' for better UX"
+      ]
+    },
     {
       "version": "0.3.2",
       "date": "2025-12-27",

@@ -18,7 +18,7 @@ require_once("shaper.inc");
 require_once("notices.inc");
 
 // Package version - Auto-increment on each .inc update
-define('PC_VERSION', '0.3.2');
+define('PC_VERSION', '0.3.3');
 define('PC_AUTHOR', 'Mukesh Kesharwani');
 define('PC_BUILD_DATE', '2025-12-26');
 
@@ -1240,6 +1240,17 @@ function pc_update_firewall_rules() {
 			$should_block = false;
 			$reason = '';
 				
+				// Check if device has active parent override
+				if (pc_has_active_override($mac, $state)) {
+					// Skip blocking - parent override is active
+					pc_log("Skipping block for {$device['device_name']} - parent override active", 'debug', array(
+						'event.action' => 'override_active',
+						'device.mac' => $mac,
+						'device.name' => $device['device_name']
+					));
+					continue;
+				}
+				
 				// Check if currently in blocked schedule
 				if (pc_is_in_blocked_schedule($device)) {
 					$should_block = true;
@@ -1620,8 +1631,33 @@ function pc_create_block_rule($device, $enforcement_mode, $reason) {
 		$whitelist = array_filter(array_map('trim', explode("\n", $whitelist_str)));
 	}
 	
+	// First, create an ALLOW rule for access to the block page
+	// This ensures blocked users can see WHY they're blocked
+	$block_page_rule = array(
+		'type' => 'pass',
+		'interface' => 'lan',
+		'ipprotocol' => 'inet',
+		'protocol' => 'tcp',
+		'descr' => "Parental Control: Allow Block Page Access - {$child_name} - {$device_name}",
+		'source' => array('address' => $mac),
+		'destination' => array(
+			'address' => 'LAN address', // pfSense firewall itself
+			'port' => '443' // HTTPS access to block page
+		),
+		'created' => array(
+			'time' => time(),
+			'username' => 'parental_control'
+		)
+	);
+	
+	// Add the allow rule first
+	$rules = config_get_path('filter/rule', []);
+	$rules[] = $block_page_rule;
+	config_set_path('filter/rule', $rules);
+	
+	// Now create the block rule
 	$rule = array(
-		'type' => 'block',
+		'type' => 'reject', // Use 'reject' instead of 'block' to send TCP RST
 		'interface' => 'lan',
 		'ipprotocol' => 'inet',
 		'descr' => "Parental Control: {$child_name} - {$device_name} ({$reason})",
@@ -1907,6 +1943,46 @@ function parental_control_cron_job() {
 		// Always release PID lock
 		pc_release_pid_lock();
 	}
+}
+
+/**
+ * Check if device has an active parent override
+ * 
+ * Checks if a device has been granted temporary access via parent override
+ * password. Returns true if override is active (not expired).
+ * 
+ * @param string $mac MAC address of device (will be normalized)
+ * @param array $state State array containing overrides
+ * @return bool True if device has active override, false otherwise
+ * @since 0.3.3
+ * 
+ * @example
+ * if (pc_has_active_override($mac, $state)) {
+ *     // Skip blocking this device
+ * }
+ */
+function pc_has_active_override($mac, $state) {
+	$mac = pc_normalize_mac($mac);
+	
+	if (!isset($state['overrides']) || !is_array($state['overrides'])) {
+		return false;
+	}
+	
+	if (!isset($state['overrides'][$mac])) {
+		return false;
+	}
+	
+	$override = $state['overrides'][$mac];
+	
+	// Check if override has expired
+	if ($override['until'] <= time()) {
+		// Clean up expired override
+		unset($state['overrides'][$mac]);
+		pc_save_state($state);
+		return false;
+	}
+	
+	return true;
 }
 
 /**
