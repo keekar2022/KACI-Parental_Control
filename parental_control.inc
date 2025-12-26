@@ -3004,6 +3004,94 @@ function pc_get_profile_options() {
 }
 
 /**
+ * Discover devices from DHCP leases and ARP table
+ * 
+ * Scans the network for active devices and returns their information
+ * Used for auto-populating device lists in profiles
+ * 
+ * @return array Array of discovered devices with MAC, IP, hostname, and device_name
+ * @since 0.5.1
+ */
+function pc_discover_devices() {
+	$devices = [];
+	$seen_macs = [];
+	
+	// Method 1: Get devices from DHCP leases
+	$leases = system_get_dhcpleases();
+	
+	if (isset($leases['lease']) && is_array($leases['lease'])) {
+		foreach ($leases['lease'] as $lease) {
+			if (isset($lease['mac']) && !empty($lease['mac'])) {
+				$mac = pc_normalize_mac($lease['mac']);
+				
+				if (!isset($seen_macs[$mac])) {
+					$hostname = isset($lease['hostname']) ? $lease['hostname'] : '';
+					$ip = isset($lease['ip']) ? $lease['ip'] : '';
+					
+					// Generate friendly device name
+					$device_name = $hostname;
+					if (empty($device_name)) {
+						$device_name = $ip;
+					}
+					if (empty($device_name)) {
+						$device_name = strtoupper($mac);
+					}
+					
+					$devices[] = [
+						'device_name' => $device_name,
+						'mac_address' => $mac,
+						'ip_address' => $ip,
+						'hostname' => $hostname
+					];
+					
+					$seen_macs[$mac] = true;
+				}
+			}
+		}
+	}
+	
+	// Method 2: Get devices from ARP table
+	exec("/usr/sbin/arp -an", $arp_output);
+	foreach ($arp_output as $line) {
+		// Parse ARP line: hostname (192.168.1.100) at aa:bb:cc:dd:ee:ff on em0
+		if (preg_match('/\(([0-9\.]+)\)\s+at\s+([0-9a-f:]+)/i', $line, $matches)) {
+			$ip = $matches[1];
+			$mac = pc_normalize_mac($matches[2]);
+			
+			if (!isset($seen_macs[$mac]) && $mac !== '00:00:00:00:00:00') {
+				// Try to get hostname from DNS
+				$hostname = gethostbyaddr($ip);
+				if ($hostname === $ip) {
+					$hostname = '';
+				}
+				
+				// Generate friendly device name
+				$device_name = $hostname;
+				if (empty($device_name)) {
+					$device_name = $ip;
+				}
+				
+				$devices[] = [
+					'device_name' => $device_name,
+					'mac_address' => $mac,
+					'ip_address' => $ip,
+					'hostname' => $hostname
+				];
+				
+				$seen_macs[$mac] = true;
+			}
+		}
+	}
+	
+	pc_log("Discovered " . count($devices) . " devices from DHCP/ARP", 'info', array(
+		'event.action' => 'devices_discovered',
+		'device.count' => count($devices)
+	));
+	
+	return $devices;
+}
+
+/**
  * Validate schedule configuration input (for KACI-PC-Schedule tab)
  * 
  * @param array $post POST data from form submission
