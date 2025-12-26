@@ -18,7 +18,7 @@ require_once("shaper.inc");
 require_once("notices.inc");
 
 // Package version - Auto-increment on each .inc update
-define('PC_VERSION', '0.2.6');
+define('PC_VERSION', '0.2.7');
 define('PC_AUTHOR', 'Mukesh Kesharwani');
 define('PC_BUILD_DATE', '2025-12-26');
 
@@ -409,16 +409,11 @@ function pc_get_profiles($no_cache = false) {
 		}, 30);
 	}
 	
-	// CRITICAL FIX: Normalize 'row' or 'devices' for compatibility
-	// WHY: Older configs use 'row', newer configs use 'devices' as fieldname
-	// Our code expects 'devices' for consistency
+	// CRITICAL FIX: Normalize 'row' to 'devices' for internal code consistency
+	// WHY: pfSense ALWAYS stores rowhelpers as 'row' in config.xml
+	// But our internal code uses 'devices' for clarity and readability
+	// This normalization happens during READ only, never during WRITE
 	foreach ($profiles as &$profile) {
-		// If we have 'devices', ensure our code can use it
-		if (isset($profile['devices']) && is_array($profile['devices'])) {
-			// Already in correct format
-			continue;
-		}
-		// If we have 'row', normalize to 'devices'
 		if (isset($profile['row']) && is_array($profile['row'])) {
 			$profile['devices'] = $profile['row'];
 		}
@@ -715,20 +710,13 @@ function pc_process_profile_devices() {
 	
 	$modified = false;
 	foreach ($profiles as $pidx => &$profile) {
-		// Handle both 'row' (old format) and 'devices' (new format)
-		// WHY: Some configs might have 'row', newer ones have 'devices'
-		$device_array = null;
-		if (isset($profile['devices']) && is_array($profile['devices'])) {
-			$device_array = &$profile['devices'];
-		} elseif (isset($profile['row']) && is_array($profile['row'])) {
-			$device_array = &$profile['row'];
-		}
-		
-		if ($device_array === null) {
+		// pfSense rowhelpers ALWAYS store as 'row' in config.xml
+		// The fieldname in XML just affects form variables during edit
+		if (!isset($profile['row']) || !is_array($profile['row'])) {
 			continue;
 		}
 		
-		foreach ($device_array as $didx => &$device) {
+		foreach ($profile['row'] as $didx => &$device) {
 			if (isset($device['device_selector']) && !empty($device['device_selector'])) {
 				$selector_value = trim($device['device_selector']);
 				
