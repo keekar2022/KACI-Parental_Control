@@ -2,11 +2,12 @@
 # Format: MAJOR.MINOR.PATCH (two digits each)
 # Auto-increment PATCH on each .inc file update
 
-CURRENT_VERSION=0.5.1
+CURRENT_VERSION=0.5.2
 BUILD_DATE=2025-12-27
 AUTHOR=Mukesh Kesharwani
 
 # Version History:
+# 0.5.2 - 2025-12-27 - BUGFIX: Improved auto-discover with better error handling and feedback
 # 0.5.1 - 2025-12-27 - BUGFIX: Added missing pc_discover_devices() function for auto-discovery
 # 0.5.0 - 2025-12-27 - MAJOR REFACTOR: Converted profiles page from XML to pure PHP
 # 0.4.1 - 2025-12-27 - CRITICAL HOTFIX: Fixed crash on schedules page (isAllowedPage argument missing)

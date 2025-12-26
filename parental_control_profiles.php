@@ -158,41 +158,51 @@ if ($_POST['save_device']) {
 }
 
 // AUTO-POPULATE DEVICES from DHCP/ARP
-if ($_POST['auto_populate'] && isset($_POST['profile_id'])) {
+if (isset($_POST['auto_populate']) && isset($_POST['profile_id'])) {
 	$profile_id = intval($_POST['profile_id']);
-	$new_devices = pc_discover_devices();
-	$added_count = 0;
 	
-	foreach ($new_devices as $device) {
-		// Check if MAC already exists in this profile
-		$exists = false;
-		if (isset($profiles[$profile_id]['row'])) {
-			foreach ($profiles[$profile_id]['row'] as $existing) {
-				if (isset($existing['mac_address']) && 
-					pc_normalize_mac($existing['mac_address']) === pc_normalize_mac($device['mac_address'])) {
-					$exists = true;
-					break;
+	try {
+		$new_devices = pc_discover_devices();
+		$added_count = 0;
+		
+		if (empty($new_devices)) {
+			$savemsg = "No devices found on the network. Make sure devices are connected and have IP addresses.";
+		} else {
+			foreach ($new_devices as $device) {
+				// Check if MAC already exists in this profile
+				$exists = false;
+				if (isset($profiles[$profile_id]['row'])) {
+					foreach ($profiles[$profile_id]['row'] as $existing) {
+						if (isset($existing['mac_address']) && 
+							pc_normalize_mac($existing['mac_address']) === pc_normalize_mac($device['mac_address'])) {
+							$exists = true;
+							break;
+						}
+					}
+				}
+				
+				if (!$exists) {
+					if (!isset($profiles[$profile_id]['row'])) {
+						$profiles[$profile_id]['row'] = [];
+					}
+					$profiles[$profile_id]['row'][] = $device;
+					$added_count++;
 				}
 			}
-		}
-		
-		if (!$exists) {
-			if (!isset($profiles[$profile_id]['row'])) {
-				$profiles[$profile_id]['row'] = [];
+			
+			if ($added_count > 0) {
+				config_set_path('installedpackages/parentalcontrolprofiles/config', $profiles);
+				write_config("Auto-populated {$added_count} devices to profile: {$profiles[$profile_id]['name']}");
+				parental_control_sync();
+				$savemsg = "Successfully added {$added_count} device(s) from DHCP/ARP. Total discovered: " . count($new_devices);
+				// Reload profiles to show new devices
+				$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', []);
+			} else {
+				$savemsg = "No new devices found. All " . count($new_devices) . " discovered devices are already in this profile.";
 			}
-			$profiles[$profile_id]['row'][] = $device;
-			$added_count++;
 		}
-	}
-	
-	if ($added_count > 0) {
-		config_set_path('installedpackages/parentalcontrolprofiles/config', $profiles);
-		write_config("Auto-populated {$added_count} devices to profile: {$profiles[$profile_id]['name']}");
-		parental_control_sync();
-		$savemsg = "Successfully added {$added_count} device(s) from DHCP/ARP.";
-		$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', []);
-	} else {
-		$savemsg = "No new devices found. All discovered devices are already in this profile.";
+	} catch (Exception $e) {
+		$input_errors[] = "Auto-discovery failed: " . $e->getMessage();
 	}
 }
 
