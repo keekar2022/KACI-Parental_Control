@@ -18,7 +18,7 @@ require_once("shaper.inc");
 require_once("notices.inc");
 
 // Package version - Auto-increment on each .inc update
-define('PC_VERSION', '0.7.0');
+define('PC_VERSION', '0.7.1');
 define('PC_AUTHOR', 'Mukesh Kesharwani');
 define('PC_BUILD_DATE', '2025-12-26');
 
@@ -2140,7 +2140,7 @@ function pc_remove_device_block($mac, $state) {
  * 
  * @example
  * // Called automatically by cron every 5 minutes:
- * // Cron: */5 * * * * php parental_control_cron.php
+ * // Cron: every 5 minutes (* /5 * * * *) php parental_control_cron.php
  * parental_control_cron_job();
  * 
  * @see pc_should_reset_counters() For reset time checking
