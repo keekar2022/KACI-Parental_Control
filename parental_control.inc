@@ -18,7 +18,7 @@ require_once("shaper.inc");
 require_once("notices.inc");
 
 // Package version - Auto-increment on each .inc update
-define('PC_VERSION', '0.2.9');
+define('PC_VERSION', '0.3.0');
 define('PC_AUTHOR', 'Mukesh Kesharwani');
 define('PC_BUILD_DATE', '2025-12-26');
 
@@ -1337,13 +1337,30 @@ function pc_is_in_blocked_schedule($device) {
 				continue;
 			}
 			
-			// Skip if not for this profile
-			if (!isset($schedule['profile_name']) || $schedule['profile_name'] != $profile_name) {
+			// Check if schedule applies to this profile (handle both old and new format)
+			$schedule_profiles = array();
+			if (isset($schedule['profile_names'])) {
+				// New format: multiple profiles (comma-separated string or array)
+				if (is_array($schedule['profile_names'])) {
+					$schedule_profiles = $schedule['profile_names'];
+				} else {
+					$schedule_profiles = array_map('trim', explode(',', $schedule['profile_names']));
+				}
+			} elseif (isset($schedule['profile_name'])) {
+				// Old format: single profile (backward compatibility)
+				$schedule_profiles = array($schedule['profile_name']);
+			}
+			
+			// Skip if this profile is not in the schedule's profile list
+			if (!in_array($profile_name, $schedule_profiles)) {
 				continue;
 			}
 			
 			// Check if today matches the schedule days
 			$days = isset($schedule['days']) && is_array($schedule['days']) ? $schedule['days'] : array();
+			if (is_string($days)) {
+				$days = array_map('trim', explode(',', $days));
+			}
 			$day_matches = false;
 			
 			foreach ($days as $day) {
@@ -2867,6 +2884,24 @@ function parental_control_profile_validate(&$post, &$input_errors) {
 }
 
 /**
+ * Get available profile names for schedule dropdown
+ * 
+ * @return array Array of profile names
+ */
+function pc_get_profile_options() {
+	$profiles = pc_get_profiles();
+	$options = array();
+	
+	foreach ($profiles as $profile) {
+		if (isset($profile['name']) && !empty($profile['name'])) {
+			$options[] = $profile['name'];
+		}
+	}
+	
+	return $options;
+}
+
+/**
  * Validate schedule configuration input (for KACI-PC-Schedule tab)
  * 
  * @param array $post POST data from form submission
@@ -2879,21 +2914,32 @@ function parental_control_schedule_validate(&$post, &$input_errors) {
 		$input_errors[] = "Schedule name is required.";
 	}
 	
-	// Validate profile selection
-	if (empty($post['profile_name'])) {
-		$input_errors[] = "Profile selection is required.";
+	// Validate profile selection (now supports multiple profiles)
+	if (empty($post['profile_names'])) {
+		$input_errors[] = "At least one profile must be selected.";
 	} else {
-		// Verify profile exists
-		$profiles = pc_get_profiles();
-		$profile_exists = false;
-		foreach ($profiles as $profile) {
-			if ($profile['name'] === $post['profile_name']) {
-				$profile_exists = true;
-				break;
+		// Convert array to comma-separated string for storage
+		if (is_array($post['profile_names'])) {
+			$selected_profiles = $post['profile_names'];
+			$post['profile_names'] = implode(',', $post['profile_names']);
+		} else {
+			// Already a string, split it
+			$selected_profiles = array_map('trim', explode(',', $post['profile_names']));
+		}
+		
+		// Verify all selected profiles exist
+		$all_profiles = pc_get_profiles();
+		$valid_profile_names = array();
+		foreach ($all_profiles as $profile) {
+			if (isset($profile['name'])) {
+				$valid_profile_names[] = $profile['name'];
 			}
 		}
-		if (!$profile_exists) {
-			$input_errors[] = "Selected profile does not exist.";
+		
+		foreach ($selected_profiles as $selected_name) {
+			if (!in_array($selected_name, $valid_profile_names)) {
+				$input_errors[] = "Profile '{$selected_name}' does not exist.";
+			}
 		}
 	}
 	

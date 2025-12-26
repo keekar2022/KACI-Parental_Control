@@ -2,11 +2,12 @@
 # Format: MAJOR.MINOR.PATCH (two digits each)
 # Auto-increment PATCH on each .inc file update
 
-CURRENT_VERSION=0.2.9
+CURRENT_VERSION=0.3.0
 BUILD_DATE=2025-12-26
 AUTHOR=Mukesh Kesharwani
 
 # Version History:
+# 0.3.0 - 2025-12-26 - Multi-profile schedule support with dynamic dropdown - schedules can now apply to multiple profiles
 # 0.2.9 - 2025-12-26 - Fixed schedule display and enforcement - list view, status page, and blocking now work
 # 0.2.8 - 2025-12-26 - Fixed AQM flowset busy errors - reduced cron frequency and removed excessive filter reloads
 # 0.2.7 - 2025-12-26 - CRITICAL: Fixed data loss issue when editing profiles

@@ -257,7 +257,7 @@ if (is_array($profiles)) {
 				<thead>
 					<tr>
 						<th><?=gettext("Schedule Name")?></th>
-						<th><?=gettext("Profile")?></th>
+						<th><?=gettext("Profile(s)")?></th>
 						<th><?=gettext("Time Range")?></th>
 						<th><?=gettext("Days")?></th>
 						<th><?=gettext("Currently Active")?></th>
@@ -278,12 +278,32 @@ if (is_array($profiles)) {
 						}
 						
 						$name = htmlspecialchars($schedule['name']);
-						$profile = htmlspecialchars($schedule['profile_name']);
+						
+						// Handle both old (profile_name) and new (profile_names) format
+						if (isset($schedule['profile_names'])) {
+							if (is_array($schedule['profile_names'])) {
+								$profile = htmlspecialchars(implode(', ', $schedule['profile_names']));
+							} else {
+								$profile = htmlspecialchars(str_replace(',', ', ', $schedule['profile_names']));
+							}
+						} elseif (isset($schedule['profile_name'])) {
+							$profile = htmlspecialchars($schedule['profile_name']);
+						} else {
+							$profile = 'Unknown';
+						}
+						
 						$start_time = $schedule['start_time'];
 						$end_time = $schedule['end_time'];
 						
-						// Format days
-						$days_array = isset($schedule['days']) && is_array($schedule['days']) ? $schedule['days'] : array();
+						// Format days (handle both array and comma-separated string)
+						$days_array = array();
+						if (isset($schedule['days'])) {
+							if (is_array($schedule['days'])) {
+								$days_array = $schedule['days'];
+							} else {
+								$days_array = array_map('trim', explode(',', $schedule['days']));
+							}
+						}
 						$days_display = empty($days_array) ? 'None' : implode(', ', array_map('ucfirst', $days_array));
 						
 						// Check if currently active

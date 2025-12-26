@@ -1,8 +1,8 @@
 {
   "build_info": {
-    "version": "0.2.9",
-    "build_date": "2025-12-26T03:15:00Z",
-    "git_commit": "83c5865",
+    "version": "0.3.0",
+    "build_date": "2025-12-26T04:00:00Z",
+    "git_commit": "68c64a4",
     "git_branch": "main",
     "built_by": "development",
     "build_environment": "local"
@@ -69,6 +69,20 @@
     }
   },
   "changelog": [
+    {
+      "version": "0.3.0",
+      "date": "2025-12-26",
+      "type": "feature",
+      "changes": [
+        "Added dynamic profile dropdown for schedule creation - profiles auto-populate from configured profiles",
+        "Multi-profile support - single schedule can now apply to multiple child profiles simultaneously",
+        "Added 'Manage Profiles' link in schedule form for easy navigation",
+        "Updated enforcement logic to handle schedules assigned to multiple profiles",
+        "Backward compatibility maintained for existing schedules with single profile",
+        "Profile dropdown shows message if no profiles configured",
+        "Status page now displays all profiles a schedule applies to"
+      ]
+    },
     {
       "version": "0.2.9",
       "date": "2025-12-26",

@@ -71,7 +71,7 @@
 			<fieldname>name</fieldname>
 		</columnitem>
 		<columnitem>
-			<fielddescr>Profile</fielddescr>
+			<fielddescr>Profile(s)</fielddescr>
 			<fieldname>profile_name</fieldname>
 		</columnitem>
 		<columnitem>
@@ -89,13 +89,38 @@
 	</adddeleteeditpagefields>
 	
 	<custom_php_command_before_form>
+		global $g, $config;
+		
+		// Populate profile dropdown options dynamically
+		$profile_options = pc_get_profile_options();
+		
+		// Update the profile_names field options
+		if (!empty($profile_options)) {
+			$pkg = $config['installedpackages']['parentalcontrolschedules'];
+			// This will be used by the form renderer
+			$g['pc_profile_options'] = $profile_options;
+		}
+		
 		// Add computed display fields for list view
 		$schedules = config_get_path('installedpackages/parentalcontrolschedules/config', []);
 		if (is_array($schedules)) {
 			foreach ($schedules as &$schedule) {
+				// Format profile names display (handle both old singular and new plural format)
+				if (isset($schedule['profile_names'])) {
+					if (is_array($schedule['profile_names'])) {
+						$schedule['profile_name'] = implode(', ', $schedule['profile_names']);
+					} else {
+						$schedule['profile_name'] = $schedule['profile_names'];
+					}
+				} elseif (!isset($schedule['profile_name'])) {
+					$schedule['profile_name'] = '';
+				}
+				
 				// Format days display
 				if (isset($schedule['days']) && is_array($schedule['days'])) {
 					$schedule['days_display'] = implode(',', $schedule['days']);
+				} elseif (isset($schedule['days']) && is_string($schedule['days'])) {
+					$schedule['days_display'] = $schedule['days'];
 				} else {
 					$schedule['days_display'] = '';
 				}
@@ -155,14 +180,15 @@ regardless of whether they have remaining time in their daily limit.
 			<required/>
 		</field>
 		
-		<field>
-			<fielddescr>Profile</fielddescr>
-			<fieldname>profile_name</fieldname>
-			<description>Which child profile this schedule applies to (enter profile name manually)</description>
-			<type>input</type>
-			<size>30</size>
-			<required/>
-		</field>
+	<field>
+		<fielddescr>Profile(s)</fielddescr>
+		<fieldname>profile_names</fieldname>
+		<description>Select one or more child profiles to apply this schedule to. Hold Ctrl/Cmd to select multiple profiles. <a href="/pkg.php?xml=parental_control_profiles.xml" target="_blank">Manage Profiles →</a></description>
+		<type>select</type>
+		<multiple/>
+		<size>5</size>
+		<required/>
+	</field>
 		
 		<field>
 			<fielddescr>Days</fielddescr>
@@ -219,8 +245,57 @@ regardless of whether they have remaining time in their daily limit.
 	</custom_php_resync_config_command>
 	
 	<custom_php_after_form_command>
+		// Populate profile dropdown with available profiles
+		$profile_options = pc_get_profile_options();
+		$current_values = array();
+		
+		// Get current selected values if editing existing schedule
+		if (isset($_GET['id']) &amp;&amp; is_numeric($_GET['id'])) {
+			$schedules = config_get_path('installedpackages/parentalcontrolschedules/config', []);
+			$id = intval($_GET['id']);
+			if (isset($schedules[$id]['profile_names'])) {
+				if (is_array($schedules[$id]['profile_names'])) {
+					$current_values = $schedules[$id]['profile_names'];
+				} else {
+					$current_values = array_map('trim', explode(',', $schedules[$id]['profile_names']));
+				}
+			}
+		}
+		
+		// Generate JavaScript to populate the dropdown
+		echo '&lt;script type="text/javascript"&gt;';
+		echo 'events.push(function() {';
+		echo '  var selectElement = document.querySelector(\'select[name="profile_names[]"]\');';
+		echo '  if (selectElement) {';
+		echo '    selectElement.innerHTML = "";';
+		
+		// Add options
+		foreach ($profile_options as $profile_name) {
+			$is_selected = in_array($profile_name, $current_values) ? 'true' : 'false';
+			$escaped_name = addslashes(htmlspecialchars($profile_name));
+			echo '    var opt' . md5($profile_name) . ' = document.createElement("option");';
+			echo '    opt' . md5($profile_name) . '.value = "' . $escaped_name . '";';
+			echo '    opt' . md5($profile_name) . '.text = "' . $escaped_name . '";';
+			echo '    opt' . md5($profile_name) . '.selected = ' . $is_selected . ';';
+			echo '    selectElement.appendChild(opt' . md5($profile_name) . ');';
+		}
+		
+		// If no profiles available, show message
+		if (empty($profile_options)) {
+			echo '    var optNone = document.createElement("option");';
+			echo '    optNone.value = "";';
+			echo '    optNone.text = "No profiles configured - create profiles first";';
+			echo '    optNone.disabled = true;';
+			echo '    selectElement.appendChild(optNone);';
+		}
+		
+		echo '  }';
+		echo '});';
+		echo '&lt;/script&gt;';
+		
+		// Footer
 		echo '&lt;div style="text-align: center; margin-top: 20px; padding: 10px; border-top: 1px solid #ddd; color: #666; font-size: 12px;"&gt;';
-		echo '&lt;strong&gt;Keekar\'s Parental Control&lt;/strong&gt; v' . (defined('PC_VERSION') ? PC_VERSION : '0.2.5') . ' | ';
+		echo '&lt;strong&gt;Keekar\'s Parental Control&lt;/strong&gt; v' . (defined('PC_VERSION') ? PC_VERSION : '0.2.9') . ' | ';
 		echo 'Built with Passion by &lt;strong&gt;Mukesh Kesharwani&lt;/strong&gt; | ';
 		echo '© ' . date('Y') . ' Keekar';
 		echo '&lt;/div&gt;';
