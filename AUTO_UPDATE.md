@@ -9,7 +9,7 @@ This feature is perfect for development/testing environments where you want the 
 ## 🎯 What It Does
 
 The auto-update system:
-- ✅ Checks GitHub every 5 minutes for new commits
+- ✅ Checks GitHub every 15 minutes for new commits
 - ✅ Automatically pulls latest changes if available
 - ✅ Deploys updated files to correct pfSense locations
 - ✅ Validates PHP syntax before deployment
@@ -38,7 +38,7 @@ sudo sh /tmp/setup_auto_update.sh
 
 ### Step 3: Done!
 
-Updates will now happen automatically every 5 minutes!
+Updates will now happen automatically every 15 minutes!
 
 ---
 
@@ -121,7 +121,10 @@ sudo cp /root/parental_control_backups/backup_YYYYMMDD_HHMMSS/parental_control.i
 Edit the cron schedule:
 
 ```bash
-# Every 5 minutes (default)
+# Every 15 minutes (default)
+*/15 * * * * /usr/local/bin/auto_update_parental_control.sh
+
+# Every 5 minutes (not recommended - too frequent)
 */5 * * * * /usr/local/bin/auto_update_parental_control.sh
 
 # Every 10 minutes
@@ -149,7 +152,7 @@ sudo crontab -l | grep -v auto_update_parental_control | sudo crontab -
 ### Re-enable Auto-Updates
 
 ```bash
-(sudo crontab -l 2>/dev/null; echo "*/5 * * * * /usr/local/bin/auto_update_parental_control.sh") | sudo crontab -
+(sudo crontab -l 2>/dev/null; echo "*/15 * * * * /usr/local/bin/auto_update_parental_control.sh") | sudo crontab -
 ```
 
 ---
@@ -348,7 +351,7 @@ grep "Update completed" /var/log/parental_control_auto_update.log | tail -10
 1. **Developer**: Make changes locally
 2. **Developer**: Test changes
 3. **Developer**: `git commit && git push` to GitHub
-4. **pfSense**: Auto-detects update within 5 minutes
+4. **pfSense**: Auto-detects update within 15 minutes
 5. **pfSense**: Automatically deploys changes
 6. **Developer**: Verify deployment worked
 7. **Repeat**
