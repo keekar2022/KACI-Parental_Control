@@ -138,7 +138,7 @@ if ($savemsg) {
 
 $tab_array = array();
 $tab_array[] = array("Settings", false, "/pkg_edit.php?xml=parental_control.xml");
-$tab_array[] = array("Profiles", false, "/pkg.php?xml=parental_control_profiles.xml");
+$tab_array[] = array("Profiles", false, "/parental_control_profiles.php");
 $tab_array[] = array("KACI-PC-Schedule", true, "/parental_control_schedules.php");
 $tab_array[] = array("Status", false, "/parental_control_status.php");
 display_top_tabs($tab_array);
