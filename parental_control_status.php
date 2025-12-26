@@ -23,7 +23,7 @@ include("head.inc");
 $tab_array = array();
 $tab_array[] = array(gettext("Settings"), false, "/pkg_edit.php?xml=parental_control.xml&id=0");
 $tab_array[] = array(gettext("Profiles"), false, "/pkg.php?xml=parental_control_profiles.xml");
-$tab_array[] = array(gettext("KACI-PC-Schedule"), false, "/pkg.php?xml=parental_control_schedules.xml");
+$tab_array[] = array(gettext("KACI-PC-Schedule"), false, "/parental_control_schedules.php");
 $tab_array[] = array(gettext("Status"), true, "/parental_control_status.php");
 display_top_tabs($tab_array);
 

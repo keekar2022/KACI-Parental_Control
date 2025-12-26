@@ -57,7 +57,7 @@
 		</tab>
 		<tab>
 			<text>KACI-PC-Schedule</text>
-			<url>/pkg.php?xml=parental_control_schedules.xml</url>
+			<url>/parental_control_schedules.php</url>
 		</tab>
 		<tab>
 			<text>Status</text>
