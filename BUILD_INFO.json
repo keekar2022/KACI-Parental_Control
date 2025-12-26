@@ -1,8 +1,8 @@
 {
   "build_info": {
-    "version": "0.2.5",
-    "build_date": "2025-12-25T23:56:58Z",
-    "git_commit": "0ee2c1d",
+    "version": "0.2.6",
+    "build_date": "2025-12-26T00:07:26Z",
+    "git_commit": "0b7ece1",
     "git_branch": "main",
     "built_by": "development",
     "build_environment": "local"
@@ -70,7 +70,15 @@
   },
   "changelog": [
     {
-      "version": "0.2.5",
+      "version": "0.2.6",
+      "date": "2025-12-26",
+      "type": "update",
+      "changes": [
+        "Separated schedules into dedicated KACI-PC-Schedule tab - fixes +Add button conflict"
+      ]
+    },
+    {
+      "version": "0.2.6",
       "date": "2025-12-26",
       "type": "update",
       "changes": [
@@ -78,7 +86,7 @@
       ]
     },
     {
-      "version": "0.2.5",
+      "version": "0.2.6",
       "date": "2025-12-26",
       "type": "bugfix",
       "changes": [
@@ -89,7 +97,7 @@
       ]
     },
     {
-      "version": "0.2.5",
+      "version": "0.2.6",
       "date": "2025-12-26",
       "type": "critical",
       "changes": [
@@ -108,7 +116,7 @@
       ]
     },
     {
-      "version": "0.2.5",
+      "version": "0.2.6",
       "date": "2025-12-26",
       "type": "hotfix",
       "changes": [
@@ -124,7 +132,7 @@
       ]
     },
     {
-      "version": "0.2.5",
+      "version": "0.2.6",
       "date": "2025-12-26",
       "type": "major",
       "changes": [
@@ -149,7 +157,7 @@
       ]
     },
     {
-      "version": "0.2.5",
+      "version": "0.2.6",
       "date": "2025-12-26",
       "type": "hotfix",
       "changes": [
@@ -165,7 +173,7 @@
       ]
     },
     {
-      "version": "0.2.5",
+      "version": "0.2.6",
       "date": "2025-12-25",
       "type": "major",
       "changes": [
@@ -188,7 +196,7 @@
       ]
     },
     {
-      "version": "0.2.5",
+      "version": "0.2.6",
       "date": "2025-12-25",
       "type": "minor",
       "changes": [
@@ -208,7 +216,7 @@
       ]
     },
     {
-      "version": "0.2.5",
+      "version": "0.2.6",
       "date": "2025-12-24",
       "changes": [
         "Version sync across all files",
@@ -216,7 +224,7 @@
       ]
     },
     {
-      "version": "0.2.5",
+      "version": "0.2.6",
       "date": "2025-12-24",
       "changes": [
         "Backend parsing of device_selector dropdown",

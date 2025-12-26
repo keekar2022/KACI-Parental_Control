@@ -18,7 +18,7 @@ require_once("shaper.inc");
 require_once("notices.inc");
 
 // Package version - Auto-increment on each .inc update
-define('PC_VERSION', '0.2.5');
+define('PC_VERSION', '0.2.6');
 define('PC_AUTHOR', 'Mukesh Kesharwani');
 define('PC_BUILD_DATE', '2025-12-26');
 
@@ -2812,6 +2812,66 @@ function parental_control_profile_validate(&$post, &$input_errors) {
 			}
 		}
 		unset($schedule); // Break reference
+	}
+}
+
+/**
+ * Validate schedule configuration input (for KACI-PC-Schedule tab)
+ * 
+ * @param array $post POST data from form submission
+ * @param array &$input_errors Array to collect validation error messages
+ * @return void
+ */
+function parental_control_schedule_validate(&$post, &$input_errors) {
+	// Validate schedule name
+	if (empty($post['name'])) {
+		$input_errors[] = "Schedule name is required.";
+	}
+	
+	// Validate profile selection
+	if (empty($post['profile_name'])) {
+		$input_errors[] = "Profile selection is required.";
+	} else {
+		// Verify profile exists
+		$profiles = pc_get_profiles();
+		$profile_exists = false;
+		foreach ($profiles as $profile) {
+			if ($profile['name'] === $post['profile_name']) {
+				$profile_exists = true;
+				break;
+			}
+		}
+		if (!$profile_exists) {
+			$input_errors[] = "Selected profile does not exist.";
+		}
+	}
+	
+	// Validate days (can be array from multi-select or comma-separated string)
+	if (empty($post['days'])) {
+		$input_errors[] = "At least one day is required.";
+	} else {
+		// Convert array to comma-separated string for storage
+		if (is_array($post['days'])) {
+			$post['days'] = implode(',', $post['days']);
+		}
+		// Validate day values
+		$valid_days = array('sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat');
+		$selected_days = array_map('trim', explode(',', $post['days']));
+		foreach ($selected_days as $day) {
+			if (!in_array(strtolower($day), $valid_days)) {
+				$input_errors[] = "Invalid day value '{$day}'.";
+			}
+		}
+	}
+	
+	// Validate start time
+	if (empty($post['start_time']) || !preg_match('/^\d{2}:\d{2}$/', $post['start_time'])) {
+		$input_errors[] = "Valid start time required (HH:MM format, e.g., 08:00 or 22:30).";
+	}
+	
+	// Validate end time
+	if (empty($post['end_time']) || !preg_match('/^\d{2}:\d{2}$/', $post['end_time'])) {
+		$input_errors[] = "Valid end time required (HH:MM format, e.g., 17:00 or 23:45).";
 	}
 }
 

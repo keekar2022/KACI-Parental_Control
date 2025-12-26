@@ -56,6 +56,10 @@
 			<active/>
 		</tab>
 		<tab>
+			<text>KACI-PC-Schedule</text>
+			<url>/pkg.php?xml=parental_control_schedules.xml</url>
+		</tab>
+		<tab>
 			<text>Status</text>
 			<url>/parental_control_status.php</url>
 		</tab>
@@ -240,64 +244,14 @@ she gets 2 hours total across both devices, not 2 hours per device.<br/><br/>
 	</field>
 		
 		<field>
-			<name>Schedules</name>
-			<type>listtopic</type>
-		</field>
-		
-		<field>
-			<fielddescr>Blocked Time Schedules</fielddescr>
-			<fieldname>schedules</fieldname>
+			<type>info</type>
 			<description>
 				<![CDATA[
-				Define time periods when ALL devices in this profile are blocked (regardless of time remaining).<br/>
-				Useful for bedtime, school hours, dinner time, etc.
+				<strong>Need to add blocked time schedules?</strong><br/>
+				Go to the <a href="/pkg.php?xml=parental_control_schedules.xml"><strong>KACI-PC-Schedule</strong></a> tab to manage bedtime, school hours, and other time-based blocking.<br/>
+				<em>Note: KACI-PC-Schedules are separate from pfSense's built-in Schedules.</em>
 				]]>
 			</description>
-			<type>rowhelper</type>
-			<rowhelper>
-				<rowhelperfield>
-					<fielddescr>Schedule Name</fielddescr>
-					<fieldname>name</fieldname>
-					<description>Name for this schedule</description>
-					<type>input</type>
-					<size>15</size>
-					<required/>
-				</rowhelperfield>
-				<rowhelperfield>
-					<fielddescr>Days</fielddescr>
-					<fieldname>days</fieldname>
-					<description>Select days when this schedule is active</description>
-					<type>select</type>
-					<multiple/>
-					<size>7</size>
-					<options>
-						<option><name>Sunday</name><value>sun</value></option>
-						<option><name>Monday</name><value>mon</value></option>
-						<option><name>Tuesday</name><value>tue</value></option>
-						<option><name>Wednesday</name><value>wed</value></option>
-						<option><name>Thursday</name><value>thu</value></option>
-						<option><name>Friday</name><value>fri</value></option>
-						<option><name>Saturday</name><value>sat</value></option>
-					</options>
-					<required/>
-				</rowhelperfield>
-				<rowhelperfield>
-					<fielddescr>Start Time</fielddescr>
-					<fieldname>start_time</fieldname>
-					<description>24-hour format. Examples: 08:00 (8am), 13:30 (1:30pm), 22:00 (10pm)</description>
-					<type>input</type>
-					<size>8</size>
-					<required/>
-				</rowhelperfield>
-				<rowhelperfield>
-					<fielddescr>End Time</fielddescr>
-					<fieldname>end_time</fieldname>
-					<description>24-hour format. Examples: 17:00 (5pm), 20:30 (8:30pm), 07:00 (7am)</description>
-					<type>input</type>
-					<size>8</size>
-					<required/>
-				</rowhelperfield>
-			</rowhelper>
 		</field>
 		
 		<field>
