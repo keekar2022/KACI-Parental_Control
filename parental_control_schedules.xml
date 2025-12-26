@@ -89,6 +89,7 @@
 	</adddeleteeditpagefields>
 	
 	<custom_php_command_before_form>
+<![CDATA[
 		global $g, $config;
 		
 		// Populate profile dropdown options dynamically
@@ -142,6 +143,7 @@
 			unset($schedule);
 			config_set_path('installedpackages/parentalcontrolschedules/config', $schedules);
 		}
+]]>
 	</custom_php_command_before_form>
 	
 	<fields>
@@ -245,12 +247,13 @@ regardless of whether they have remaining time in their daily limit.
 	</custom_php_resync_config_command>
 	
 	<custom_php_after_form_command>
+<![CDATA[
 		// Populate profile dropdown with available profiles
 		$profile_options = pc_get_profile_options();
 		$current_values = array();
 		
 		// Get current selected values if editing existing schedule
-		if (isset($_GET['id']) &amp;&amp; is_numeric($_GET['id'])) {
+		if (isset($_GET['id']) && is_numeric($_GET['id'])) {
 			$schedules = config_get_path('installedpackages/parentalcontrolschedules/config', []);
 			$id = intval($_GET['id']);
 			if (isset($schedules[$id]['profile_names'])) {
@@ -263,7 +266,7 @@ regardless of whether they have remaining time in their daily limit.
 		}
 		
 		// Generate JavaScript to populate the dropdown
-		echo '&lt;script type="text/javascript"&gt;';
+		echo '<script type="text/javascript">';
 		echo 'events.push(function() {';
 		echo '  var selectElement = document.querySelector(\'select[name="profile_names[]"]\');';
 		echo '  if (selectElement) {';
@@ -291,14 +294,15 @@ regardless of whether they have remaining time in their daily limit.
 		
 		echo '  }';
 		echo '});';
-		echo '&lt;/script&gt;';
+		echo '</script>';
 		
 		// Footer
-		echo '&lt;div style="text-align: center; margin-top: 20px; padding: 10px; border-top: 1px solid #ddd; color: #666; font-size: 12px;"&gt;';
-		echo '&lt;strong&gt;Keekar\'s Parental Control&lt;/strong&gt; v' . (defined('PC_VERSION') ? PC_VERSION : '0.2.9') . ' | ';
-		echo 'Built with Passion by &lt;strong&gt;Mukesh Kesharwani&lt;/strong&gt; | ';
+		echo '<div style="text-align: center; margin-top: 20px; padding: 10px; border-top: 1px solid #ddd; color: #666; font-size: 12px;">';
+		echo '<strong>Keekar\'s Parental Control</strong> v' . (defined('PC_VERSION') ? PC_VERSION : '0.3.0') . ' | ';
+		echo 'Built with Passion by <strong>Mukesh Kesharwani</strong> | ';
 		echo '© ' . date('Y') . ' Keekar';
-		echo '&lt;/div&gt;';
+		echo '</div>';
+]]>
 	</custom_php_after_form_command>
 	
 </packagegui>

@@ -1,8 +1,8 @@
 {
   "build_info": {
-    "version": "0.3.0",
-    "build_date": "2025-12-26T04:00:00Z",
-    "git_commit": "68c64a4",
+    "version": "0.3.1",
+    "build_date": "2025-12-26T05:00:00Z",
+    "git_commit": "5ac23ba",
     "git_branch": "main",
     "built_by": "development",
     "build_environment": "local"
@@ -69,6 +69,18 @@
     }
   },
   "changelog": [
+    {
+      "version": "0.3.1",
+      "date": "2025-12-26",
+      "type": "hotfix",
+      "changes": [
+        "CRITICAL: Fixed XML syntax error in parental_control_schedules.xml",
+        "Wrapped PHP code in CDATA sections to prevent XML parsing errors",
+        "Fixed XML_ERR_NAME_REQUIRED error at line 107",
+        "Changed escaped HTML entities to literal in CDATA sections",
+        "Schedules page now loads correctly without errors"
+      ]
+    },
     {
       "version": "0.3.0",
       "date": "2025-12-26",
