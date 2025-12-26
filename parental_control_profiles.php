@@ -157,19 +157,65 @@ if ($_POST['save_device']) {
 	}
 }
 
-// AUTO-POPULATE DEVICES from DHCP/ARP
-if (isset($_POST['auto_populate']) && isset($_POST['profile_id'])) {
+// DISCOVER DEVICES (show selection interface)
+$discovered_devices = [];
+$show_device_selector = false;
+if (isset($_POST['discover_devices']) && isset($_POST['profile_id'])) {
 	$profile_id = intval($_POST['profile_id']);
 	
 	try {
-		$new_devices = pc_discover_devices();
-		$added_count = 0;
+		$all_devices = pc_discover_devices();
 		
-		if (empty($new_devices)) {
+		if (empty($all_devices)) {
 			$savemsg = "No devices found on the network. Make sure devices are connected and have IP addresses.";
 		} else {
-			foreach ($new_devices as $device) {
-				// Check if MAC already exists in this profile
+			// Get all assigned MACs from ALL profiles
+			$assigned_macs = [];
+			foreach ($profiles as $prof) {
+				if (isset($prof['row']) && is_array($prof['row'])) {
+					foreach ($prof['row'] as $dev) {
+						if (isset($dev['mac_address'])) {
+							$assigned_macs[] = pc_normalize_mac($dev['mac_address']);
+						}
+					}
+				}
+			}
+			
+			// Filter out already assigned devices
+			foreach ($all_devices as $device) {
+				$mac = pc_normalize_mac($device['mac_address']);
+				if (!in_array($mac, $assigned_macs)) {
+					$discovered_devices[] = $device;
+				}
+			}
+			
+			if (empty($discovered_devices)) {
+				$savemsg = "Found " . count($all_devices) . " device(s), but all are already assigned to profiles.";
+			} else {
+				$show_device_selector = true;
+				$savemsg = "Found " . count($discovered_devices) . " unassigned device(s). Select the ones you want to add:";
+			}
+		}
+	} catch (Exception $e) {
+		$input_errors[] = "Auto-discovery failed: " . $e->getMessage();
+	}
+}
+
+// ADD SELECTED DEVICES
+if (isset($_POST['add_selected_devices']) && isset($_POST['profile_id'])) {
+	$profile_id = intval($_POST['profile_id']);
+	
+	if (empty($_POST['selected_devices'])) {
+		$input_errors[] = "Please select at least one device to add.";
+	} else {
+		$added_count = 0;
+		
+		// Decode the selected devices JSON
+		foreach ($_POST['selected_devices'] as $device_json) {
+			$device = json_decode($device_json, true);
+			
+			if ($device && isset($device['mac_address'])) {
+				// Double-check it's not already in this profile
 				$exists = false;
 				if (isset($profiles[$profile_id]['row'])) {
 					foreach ($profiles[$profile_id]['row'] as $existing) {
@@ -189,20 +235,18 @@ if (isset($_POST['auto_populate']) && isset($_POST['profile_id'])) {
 					$added_count++;
 				}
 			}
-			
-			if ($added_count > 0) {
-				config_set_path('installedpackages/parentalcontrolprofiles/config', $profiles);
-				write_config("Auto-populated {$added_count} devices to profile: {$profiles[$profile_id]['name']}");
-				parental_control_sync();
-				$savemsg = "Successfully added {$added_count} device(s) from DHCP/ARP. Total discovered: " . count($new_devices);
-				// Reload profiles to show new devices
-				$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', []);
-			} else {
-				$savemsg = "No new devices found. All " . count($new_devices) . " discovered devices are already in this profile.";
-			}
 		}
-	} catch (Exception $e) {
-		$input_errors[] = "Auto-discovery failed: " . $e->getMessage();
+		
+		if ($added_count > 0) {
+			config_set_path('installedpackages/parentalcontrolprofiles/config', $profiles);
+			write_config("Added {$added_count} discovered devices to profile: {$profiles[$profile_id]['name']}");
+			parental_control_sync();
+			$savemsg = "Successfully added {$added_count} device(s) to profile.";
+			// Reload profiles
+			$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', []);
+		} else {
+			$savemsg = "No devices were added (they may have been added already).";
+		}
 	}
 }
 
@@ -496,7 +540,7 @@ display_top_tabs($tab_array);
 		
 		<form method="post" style="display:inline-block; margin-left: 10px;">
 			<input type="hidden" name="profile_id" value="<?=$manage_devices_id?>" />
-			<button type="submit" name="auto_populate" class="btn btn-primary">
+			<button type="submit" name="discover_devices" class="btn btn-primary">
 				<i class="fa fa-magic"></i> Auto-Discover Devices
 			</button>
 		</form>
@@ -506,6 +550,79 @@ display_top_tabs($tab_array);
 		</a>
 	</div>
 </div>
+
+<!-- Device Selection Panel (shown after discovery) -->
+<?php if ($show_device_selector && !empty($discovered_devices)): ?>
+<div class="panel panel-info" style="margin-top: 20px;">
+	<div class="panel-heading">
+		<h2 class="panel-title">
+			<i class="fa fa-check-square-o"></i> Select Devices to Add to: 
+			<strong><?=htmlspecialchars($profiles[$manage_devices_id]['name'])?></strong>
+		</h2>
+	</div>
+	<div class="panel-body">
+		<form method="post" action="parental_control_profiles.php#device-selector">
+			<input type="hidden" name="profile_id" value="<?=$manage_devices_id?>" />
+			
+			<div class="table-responsive">
+				<table class="table table-striped table-hover">
+					<thead>
+						<tr>
+							<th style="width: 50px;">
+								<input type="checkbox" id="select_all_devices" 
+									onclick="toggleAllDevices(this)" title="Select/Deselect All" />
+							</th>
+							<th>Device Name</th>
+							<th>MAC Address</th>
+							<th>IP Address</th>
+							<th>Hostname</th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php foreach ($discovered_devices as $idx => $device): ?>
+						<tr>
+							<td>
+								<input type="checkbox" name="selected_devices[]" 
+									value="<?=htmlspecialchars(json_encode($device))?>" 
+									class="device-checkbox" />
+							</td>
+							<td><strong><?=htmlspecialchars($device['device_name'])?></strong></td>
+							<td><code><?=htmlspecialchars(strtoupper($device['mac_address']))?></code></td>
+							<td><?=htmlspecialchars($device['ip_address'] ?? '-')?></td>
+							<td><?=htmlspecialchars($device['hostname'] ?? '-')?></td>
+						</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+			</div>
+			
+			<div class="alert alert-info">
+				<i class="fa fa-info-circle"></i> 
+				<strong>Tip:</strong> Use the checkbox at the top to select/deselect all devices. 
+				Only unassigned devices are shown (devices already in other profiles are filtered out).
+			</div>
+			
+			<button type="submit" name="add_selected_devices" class="btn btn-success">
+				<i class="fa fa-plus"></i> Add Selected Devices
+			</button>
+			<a href="?act=devices&amp;id=<?=$manage_devices_id?>" class="btn btn-default">
+				<i class="fa fa-times"></i> Cancel
+			</a>
+		</form>
+	</div>
+</div>
+
+<script type="text/javascript">
+//<![CDATA[
+function toggleAllDevices(checkbox) {
+	var checkboxes = document.querySelectorAll('.device-checkbox');
+	for (var i = 0; i < checkboxes.length; i++) {
+		checkboxes[i].checked = checkbox.checked;
+	}
+}
+//]]>
+</script>
+<?php endif; ?>
 <?php endif; ?>
 
 <!-- Add/Edit Device Form -->

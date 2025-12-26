@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.0] - 2025-12-27 ✨ FEATURE: Better Device Discovery
+
+### Added
+- **NEW**: Device selection interface for auto-discover with checkboxes
+  - Users can now select which discovered devices to add (not automatic)
+  - Shows all unassigned devices from DHCP leases
+  - Includes "Select All" checkbox for convenience
+  - Real-time table view of MAC, IP, hostname, and device name
+  
+### Changed  
+- **IMPROVED**: Cross-profile filtering for device discovery
+  - Filters out devices already assigned to ANY profile (not just current)
+  - Prevents duplicate device entries across all profiles
+  - Shows clear message when all devices are already assigned
+  
+- **IMPROVED**: Better UX for device management
+  - Two-step process: Discover → Select → Add
+  - Visual feedback with device count before selection
+  - Cancel option to return without adding devices
+
+### Technical
+- Uses DHCP leases only (no ARP) per user environment
+- JSON encoding for device data transfer in form
+- Proper state management during discovery flow
+
+---
+
+## [0.5.3] - 2025-12-27 🐛 BUGFIX
+
+### Fixed
+- **BUGFIX**: Removed ARP table scanning (doesn't work in user environment)
+  - Now uses DHCP leases exclusively (same as status_dhcp_leases.php)
+  - Includes both active leases and static DHCP mappings
+  - More reliable and faster device discovery
+
+---
+
+## [0.5.2] - 2025-12-27 🐛 BUGFIX
+
+### Fixed
+- **BUGFIX**: Improved auto-discover with better error handling
+  - Added `pc_discover_devices()` function implementation
+  - Better error messages and feedback
+  - Debug logging for troubleshooting
+
+---
+
 ## [0.2.1] - 2025-12-26 🚨 CRITICAL FIX
 
 ### 🔴 CRITICAL - Layer 3 Compliance
