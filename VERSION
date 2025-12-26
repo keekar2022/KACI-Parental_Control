@@ -2,11 +2,12 @@
 # Format: MAJOR.MINOR.PATCH (two digits each)
 # Auto-increment PATCH on each .inc file update
 
-CURRENT_VERSION=0.4.0
+CURRENT_VERSION=0.4.1
 BUILD_DATE=2025-12-27
 AUTHOR=Mukesh Kesharwani
 
 # Version History:
+# 0.4.1 - 2025-12-27 - CRITICAL HOTFIX: Fixed crash on schedules page (isAllowedPage argument missing)
 # 0.4.0 - 2025-12-27 - MAJOR REFACTOR: Converted schedules page from XML to pure PHP for better control
 # 0.3.4 - 2025-12-27 - BUGFIX: Schedules page list view not displaying (backward compatibility issue)
 # 0.3.3 - 2025-12-27 - MAJOR FEATURE: User-friendly block page with parent override and auto-redirect

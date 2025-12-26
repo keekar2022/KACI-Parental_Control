@@ -13,7 +13,7 @@ require_once("guiconfig.inc");
 require_once("/usr/local/pkg/parental_control.inc");
 
 // Check if user has permission
-if (!isAllowedPage()) {
+if (!isAllowedPage($_SERVER['SCRIPT_NAME'])) {
 	header("Location: /");
 	exit;
 }
