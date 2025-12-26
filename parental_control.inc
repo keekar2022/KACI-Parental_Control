@@ -18,7 +18,7 @@ require_once("shaper.inc");
 require_once("notices.inc");
 
 // Package version - Auto-increment on each .inc update
-define('PC_VERSION', '0.3.1');
+define('PC_VERSION', '0.3.2');
 define('PC_AUTHOR', 'Mukesh Kesharwani');
 define('PC_BUILD_DATE', '2025-12-26');
 
@@ -1952,9 +1952,13 @@ function pc_should_reset_counters($last_reset, $reset_time) {
  * reached (typically midnight or configured reset time). Weekly counters are
  * reset separately on configured day of week. Modifies state by reference.
  * 
+ * IMPORTANT: Resets BOTH devices (MAC-based) and devices_by_ip (IP-based) arrays
+ * to maintain backward compatibility and support both tracking methods.
+ * 
  * @param array &$state State array containing devices and usage data (modified by reference)
  * @return void State is modified in-place
  * @since 0.1.0
+ * @updated 0.3.2 Fixed to reset devices_by_ip (IP-based tracking)
  * 
  * @example
  * $state = pc_load_state();
@@ -1968,10 +1972,32 @@ function pc_should_reset_counters($last_reset, $reset_time) {
  * @see parental_control_cron_job() For automatic reset scheduling
  */
 function pc_reset_daily_counters(&$state) {
-	foreach ($state['devices'] as $mac => &$device_state) {
-		$device_state['usage_today'] = 0;
+	$reset_count = 0;
+	
+	// Reset MAC-based tracking (legacy, for backward compatibility)
+	if (isset($state['devices']) && is_array($state['devices'])) {
+		foreach ($state['devices'] as $mac => &$device_state) {
+			$device_state['usage_today'] = 0;
+			$reset_count++;
+		}
+		unset($device_state); // Break reference
 	}
-	pc_log("Daily usage counters reset", 'info');
+	
+	// Reset IP-based tracking (current method - Layer 3)
+	if (isset($state['devices_by_ip']) && is_array($state['devices_by_ip'])) {
+		foreach ($state['devices_by_ip'] as $ip => &$device_state) {
+			$device_state['usage_today'] = 0;
+			$reset_count++;
+		}
+		unset($device_state); // Break reference
+	}
+	
+	pc_log("Daily usage counters reset for $reset_count device entries", 'info', array(
+		'event.action' => 'daily_reset',
+		'event.category' => 'system',
+		'devices.reset' => $reset_count,
+		'reset.type' => 'daily'
+	));
 }
 
 /**

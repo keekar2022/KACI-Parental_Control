@@ -1,8 +1,8 @@
 {
   "build_info": {
-    "version": "0.3.1",
-    "build_date": "2025-12-26T05:00:00Z",
-    "git_commit": "5ac23ba",
+    "version": "0.3.2",
+    "build_date": "2025-12-27T06:30:00Z",
+    "git_commit": "339451c",
     "git_branch": "main",
     "built_by": "development",
     "build_environment": "local"
@@ -69,6 +69,19 @@
     }
   },
   "changelog": [
+    {
+      "version": "0.3.2",
+      "date": "2025-12-27",
+      "type": "bugfix",
+      "changes": [
+        "CRITICAL: Fixed daily counter reset not working",
+        "Bug: pc_reset_daily_counters() was resetting $state['devices'] (MAC-based)",
+        "System now tracks by IP in $state['devices_by_ip'] (Layer 3)",
+        "Reset function now resets BOTH arrays for backward compatibility",
+        "Added detailed logging for reset operations",
+        "Counters will now properly reset at midnight (or configured time)"
+      ]
+    },
     {
       "version": "0.3.1",
       "date": "2025-12-26",
