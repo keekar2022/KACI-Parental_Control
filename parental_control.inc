@@ -18,7 +18,7 @@ require_once("shaper.inc");
 require_once("notices.inc");
 
 // Package version - Auto-increment on each .inc update
-define('PC_VERSION', '0.7.1');
+define('PC_VERSION', '0.7.2');
 define('PC_AUTHOR', 'Mukesh Kesharwani');
 define('PC_BUILD_DATE', '2025-12-26');
 
@@ -1899,12 +1899,20 @@ function pc_init_block_table() {
 		// Add rule to beginning of rules array for priority
 		array_unshift($rules, $block_rule);
 		config_set_path('filter/rule', $rules);
-		write_config("Added parental control dynamic block table rule");
 		
-		pc_log("Created firewall rule for dynamic block table", 'info', array(
-			'event.action' => 'block_rule_created',
-			'rule.type' => 'table_based'
-		));
+		// Try to write config, but don't fail if we can't
+		try {
+			write_config("Added parental control dynamic block table rule");
+			pc_log("Created firewall rule for dynamic block table", 'info', array(
+				'event.action' => 'block_rule_created',
+				'rule.type' => 'table_based'
+			));
+		} catch (Exception $e) {
+			pc_log("Note: Could not write config for table rule (will be created on next GUI save)", 'warning', array(
+				'event.action' => 'block_rule_create_deferred',
+				'reason' => $e->getMessage()
+			));
+		}
 	}
 }
 
