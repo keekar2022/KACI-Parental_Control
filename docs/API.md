@@ -160,12 +160,31 @@ curl -H "X-API-Key: YOUR_KEY" https://pfsense.local/parental_control_api.php/dev
       "usage_week": 180,
       "last_seen": 1735123800
     },
-    "schedules": {
-      "bedtime_start": "21:00",
-      "bedtime_end": "07:00",
-      "school_start": "09:00",
-      "school_end": "15:00"
-    }
+    "schedules_applied": [
+      {
+        "id": 0,
+        "schedule_name": "Bedtime",
+        "time_range": "22:00 - 07:00",
+        "start_time": "22:00",
+        "end_time": "07:00",
+        "days": ["sun", "mon", "tue", "wed", "thu", "fri", "sat"],
+        "enabled": true,
+        "currently_active": false,
+        "applies_to_profiles": ["Alice Profile", "Bob Profile"]
+      },
+      {
+        "id": 1,
+        "schedule_name": "School Hours",
+        "time_range": "08:00 - 15:00",
+        "start_time": "08:00",
+        "end_time": "15:00",
+        "days": ["mon", "tue", "wed", "thu", "fri"],
+        "enabled": true,
+        "currently_active": true,
+        "applies_to_profiles": ["Alice Profile"]
+      }
+    ],
+    "currently_blocked": false
   }
 }
 ```
@@ -305,7 +324,19 @@ curl -H "X-API-Key: YOUR_KEY" https://pfsense.local/parental_control_api.php/pro
         "ip_address": "192.168.1.100"
       }
     ],
-    "schedules": [],
+    "schedules_applied": [
+      {
+        "id": 0,
+        "schedule_name": "Bedtime",
+        "time_range": "22:00 - 07:00",
+        "start_time": "22:00",
+        "end_time": "07:00",
+        "days": ["sun", "mon", "tue", "wed", "thu", "fri", "sat"],
+        "enabled": true,
+        "currently_active": false,
+        "applies_to_profiles": ["Alice Profile", "Bob Profile"]
+      }
+    ],
     "usage": {
       "usage_today": 45,
       "usage_week": 180
@@ -313,6 +344,170 @@ curl -H "X-API-Key: YOUR_KEY" https://pfsense.local/parental_control_api.php/pro
   }
 }
 ```
+
+---
+
+### GET /profiles/{id}/schedules
+
+Get all schedules that apply to a specific profile.
+
+**Parameters:**
+- `id` - Profile ID
+
+**Example:**
+```bash
+curl -H "X-API-Key: YOUR_KEY" https://pfsense.local/parental_control_api.php/profiles/1/schedules
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "timestamp": "2025-12-26T04:00:00+00:00",
+  "data": {
+    "profile_id": "1",
+    "profile_name": "Alice Profile",
+    "schedules_count": 2,
+    "schedules": [
+      {
+        "id": 0,
+        "schedule_name": "Bedtime",
+        "time_range": "22:00 - 07:00",
+        "start_time": "22:00",
+        "end_time": "07:00",
+        "days": ["sun", "mon", "tue", "wed", "thu", "fri", "sat"],
+        "enabled": true,
+        "currently_active": false,
+        "applies_to_profiles": ["Alice Profile", "Bob Profile"]
+      },
+      {
+        "id": 1,
+        "schedule_name": "School Hours",
+        "time_range": "08:00 - 15:00",
+        "start_time": "08:00",
+        "end_time": "15:00",
+        "days": ["mon", "tue", "wed", "thu", "fri"],
+        "enabled": true,
+        "currently_active": true,
+        "applies_to_profiles": ["Alice Profile"]
+      }
+    ]
+  }
+}
+```
+
+---
+
+### GET /schedules
+
+List all configured schedules across all profiles.
+
+**Example:**
+```bash
+curl -H "X-API-Key: YOUR_KEY" https://pfsense.local/parental_control_api.php/schedules
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "timestamp": "2025-12-26T04:00:00+00:00",
+  "data": [
+    {
+      "id": 0,
+      "name": "Bedtime",
+      "profiles": ["Alice Profile", "Bob Profile"],
+      "time_range": "22:00 - 07:00",
+      "days": ["sun", "mon", "tue", "wed", "thu", "fri", "sat"],
+      "enabled": true,
+      "currently_active": false
+    },
+    {
+      "id": 1,
+      "name": "School Hours",
+      "profiles": ["Alice Profile"],
+      "time_range": "08:00 - 15:00",
+      "days": ["mon", "tue", "wed", "thu", "fri"],
+      "enabled": true,
+      "currently_active": true
+    }
+  ]
+}
+```
+
+---
+
+### GET /schedules/{id}
+
+Get details for a specific schedule by ID.
+
+**Parameters:**
+- `id` - Schedule ID
+
+**Example:**
+```bash
+curl -H "X-API-Key: YOUR_KEY" https://pfsense.local/parental_control_api.php/schedules/0
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "timestamp": "2025-12-26T04:00:00+00:00",
+  "data": {
+    "id": 0,
+    "name": "Bedtime",
+    "profiles": ["Alice Profile", "Bob Profile"],
+    "start_time": "22:00",
+    "end_time": "07:00",
+    "time_range": "22:00 - 07:00",
+    "days": ["sun", "mon", "tue", "wed", "thu", "fri", "sat"],
+    "enabled": true,
+    "currently_active": false,
+    "affected_devices_count": 4
+  }
+}
+```
+
+---
+
+### GET /schedules/active
+
+Get all currently active schedules (blocking now).
+
+**Example:**
+```bash
+curl -H "X-API-Key: YOUR_KEY" https://pfsense.local/parental_control_api.php/schedules/active
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "timestamp": "2025-12-26T04:00:00+00:00",
+  "data": {
+    "count": 1,
+    "schedules": [
+      {
+        "id": 1,
+        "name": "School Hours",
+        "profiles": ["Alice Profile"],
+        "time_range": "08:00 - 15:00",
+        "start_time": "08:00",
+        "end_time": "15:00",
+        "days": ["mon", "tue", "wed", "thu", "fri"],
+        "blocking_since": null
+      }
+    ]
+  }
+}
+```
+
+**Use Cases:**
+- Real-time monitoring dashboards
+- Home automation triggers (e.g., notify when bedtime schedule activates)
+- Mobile app notifications
+- External logging systems
 
 ---
 

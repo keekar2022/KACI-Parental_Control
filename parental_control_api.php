@@ -14,6 +14,10 @@
  *   POST /api/devices/{mac}/unblock - Unblock a device
  *   GET  /api/profiles          - List all profiles
  *   GET  /api/profiles/{id}     - Get profile details
+ *   GET  /api/profiles/{id}/schedules - Get schedules for a profile
+ *   GET  /api/schedules         - List all schedules
+ *   GET  /api/schedules/{id}    - Get schedule details by ID
+ *   GET  /api/schedules/active  - Get currently active schedules
  *   GET  /api/usage             - Get usage statistics
  *   GET  /api/status            - Get service status
  *   POST /api/override          - Grant temporary internet override
@@ -21,7 +25,7 @@
  * Authentication: API key in X-API-Key header or api_key query parameter
  *
  * @package ParentalControl
- * @version 0.1.4
+ * @version 0.3.0
  * @since 0.1.4
  */
 
@@ -101,6 +105,89 @@ function api_response($status_code, $data, $error = null) {
 	
 	echo json_encode($response, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 	exit;
+}
+
+/**
+ * Get schedules that apply to a specific profile
+ * 
+ * @param string $profile_name Profile name to check
+ * @return array Array of schedule data
+ */
+function api_get_schedules_for_profile($profile_name) {
+	$all_schedules = config_get_path('installedpackages/parentalcontrolschedules/config', []);
+	$matching_schedules = array();
+	
+	if (!is_array($all_schedules)) {
+		return $matching_schedules;
+	}
+	
+	$current_time = date('H:i');
+	$current_day_num = date('N');
+	$day_map = array('mon' => 1, 'tue' => 2, 'wed' => 3, 'thu' => 4, 'fri' => 5, 'sat' => 6, 'sun' => 7);
+	
+	foreach ($all_schedules as $idx => $schedule) {
+		if (!is_array($schedule)) continue;
+		
+		// Get schedule profiles (handle both old and new format)
+		$schedule_profiles = array();
+		if (isset($schedule['profile_names'])) {
+			if (is_array($schedule['profile_names'])) {
+				$schedule_profiles = $schedule['profile_names'];
+			} else {
+				$schedule_profiles = array_map('trim', explode(',', $schedule['profile_names']));
+			}
+		} elseif (isset($schedule['profile_name'])) {
+			$schedule_profiles = array($schedule['profile_name']);
+		}
+		
+		// Check if this schedule applies to the requested profile
+		if (!in_array($profile_name, $schedule_profiles)) {
+			continue;
+		}
+		
+		// Parse days
+		$days = array();
+		if (isset($schedule['days'])) {
+			if (is_array($schedule['days'])) {
+				$days = $schedule['days'];
+			} else {
+				$days = array_map('trim', explode(',', $schedule['days']));
+			}
+		}
+		
+		// Check if currently active
+		$is_active = false;
+		$day_matches = false;
+		
+		foreach ($days as $day) {
+			$day_lower = strtolower($day);
+			if (isset($day_map[$day_lower]) && $day_map[$day_lower] == $current_day_num) {
+				$day_matches = true;
+				break;
+			}
+		}
+		
+		if ($day_matches && isset($schedule['start_time']) && isset($schedule['end_time'])) {
+			if (pc_is_time_in_range($current_time, $schedule['start_time'], $schedule['end_time'])) {
+				$is_active = true;
+			}
+		}
+		
+		$matching_schedules[] = array(
+			'id' => $idx,
+			'schedule_name' => isset($schedule['name']) ? $schedule['name'] : 'Unnamed',
+			'time_range' => isset($schedule['start_time']) && isset($schedule['end_time']) ? 
+				$schedule['start_time'] . ' - ' . $schedule['end_time'] : null,
+			'start_time' => isset($schedule['start_time']) ? $schedule['start_time'] : null,
+			'end_time' => isset($schedule['end_time']) ? $schedule['end_time'] : null,
+			'days' => $days,
+			'enabled' => isset($schedule['enabled']) && $schedule['enabled'] === 'on',
+			'currently_active' => $is_active,
+			'applies_to_profiles' => $schedule_profiles
+		);
+	}
+	
+	return $matching_schedules;
 }
 
 /**
@@ -199,22 +286,34 @@ if ($method === 'GET' && $resource === 'devices' && $id !== null) {
 	
 	foreach ($devices as $device) {
 		if (pc_normalize_mac($device['mac_address']) === $mac) {
+			// Get schedules that apply to this device's profile
+			$profile_name = isset($device['child_name']) ? $device['child_name'] : '';
+			$schedules_applied = api_get_schedules_for_profile($profile_name);
+			
+			// Get device IP from state (IP-based tracking since v0.2.1)
+			$device_ip = null;
+			if (isset($state['mac_to_ip_cache'][$mac])) {
+				$device_ip = $state['mac_to_ip_cache'][$mac];
+			}
+			
+			// Get usage from IP-based state
+			$usage = null;
+			if ($device_ip && isset($state['devices_by_ip'][$device_ip])) {
+				$usage = $state['devices_by_ip'][$device_ip];
+			}
+			
 			$device_info = array(
 				'mac_address' => $mac,
 				'device_name' => $device['device_name'],
-				'child_name' => isset($device['child_name']) ? $device['child_name'] : '',
-				'ip_address' => isset($device['ip_address']) ? $device['ip_address'] : null,
+				'child_name' => $profile_name,
+				'ip_address' => $device_ip,
 				'enabled' => pc_is_device_enabled($device),
 				'online' => pc_is_device_online($mac),
 				'daily_limit' => isset($device['daily_limit']) ? intval($device['daily_limit']) : 0,
 				'weekly_limit' => isset($device['weekly_limit']) ? intval($device['weekly_limit']) : 0,
-				'usage' => isset($state['devices'][$mac]) ? $state['devices'][$mac] : null,
-				'schedules' => array(
-					'bedtime_start' => isset($device['bedtime_start']) ? $device['bedtime_start'] : null,
-					'bedtime_end' => isset($device['bedtime_end']) ? $device['bedtime_end'] : null,
-					'school_start' => isset($device['school_start']) ? $device['school_start'] : null,
-					'school_end' => isset($device['school_end']) ? $device['school_end'] : null
-				)
+				'usage' => $usage,
+				'schedules_applied' => $schedules_applied,
+				'currently_blocked' => pc_is_in_blocked_schedule($device) || pc_is_time_limit_exceeded($device, $state)
 			);
 			api_response(200, $device_info);
 		}
@@ -309,15 +408,19 @@ if ($method === 'GET' && $resource === 'profiles' && $id !== null) {
 	
 	foreach ($profiles as $profile) {
 		if (isset($profile['id']) && $profile['id'] == $id) {
+			// Get schedules that apply to this profile
+			$profile_name = isset($profile['name']) ? $profile['name'] : '';
+			$schedules_applied = api_get_schedules_for_profile($profile_name);
+			
 			$profile_info = array(
 				'id' => $profile['id'],
-				'name' => $profile['name'],
+				'name' => $profile_name,
 				'description' => isset($profile['description']) ? $profile['description'] : '',
 				'enabled' => isset($profile['enabled']) && $profile['enabled'] === 'on',
 				'daily_limit' => isset($profile['daily_limit']) ? intval($profile['daily_limit']) : 0,
 				'weekend_bonus' => isset($profile['weekend_bonus']) ? intval($profile['weekend_bonus']) : 0,
 				'devices' => isset($profile['devices']) ? $profile['devices'] : array(),
-				'schedules' => isset($profile['schedules']) ? $profile['schedules'] : array(),
+				'schedules_applied' => $schedules_applied,
 				'usage' => pc_get_profile_usage($profile)
 			);
 			api_response(200, $profile_info);
@@ -436,6 +539,259 @@ if ($method === 'POST' && $resource === 'override') {
 	if (!$device_found) {
 		api_response(404, null, "Device not found: {$mac}");
 	}
+}
+
+// GET /api/schedules - List all schedules
+if ($method === 'GET' && $resource === 'schedules' && $id === null && $action === null) {
+	$schedules = config_get_path('installedpackages/parentalcontrolschedules/config', []);
+	$schedule_list = array();
+	
+	if (is_array($schedules)) {
+		$current_time = date('H:i');
+		$current_day_num = date('N');
+		$day_map = array('mon' => 1, 'tue' => 2, 'wed' => 3, 'thu' => 4, 'fri' => 5, 'sat' => 6, 'sun' => 7);
+		
+		foreach ($schedules as $idx => $schedule) {
+			if (!is_array($schedule)) continue;
+			
+			// Get schedule profiles (handle both old and new format)
+			$schedule_profiles = array();
+			if (isset($schedule['profile_names'])) {
+				if (is_array($schedule['profile_names'])) {
+					$schedule_profiles = $schedule['profile_names'];
+				} else {
+					$schedule_profiles = array_map('trim', explode(',', $schedule['profile_names']));
+				}
+			} elseif (isset($schedule['profile_name'])) {
+				$schedule_profiles = array($schedule['profile_name']);
+			}
+			
+			// Parse days
+			$days = array();
+			if (isset($schedule['days'])) {
+				if (is_array($schedule['days'])) {
+					$days = $schedule['days'];
+				} else {
+					$days = array_map('trim', explode(',', $schedule['days']));
+				}
+			}
+			
+			// Check if currently active
+			$is_active = false;
+			$day_matches = false;
+			
+			foreach ($days as $day) {
+				$day_lower = strtolower($day);
+				if (isset($day_map[$day_lower]) && $day_map[$day_lower] == $current_day_num) {
+					$day_matches = true;
+					break;
+				}
+			}
+			
+			if ($day_matches && isset($schedule['start_time']) && isset($schedule['end_time'])) {
+				if (pc_is_time_in_range($current_time, $schedule['start_time'], $schedule['end_time'])) {
+					$is_active = true;
+				}
+			}
+			
+			$schedule_list[] = array(
+				'id' => $idx,
+				'name' => isset($schedule['name']) ? $schedule['name'] : 'Unnamed',
+				'profiles' => $schedule_profiles,
+				'time_range' => isset($schedule['start_time']) && isset($schedule['end_time']) ? 
+					$schedule['start_time'] . ' - ' . $schedule['end_time'] : null,
+				'days' => $days,
+				'enabled' => isset($schedule['enabled']) && $schedule['enabled'] === 'on',
+				'currently_active' => $is_active
+			);
+		}
+	}
+	
+	api_response(200, $schedule_list);
+}
+
+// GET /api/schedules/active - Get currently active schedules
+if ($method === 'GET' && $resource === 'schedules' && $id === 'active') {
+	$schedules = config_get_path('installedpackages/parentalcontrolschedules/config', []);
+	$active_schedules = array();
+	
+	if (is_array($schedules)) {
+		$current_time = date('H:i');
+		$current_day_num = date('N');
+		$day_map = array('mon' => 1, 'tue' => 2, 'wed' => 3, 'thu' => 4, 'fri' => 5, 'sat' => 6, 'sun' => 7);
+		
+		foreach ($schedules as $idx => $schedule) {
+			if (!is_array($schedule)) continue;
+			
+			// Skip disabled schedules
+			if (!isset($schedule['enabled']) || $schedule['enabled'] != 'on') {
+				continue;
+			}
+			
+			// Get schedule profiles
+			$schedule_profiles = array();
+			if (isset($schedule['profile_names'])) {
+				if (is_array($schedule['profile_names'])) {
+					$schedule_profiles = $schedule['profile_names'];
+				} else {
+					$schedule_profiles = array_map('trim', explode(',', $schedule['profile_names']));
+				}
+			} elseif (isset($schedule['profile_name'])) {
+				$schedule_profiles = array($schedule['profile_name']);
+			}
+			
+			// Parse days
+			$days = array();
+			if (isset($schedule['days'])) {
+				if (is_array($schedule['days'])) {
+					$days = $schedule['days'];
+				} else {
+					$days = array_map('trim', explode(',', $schedule['days']));
+				}
+			}
+			
+			// Check if currently active
+			$day_matches = false;
+			foreach ($days as $day) {
+				$day_lower = strtolower($day);
+				if (isset($day_map[$day_lower]) && $day_map[$day_lower] == $current_day_num) {
+					$day_matches = true;
+					break;
+				}
+			}
+			
+			if ($day_matches && isset($schedule['start_time']) && isset($schedule['end_time'])) {
+				if (pc_is_time_in_range($current_time, $schedule['start_time'], $schedule['end_time'])) {
+					$active_schedules[] = array(
+						'id' => $idx,
+						'name' => isset($schedule['name']) ? $schedule['name'] : 'Unnamed',
+						'profiles' => $schedule_profiles,
+						'time_range' => $schedule['start_time'] . ' - ' . $schedule['end_time'],
+						'start_time' => $schedule['start_time'],
+						'end_time' => $schedule['end_time'],
+						'days' => $days,
+						'blocking_since' => null // Could calculate based on start_time
+					);
+				}
+			}
+		}
+	}
+	
+	api_response(200, array(
+		'count' => count($active_schedules),
+		'schedules' => $active_schedules
+	));
+}
+
+// GET /api/schedules/{id} - Get schedule details by ID
+if ($method === 'GET' && $resource === 'schedules' && $id !== null && $action === null && $id !== 'active') {
+	$schedules = config_get_path('installedpackages/parentalcontrolschedules/config', []);
+	$schedule_id = intval($id);
+	
+	if (is_array($schedules) && isset($schedules[$schedule_id])) {
+		$schedule = $schedules[$schedule_id];
+		
+		// Get schedule profiles
+		$schedule_profiles = array();
+		if (isset($schedule['profile_names'])) {
+			if (is_array($schedule['profile_names'])) {
+				$schedule_profiles = $schedule['profile_names'];
+			} else {
+				$schedule_profiles = array_map('trim', explode(',', $schedule['profile_names']));
+			}
+		} elseif (isset($schedule['profile_name'])) {
+			$schedule_profiles = array($schedule['profile_name']);
+		}
+		
+		// Parse days
+		$days = array();
+		if (isset($schedule['days'])) {
+			if (is_array($schedule['days'])) {
+				$days = $schedule['days'];
+			} else {
+				$days = array_map('trim', explode(',', $schedule['days']));
+			}
+		}
+		
+		// Check if currently active
+		$current_time = date('H:i');
+		$current_day_num = date('N');
+		$day_map = array('mon' => 1, 'tue' => 2, 'wed' => 3, 'thu' => 4, 'fri' => 5, 'sat' => 6, 'sun' => 7);
+		$is_active = false;
+		$day_matches = false;
+		
+		foreach ($days as $day) {
+			$day_lower = strtolower($day);
+			if (isset($day_map[$day_lower]) && $day_map[$day_lower] == $current_day_num) {
+				$day_matches = true;
+				break;
+			}
+		}
+		
+		if ($day_matches && isset($schedule['start_time']) && isset($schedule['end_time'])) {
+			if (pc_is_time_in_range($current_time, $schedule['start_time'], $schedule['end_time'])) {
+				$is_active = true;
+			}
+		}
+		
+		$schedule_info = array(
+			'id' => $schedule_id,
+			'name' => isset($schedule['name']) ? $schedule['name'] : 'Unnamed',
+			'profiles' => $schedule_profiles,
+			'start_time' => isset($schedule['start_time']) ? $schedule['start_time'] : null,
+			'end_time' => isset($schedule['end_time']) ? $schedule['end_time'] : null,
+			'time_range' => isset($schedule['start_time']) && isset($schedule['end_time']) ? 
+				$schedule['start_time'] . ' - ' . $schedule['end_time'] : null,
+			'days' => $days,
+			'enabled' => isset($schedule['enabled']) && $schedule['enabled'] === 'on',
+			'currently_active' => $is_active,
+			'affected_devices_count' => count_devices_in_profiles($schedule_profiles)
+		);
+		
+		api_response(200, $schedule_info);
+	}
+	
+	api_response(404, null, "Schedule not found: {$id}");
+}
+
+// GET /api/profiles/{id}/schedules - Get schedules for a specific profile
+if ($method === 'GET' && $resource === 'profiles' && $id !== null && $action === 'schedules') {
+	$profiles = pc_get_profiles();
+	$profile_found = false;
+	
+	foreach ($profiles as $profile) {
+		if (isset($profile['id']) && $profile['id'] == $id) {
+			$profile_found = true;
+			$profile_name = isset($profile['name']) ? $profile['name'] : '';
+			$schedules_applied = api_get_schedules_for_profile($profile_name);
+			
+			api_response(200, array(
+				'profile_id' => $id,
+				'profile_name' => $profile_name,
+				'schedules_count' => count($schedules_applied),
+				'schedules' => $schedules_applied
+			));
+		}
+	}
+	
+	if (!$profile_found) {
+		api_response(404, null, "Profile not found: {$id}");
+	}
+}
+
+// Helper function to count devices in given profiles
+function count_devices_in_profiles($profile_names) {
+	$devices = pc_get_devices();
+	$count = 0;
+	
+	foreach ($devices as $device) {
+		$device_profile = isset($device['child_name']) ? $device['child_name'] : '';
+		if (in_array($device_profile, $profile_names)) {
+			$count++;
+		}
+	}
+	
+	return $count;
 }
 
 // If we get here, endpoint not found

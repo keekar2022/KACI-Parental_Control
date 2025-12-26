@@ -80,7 +80,15 @@
         "Updated enforcement logic to handle schedules assigned to multiple profiles",
         "Backward compatibility maintained for existing schedules with single profile",
         "Profile dropdown shows message if no profiles configured",
-        "Status page now displays all profiles a schedule applies to"
+        "Status page now displays all profiles a schedule applies to",
+        "API: Added GET /api/schedules - List all configured schedules",
+        "API: Added GET /api/schedules/{id} - Get schedule details by ID",
+        "API: Added GET /api/schedules/active - Get currently active blocking schedules",
+        "API: Added GET /api/profiles/{id}/schedules - Get schedules for a specific profile",
+        "API: Updated GET /api/devices/{mac} - Now includes schedules_applied and currently_blocked",
+        "API: Updated GET /api/profiles/{id} - Now includes schedules_applied array",
+        "API: All schedule endpoints support multi-profile schedules",
+        "API: Real-time active status calculation for all schedules"
       ]
     },
     {
