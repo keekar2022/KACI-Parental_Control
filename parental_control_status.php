@@ -238,58 +238,91 @@ if (is_array($profiles)) {
 	</div>
 </div>
 
-<?php if (!empty($profiles)): ?>
 <div class="panel panel-default">
 	<div class="panel-heading">
 		<h2 class="panel-title"><?=gettext("Active Schedules")?></h2>
 	</div>
 	<div class="panel-body">
-		<table class="table table-striped table-condensed">
-			<thead>
-				<tr>
-					<th><?=gettext("Child/Device")?></th>
-					<th><?=gettext("Schedule Type")?></th>
-					<th><?=gettext("Time Range")?></th>
-					<th><?=gettext("Days")?></th>
-					<th><?=gettext("Currently Active")?></th>
-				</tr>
-			</thead>
-			<tbody>
-				<?php foreach ($devices as $device): 
-					if (!isset($device['enable']) || $device['enable'] != 'on') continue;
-					$device_label = htmlspecialchars($device['child_name'] . " - " . $device['device_name']);
+		<?php
+		// Load schedules from new config path
+		$schedules = config_get_path('installedpackages/parentalcontrolschedules/config', []);
+		
+		if (empty($schedules)): ?>
+			<div class="alert alert-info">
+				<i class="fa-solid fa-info-circle"></i>
+				<?=gettext("No schedules configured. Go to the KACI-PC-Schedule tab to add time-based blocking schedules.")?>
+			</div>
+		<?php else: ?>
+			<table class="table table-striped table-condensed">
+				<thead>
+					<tr>
+						<th><?=gettext("Schedule Name")?></th>
+						<th><?=gettext("Profile")?></th>
+						<th><?=gettext("Time Range")?></th>
+						<th><?=gettext("Days")?></th>
+						<th><?=gettext("Currently Active")?></th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php 
+					$current_time = date('H:i');
+					$current_day_num = date('N'); // 1=Mon, 7=Sun
+					$day_map = array('mon' => 1, 'tue' => 2, 'wed' => 3, 'thu' => 4, 'fri' => 5, 'sat' => 6, 'sun' => 7);
 					
-					// Bedtime
-					if (isset($device['bedtime_enable']) && $device['bedtime_enable'] == 'on') {
-						$active = pc_is_time_in_range(date('H:i'), $device['bedtime_start'], $device['bedtime_end']);
-						echo "<tr>";
-						echo "<td>{$device_label}</td>";
-						echo "<td>Bedtime</td>";
-						echo "<td>{$device['bedtime_start']} - {$device['bedtime_end']}</td>";
-						echo "<td>Daily</td>";
-						echo "<td>" . ($active ? '<span class="label label-danger">Active</span>' : '<span class="label label-default">Inactive</span>') . "</td>";
-						echo "</tr>";
-					}
-					
-					// School
-					if (isset($device['school_enable']) && $device['school_enable'] == 'on') {
-						$current_day = date('N');
-						$is_weekday = ($current_day >= 1 && $current_day <= 5);
-						$active = $is_weekday && pc_is_time_in_range(date('H:i'), $device['school_start'], $device['school_end']);
-						echo "<tr>";
-						echo "<td>{$device_label}</td>";
-						echo "<td>School Hours</td>";
-						echo "<td>{$device['school_start']} - {$device['school_end']}</td>";
-						echo "<td>Monday-Friday</td>";
-						echo "<td>" . ($active ? '<span class="label label-danger">Active</span>' : '<span class="label label-default">Inactive</span>') . "</td>";
-						echo "</tr>";
-					}
-				endforeach; ?>
-			</tbody>
-		</table>
+					foreach ($schedules as $schedule): 
+						if (!is_array($schedule)) continue;
+						
+						// Skip disabled schedules
+						if (!isset($schedule['enabled']) || $schedule['enabled'] != 'on') {
+							continue;
+						}
+						
+						$name = htmlspecialchars($schedule['name']);
+						$profile = htmlspecialchars($schedule['profile_name']);
+						$start_time = $schedule['start_time'];
+						$end_time = $schedule['end_time'];
+						
+						// Format days
+						$days_array = isset($schedule['days']) && is_array($schedule['days']) ? $schedule['days'] : array();
+						$days_display = empty($days_array) ? 'None' : implode(', ', array_map('ucfirst', $days_array));
+						
+						// Check if currently active
+						$is_active = false;
+						
+						// Check if today matches the schedule days
+						$day_matches = false;
+						foreach ($days_array as $day) {
+							$day_lower = strtolower($day);
+							if (isset($day_map[$day_lower]) && $day_map[$day_lower] == $current_day_num) {
+								$day_matches = true;
+								break;
+							}
+						}
+						
+						// If day matches, check time
+						if ($day_matches && pc_is_time_in_range($current_time, $start_time, $end_time)) {
+							$is_active = true;
+						}
+						
+						$status_badge = $is_active ? 
+							'<span class="label label-danger"><i class="fa-solid fa-ban"></i> BLOCKING NOW</span>' : 
+							'<span class="label label-default"><i class="fa-solid fa-check"></i> Inactive</span>';
+						
+						$row_class = $is_active ? 'danger' : '';
+					?>
+					<tr class="<?=$row_class?>">
+						<td><strong><?=$name?></strong></td>
+						<td><?=$profile?></td>
+						<td><code><?=$start_time?> - <?=$end_time?></code></td>
+						<td><?=$days_display?></td>
+						<td><?=$status_badge?></td>
+					</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+		<?php endif; ?>
 	</div>
 </div>
-<?php endif; ?>
 
 <div class="panel panel-default">
 	<div class="panel-heading">

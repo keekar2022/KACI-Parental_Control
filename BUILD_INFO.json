@@ -1,8 +1,8 @@
 {
   "build_info": {
-    "version": "0.2.8",
-    "build_date": "2025-12-26T02:04:41Z",
-    "git_commit": "afc804f",
+    "version": "0.2.9",
+    "build_date": "2025-12-26T03:15:00Z",
+    "git_commit": "83c5865",
     "git_branch": "main",
     "built_by": "development",
     "build_environment": "local"
@@ -69,6 +69,18 @@
     }
   },
   "changelog": [
+    {
+      "version": "0.2.9",
+      "date": "2025-12-26",
+      "type": "update",
+      "changes": [
+        "Fixed schedule list view to display profile, days, time range, and enabled status",
+        "Fixed Active Schedules section on status page to read from new KACI-PC-Schedule config",
+        "Updated schedule enforcement logic to use new schedule system",
+        "Schedules now show real-time active/inactive status with 'BLOCKING NOW' badge",
+        "Maintains backward compatibility with legacy bedtime/school fields"
+      ]
+    },
     {
       "version": "0.2.8",
       "date": "2025-12-26",

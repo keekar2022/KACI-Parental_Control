@@ -18,7 +18,7 @@ require_once("shaper.inc");
 require_once("notices.inc");
 
 // Package version - Auto-increment on each .inc update
-define('PC_VERSION', '0.2.8');
+define('PC_VERSION', '0.2.9');
 define('PC_AUTHOR', 'Mukesh Kesharwani');
 define('PC_BUILD_DATE', '2025-12-26');
 
@@ -1311,7 +1311,58 @@ function pc_is_in_blocked_schedule($device) {
 	$current_day = date('N', $now); // 1 (Monday) through 7 (Sunday)
 	$current_time = date('H:i', $now);
 	
-	// Check bedtime
+	// Map day numbers to schedule day strings
+	$day_map = array(
+		1 => 'mon', 2 => 'tue', 3 => 'wed', 4 => 'thu',
+		5 => 'fri', 6 => 'sat', 7 => 'sun'
+	);
+	$current_day_str = $day_map[$current_day];
+	
+	// Get device's profile name
+	$profile_name = isset($device['child_name']) ? $device['child_name'] : '';
+	
+	if (empty($profile_name)) {
+		return false;
+	}
+	
+	// Check new KACI-PC-Schedule system
+	$schedules = config_get_path('installedpackages/parentalcontrolschedules/config', []);
+	
+	if (is_array($schedules)) {
+		foreach ($schedules as $schedule) {
+			if (!is_array($schedule)) continue;
+			
+			// Skip disabled schedules
+			if (!isset($schedule['enabled']) || $schedule['enabled'] != 'on') {
+				continue;
+			}
+			
+			// Skip if not for this profile
+			if (!isset($schedule['profile_name']) || $schedule['profile_name'] != $profile_name) {
+				continue;
+			}
+			
+			// Check if today matches the schedule days
+			$days = isset($schedule['days']) && is_array($schedule['days']) ? $schedule['days'] : array();
+			$day_matches = false;
+			
+			foreach ($days as $day) {
+				if (strtolower($day) == $current_day_str) {
+					$day_matches = true;
+					break;
+				}
+			}
+			
+			// If day matches, check time
+			if ($day_matches && isset($schedule['start_time']) && isset($schedule['end_time'])) {
+				if (pc_is_time_in_range($current_time, $schedule['start_time'], $schedule['end_time'])) {
+					return true; // Device is in blocked schedule
+				}
+			}
+		}
+	}
+	
+	// Legacy support: Check old bedtime/school fields (will be deprecated)
 	if (isset($device['bedtime_enable']) && $device['bedtime_enable'] == 'on') {
 		$start = $device['bedtime_start'];
 		$end = $device['bedtime_end'];
@@ -1335,12 +1386,12 @@ function pc_is_in_blocked_schedule($device) {
 	
 	// Check custom schedule
 	if (!empty($device['custom_schedule'])) {
-		$schedules = explode("\n", $device['custom_schedule']);
-		foreach ($schedules as $schedule) {
-			$schedule = trim($schedule);
-			if (empty($schedule)) continue;
+		$schedules_text = explode("\n", $device['custom_schedule']);
+		foreach ($schedules_text as $schedule_line) {
+			$schedule_line = trim($schedule_line);
+			if (empty($schedule_line)) continue;
 			
-			if (pc_matches_custom_schedule($schedule, $current_day, $current_time)) {
+			if (pc_matches_custom_schedule($schedule_line, $current_day, $current_time)) {
 				return true;
 			}
 		}

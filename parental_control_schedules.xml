@@ -76,13 +76,48 @@
 		</columnitem>
 		<columnitem>
 			<fielddescr>Days</fielddescr>
-			<fieldname>days</fieldname>
+			<fieldname>days_display</fieldname>
 		</columnitem>
 		<columnitem>
 			<fielddescr>Time Range</fielddescr>
-			<fieldname>time_range</fieldname>
+			<fieldname>time_range_display</fieldname>
+		</columnitem>
+		<columnitem>
+			<fielddescr>Status</fielddescr>
+			<fieldname>enabled_display</fieldname>
 		</columnitem>
 	</adddeleteeditpagefields>
+	
+	<custom_php_command_before_form>
+		// Add computed display fields for list view
+		$schedules = config_get_path('installedpackages/parentalcontrolschedules/config', []);
+		if (is_array($schedules)) {
+			foreach ($schedules as &$schedule) {
+				// Format days display
+				if (isset($schedule['days']) && is_array($schedule['days'])) {
+					$schedule['days_display'] = implode(',', $schedule['days']);
+				} else {
+					$schedule['days_display'] = '';
+				}
+				
+				// Format time range display
+				if (isset($schedule['start_time']) && isset($schedule['end_time'])) {
+					$schedule['time_range_display'] = $schedule['start_time'] . ' - ' . $schedule['end_time'];
+				} else {
+					$schedule['time_range_display'] = '';
+				}
+				
+				// Format enabled display
+				if (isset($schedule['enabled']) && $schedule['enabled'] == 'on') {
+					$schedule['enabled_display'] = '✓ Enabled';
+				} else {
+					$schedule['enabled_display'] = '✗ Disabled';
+				}
+			}
+			unset($schedule);
+			config_set_path('installedpackages/parentalcontrolschedules/config', $schedules);
+		}
+	</custom_php_command_before_form>
 	
 	<fields>
 		<field>
