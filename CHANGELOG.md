@@ -7,6 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.6] - 2025-12-28 🧹 CLEANUP: Remove Invalid Table-Based Rule
+
+### Problem Fixed
+**System logs showing error**: "Rule skipped: Unresolvable source alias '<parental_control_blocked>' for rule 'Parental Control: Dynamic Block Table'"
+
+This error appeared every 15 minutes in the system logs.
+
+### Root Cause
+Leftover rule from v0.7.0-0.7.2 when we tried to use pfctl tables instead of anchors.
+
+The rule referenced a table alias `<parental_control_blocked>` which:
+- Doesn't exist (we use anchors now, not tables)
+- Causes pfSense to log errors every filter reload
+- Was harmless but annoying in logs
+
+### Solution
+Updated `pc_init_block_table()` to automatically remove invalid rules:
+
+```php
+// Clean up any invalid rules from earlier versions
+foreach ($rules as $rule) {
+    if (strpos($rule['descr'], 'Dynamic Block Table') !== false) {
+        // Remove this invalid rule
+        continue;
+    }
+    $new_rules[] = $rule;
+}
+```
+
+The function now:
+1. ✅ Creates anchor file (as before)
+2. ✅ Loads anchor into pfctl (as before)
+3. ✅ **NEW: Removes invalid table-based rules**
+4. ✅ Cleans up config automatically
+
+### Impact
+
+**Before** (v0.7.5):
+```
+General Log:
+Rule skipped: Unresolvable source alias '<parental_control_blocked>'...
+Rule skipped: Unresolvable source alias '<parental_control_blocked>'...
+Rule skipped: Unresolvable source alias '<parental_control_blocked>'...
+(repeated every 15 minutes)
+```
+
+**After** (v0.7.6):
+```
+General Log:
+(clean - no more errors)
+```
+
+### Automatic Cleanup
+
+The invalid rule will be removed automatically when:
+- You save any config change in Services > Parental Control
+- The system runs `parental_control_sync()`
+- Manual: Run `parental_control_sync()` from pfSense shell
+
+No manual intervention needed!
+
+### Verification
+
+After deploying v0.7.6:
+1. Save any profile/schedule → Triggers cleanup
+2. Check System Log (Status > System Logs > General)
+3. ✅ No more "Unresolvable source alias" errors
+4. ✅ Clean log entries
+
+---
+
 ## [0.7.5] - 2025-12-28 🔧 CRITICAL FIX: Profiles and Schedules Save Timeout
 
 ### Problem Solved

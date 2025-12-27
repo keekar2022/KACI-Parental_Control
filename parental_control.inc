@@ -18,7 +18,7 @@ require_once("shaper.inc");
 require_once("notices.inc");
 
 // Package version - Auto-increment on each .inc update
-define('PC_VERSION', '0.7.5');
+define('PC_VERSION', '0.7.6');
 define('PC_AUTHOR', 'Mukesh Kesharwani');
 define('PC_BUILD_DATE', '2025-12-26');
 
@@ -1855,10 +1855,11 @@ function pc_remove_cron_job() {
  * add/remove block rules without calling filter_configure(). Anchors are
  * persistent and efficient - perfect for dynamic blocking.
  * 
- * Also creates a main rule that loads the anchor rules into the firewall.
+ * Also removes any invalid table-based rules from earlier versions.
  * 
  * @return void
  * @since 0.7.0
+ * @updated 0.7.6 Removes invalid table-based rules
  */
 function pc_init_block_table() {
 	// Initialize the pfSense anchor
@@ -1885,44 +1886,39 @@ function pc_init_block_table() {
 		));
 	}
 	
-	// Ensure main rule exists that loads the anchor
-	// This rule will be visible in pfSense GUI under Firewall > Rules
+	// Clean up any invalid rules from earlier versions
+	// Remove table-based rules that cause "Unresolvable source alias" errors
 	$rules = config_get_path('filter/rule', []);
-	$anchor_rule_exists = false;
+	$new_rules = [];
+	$removed_invalid = false;
 	
 	foreach ($rules as $rule) {
-		if (isset($rule['descr']) && strpos($rule['descr'], 'Parental Control: Anchor') !== false) {
-			$anchor_rule_exists = true;
-			break;
+		// Remove invalid table-based rule
+		if (isset($rule['descr']) && strpos($rule['descr'], 'Dynamic Block Table') !== false) {
+			pc_log("Removing invalid table-based rule from v0.7.0-0.7.2", 'info', array(
+				'event.action' => 'invalid_rule_removed',
+				'rule.description' => $rule['descr']
+			));
+			$removed_invalid = true;
+			continue; // Skip this rule
 		}
+		
+		// Keep all other rules
+		$new_rules[] = $rule;
 	}
 	
-	if (!$anchor_rule_exists) {
-		// This rule tells pfSense to process our anchor rules
-		// It will be VISIBLE in the GUI at Firewall > Rules > LAN
-		$anchor_rule = array(
-			'type' => 'match',  // 'match' type allows anchor processing
-			'interface' => 'lan',
-			'ipprotocol' => 'inet',
-			'descr' => 'Parental Control: Anchor (Dynamic Rules)',
-			'source' => array('any' => ''),
-			'destination' => array('any' => ''),
-			'associated-rule-id' => 'parental_control_anchor',
-			'created' => array(
-				'time' => time(),
-				'username' => 'system'
-			)
-		);
-		
-		// Add to rules array
-		$rules[] = $anchor_rule;
-		config_set_path('filter/rule', $rules);
-		
-		pc_log("Anchor rule added to config (will be visible in GUI after filter reload)", 'info', array(
-			'event.action' => 'anchor_rule_added',
-			'note' => 'Rule will appear in Firewall > Rules > LAN'
+	// Save cleaned rules if we removed any
+	if ($removed_invalid) {
+		config_set_path('filter/rule', $new_rules);
+		write_config("Removed invalid parental control table-based rule");
+		pc_log("Invalid rules cleaned up", 'info', array(
+			'event.action' => 'cleanup_complete'
 		));
 	}
+	
+	// Note: We no longer create GUI-visible anchor rules
+	// The anchor system works without them in pfSense
+	// Rules are managed entirely via the anchor file and pfctl
 }
 
 /**
