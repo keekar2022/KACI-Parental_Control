@@ -432,10 +432,11 @@ The package uses OpenTelemetry-compliant JSONL format for logs:
 
 ## 📝 License & Credits
 
-**Package:** Parental Control for pfSense  
-**Version:** 0.2.1  
-**Compatibility:** pfSense 2.7.0+  
-**Platform:** FreeBSD 13.0+
+**Package:** KACI Parental Control for pfSense  
+**Version:** 1.0.0 (Stable Release)  
+**Status:** Production Ready  
+**Compatibility:** pfSense 2.6.0+  
+**License:** MIT
 
 ---
 
