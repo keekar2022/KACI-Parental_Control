@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.8] - 2025-12-28 🔧 CRITICAL: Remove write_config from init function
+
+### Problem Fixed
+**Profiles still not saving** - Error: "TypeError: fwrite(): Argument #1 ($stream) must be of type resource, false given"
+
+### Root Cause
+The `pc_init_block_table()` function was calling `write_config()` to save cleaned rules, but this conflicted with the profile/schedule save process which also calls `write_config()`.
+
+**Call sequence causing error**:
+```
+1. User saves profile
+2. parental_control_profiles.php calls write_config()
+3. Then calls parental_control_sync()
+4. Sync calls pc_init_block_table()
+5. pc_init_block_table() tries to call write_config() AGAIN
+6. ERROR: Can't write config twice in same transaction
+```
+
+### Solution
+**Removed `write_config()` from `pc_init_block_table()`**
+
+The function now only:
+1. ✅ Creates anchor file
+2. ✅ Loads anchor
+3. ✅ Cleans invalid rules **in memory**
+4. ❌ **Does NOT call write_config**
+
+The calling function (profile/schedule save) will call `write_config()` and save everything including the cleaned rules.
+
+### Code Change
+
+**Before** (v0.7.7):
+```php
+if ($removed_invalid) {
+    config_set_path('filter/rule', $new_rules);
+    write_config("Removed invalid rule");  // ← CAUSED ERROR
+}
+```
+
+**After** (v0.7.8):
+```php
+if ($removed_invalid) {
+    config_set_path('filter/rule', $new_rules);
+    // DON'T call write_config - let caller handle it
+    pc_log("Invalid rules removed (will be saved by caller)");
+}
+```
+
+### Result
+✅ **Profiles save successfully**  
+✅ **Schedules save successfully**  
+✅ **Invalid rules cleaned automatically**  
+✅ **No more fwrite errors**  
+✅ **Single write_config per transaction**  
+
+---
+
 ## [0.7.6] - 2025-12-28 🧹 CLEANUP: Remove Invalid Table-Based Rule
 
 ### Problem Fixed
