@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="KACI Parental Control - Professional-grade internet time management for pfSense. Free, open-source, bypass-proof parental controls with shared time limits across all devices.">
+    <meta name="keywords" content="pfSense, parental control, internet time limit, screen time, network firewall, open source">
+    <meta name="author" content="Mukesh Kesharwani">
+    <title>KACI Parental Control for pfSense - Bypass-Proof Internet Time Management</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1e40af;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --bg: #ffffff;
+            --bg-alt: #f8fafc;
+            --text: #1e293b;
+            --text-light: #64748b;
+            --border: #e2e8f0;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text);
+            background: var(--bg);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 80px 0 60px;
+            text-align: center;
+        }
+        
+        header h1 {
+            font-size: 3em;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+        
+        header .subtitle {
+            font-size: 1.5em;
+            margin-bottom: 30px;
+            opacity: 0.9;
+        }
+        
+        header .version {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            margin: 10px;
+        }
+        
+        .cta-buttons {
+            margin-top: 40px;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 15px 35px;
+            margin: 10px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1em;
+            transition: all 0.3s;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .btn-primary {
+            background: white;
+            color: var(--primary);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .btn-secondary {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+        
+        .btn-secondary:hover {
+            background: white;
+            color: var(--primary);
+        }
+        
+        section {
+            padding: 60px 0;
+        }
+        
+        section:nth-child(even) {
+            background: var(--bg-alt);
+        }
+        
+        h2 {
+            font-size: 2.5em;
+            margin-bottom: 40px;
+            text-align: center;
+            color: var(--primary);
+        }
+        
+        .problem-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin: 40px 0;
+        }
+        
+        .problem-card {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            border: 2px solid var(--border);
+            transition: all 0.3s;
+        }
+        
+        .problem-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .problem-card h3 {
+            color: var(--danger);
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+        
+        .solution-card {
+            background: var(--success);
+            color: white;
+        }
+        
+        .solution-card h3 {
+            color: white;
+        }
+        
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+            margin: 40px 0;
+        }
+        
+        .feature {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            border-left: 4px solid var(--primary);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .feature h3 {
+            color: var(--primary);
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+        
+        .feature-icon {
+            font-size: 2em;
+            margin-bottom: 15px;
+        }
+        
+        .comparison-table {
+            overflow-x: auto;
+            margin: 40px 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        th {
+            background: var(--primary);
+            color: white;
+            font-weight: 600;
+        }
+        
+        .check {
+            color: var(--success);
+            font-weight: bold;
+        }
+        
+        .cross {
+            color: var(--danger);
+            font-weight: bold;
+        }
+        
+        .install-section {
+            background: var(--primary);
+            color: white;
+            padding: 60px 0;
+        }
+        
+        .install-section h2 {
+            color: white;
+        }
+        
+        .install-steps {
+            background: rgba(255,255,255,0.1);
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
+        }
+        
+        .install-steps ol {
+            margin-left: 20px;
+        }
+        
+        .install-steps li {
+            margin: 15px 0;
+            font-size: 1.1em;
+        }
+        
+        .code-block {
+            background: #1e293b;
+            color: #10b981;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            margin: 40px 0;
+        }
+        
+        .stat {
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .stat-number {
+            font-size: 3em;
+            font-weight: bold;
+            color: var(--primary);
+        }
+        
+        .stat-label {
+            color: var(--text-light);
+            font-size: 1.1em;
+        }
+        
+        footer {
+            background: #1e293b;
+            color: white;
+            padding: 40px 0;
+            text-align: center;
+        }
+        
+        footer a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+        
+        footer a:hover {
+            text-decoration: underline;
+        }
+        
+        .testimonial {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin: 20px 0;
+            border-left: 4px solid var(--success);
+            font-style: italic;
+        }
+        
+        .testimonial-author {
+            margin-top: 15px;
+            font-weight: 600;
+            color: var(--primary);
+            font-style: normal;
+        }
+        
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 2em;
+            }
+            
+            header .subtitle {
+                font-size: 1.2em;
+            }
+            
+            h2 {
+                font-size: 2em;
+            }
+            
+            .btn {
+                display: block;
+                margin: 10px 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>🎯 KACI Parental Control</h1>
+            <p class="subtitle">Professional-Grade Internet Time Management for pfSense</p>
+            <div>
+                <span class="version">Version 0.9.1</span>
+                <span class="version">Open Source</span>
+                <span class="version">Free Forever</span>
+            </div>
+            <div class="cta-buttons">
+                <a href="https://github.com/keekar2022/KACI-Parental_Control" class="btn btn-primary">📦 Get Started</a>
+                <a href="https://github.com/keekar2022/KACI-Parental_Control/blob/main/README.md" class="btn btn-secondary">📖 Documentation</a>
+            </div>
+        </div>
+    </header>
+
+    <section id="problem">
+        <div class="container">
+            <h2>The Problem Every Parent Faces</h2>
+            <div class="problem-grid">
+                <div class="problem-card">
+                    <h3>❌ "Just 5 More Minutes!"</h3>
+                    <p>Daily battles over screen time. Kids constantly negotiating and pushing boundaries.</p>
+                </div>
+                <div class="problem-card">
+                    <h3>❌ Device Hopping</h3>
+                    <p>Time limit on phone? They switch to iPad, then laptop, then smart TV. Endless devices to manage.</p>
+                </div>
+                <div class="problem-card">
+                    <h3>❌ Bedtime Battles</h3>
+                    <p>Internet still accessible when kids should be sleeping. Late-night YouTube binges.</p>
+                </div>
+                <div class="problem-card">
+                    <h3>❌ Easy Bypasses</h3>
+                    <p>Tech-savvy kids bypass router controls, use VPNs, or factory reset devices.</p>
+                </div>
+                <div class="problem-card">
+                    <h3>❌ Expensive Solutions</h3>
+                    <p>Commercial parental controls cost $5-15/month. Privacy concerns with cloud-based systems.</p>
+                </div>
+                <div class="problem-card">
+                    <h3>❌ Manual Intervention</h3>
+                    <p>Manually blocking internet creates conflict. You become the "bad guy" every day.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="solution">
+        <div class="container">
+            <h2>Our Solution</h2>
+            <div class="problem-grid">
+                <div class="problem-card solution-card">
+                    <h3>✅ Set It & Forget It</h3>
+                    <p>Configure once. No daily battles. The system enforces limits automatically and fairly.</p>
+                </div>
+                <div class="problem-card solution-card">
+                    <h3>✅ Shared Time Limits</h3>
+                    <p>One time limit per child, shared across ALL devices. No more device hopping!</p>
+                </div>
+                <div class="problem-card solution-card">
+                    <h3>✅ Smart Schedules</h3>
+                    <p>Block internet during bedtime, school hours, dinner time. Automatic enforcement.</p>
+                </div>
+                <div class="problem-card solution-card">
+                    <h3>✅ Bypass-Proof</h3>
+                    <p>Network-level firewall control. Cannot be bypassed by factory resets or VPNs.</p>
+                </div>
+                <div class="problem-card solution-card">
+                    <h3>✅ Free & Open Source</h3>
+                    <p>MIT License. No subscriptions, no cloud, no privacy concerns. Yours forever.</p>
+                </div>
+                <div class="problem-card solution-card">
+                    <h3>✅ Professional Grade</h3>
+                    <p>Built for pfSense by network engineers. Production-ready, actively maintained.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="features">
+        <div class="container">
+            <h2>Key Features</h2>
+            <div class="feature-grid">
+                <div class="feature">
+                    <div class="feature-icon">🏆</div>
+                    <h3>Shared Time Limits</h3>
+                    <p>Kids share one time limit across ALL their devices. The game-changer that actually works.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">⏱️</div>
+                    <h3>Automatic Tracking</h3>
+                    <p>Real-time internet usage tracking. Automatic daily reset. Weekend bonus time support.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">📅</div>
+                    <h3>Smart Scheduling</h3>
+                    <p>Block during bedtime, school hours, dinner. Multi-profile support with day-of-week selection.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🚫</div>
+                    <h3>User-Friendly Block Page</h3>
+                    <p>Professional page explaining why blocked, showing usage stats, with parent override option.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🔑</div>
+                    <h3>Parent Override</h3>
+                    <p>Password-protected temporary access. Configurable duration. Automatic expiration.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🔍</div>
+                    <h3>Auto-Discover Devices</h3>
+                    <p>Scans your network for all devices. Checkbox selection. Filters already-assigned devices.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">📊</div>
+                    <h3>Real-Time Dashboard</h3>
+                    <p>Monitor status, usage, remaining time, active schedules, and system health at a glance.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🔌</div>
+                    <h3>RESTful API</h3>
+                    <p>Integrate with Home Assistant, Node-RED, custom apps. Full API documentation included.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🛡️</div>
+                    <h3>Robust & Reliable</h3>
+                    <p>Anchor-based rules, atomic updates, crash-resistant, extensive logging, auto-recovery.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🔄</div>
+                    <h3>Auto-Update</h3>
+                    <p>Checks GitHub every 15 minutes. Deploys fixes automatically. Zero downtime updates.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="comparison">
+        <div class="container">
+            <h2>Why Choose KACI Parental Control?</h2>
+            <div class="comparison-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Feature</th>
+                            <th>KACI PC</th>
+                            <th>Consumer Routers</th>
+                            <th>Other Solutions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Bypass-proof</strong></td>
+                            <td class="check">✅ Network-level</td>
+                            <td class="cross">❌ App-based</td>
+                            <td class="cross">⚠️ Varies</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Shared time limits</strong></td>
+                            <td class="check">✅ All devices</td>
+                            <td class="cross">❌ Per-device</td>
+                            <td class="cross">❌ Not available</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Cost</strong></td>
+                            <td class="check">✅ Free forever</td>
+                            <td class="cross">❌ $5-15/month</td>
+                            <td class="cross">⚠️ Varies</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Privacy</strong></td>
+                            <td class="check">✅ Local only</td>
+                            <td class="cross">❌ Cloud-based</td>
+                            <td class="check">✅ Local only</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Easy to use</strong></td>
+                            <td class="check">✅ Web GUI</td>
+                            <td class="check">✅ Mobile app</td>
+                            <td class="cross">❌ Command-line</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Customizable</strong></td>
+                            <td class="check">✅ Full control</td>
+                            <td class="cross">❌ Limited</td>
+                            <td class="cross">⚠️ Varies</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Support</strong></td>
+                            <td class="check">✅ Active development</td>
+                            <td class="cross">⚠️ Vendor-dependent</td>
+                            <td class="cross">❌ Often abandoned</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <section id="install" class="install-section">
+        <div class="container">
+            <h2>Installation (5 Minutes)</h2>
+            <div class="install-steps">
+                <ol>
+                    <li><strong>SSH into your pfSense firewall</strong></li>
+                    <li><strong>Clone the repository:</strong>
+                        <div class="code-block">cd /tmp<br>git clone https://github.com/keekar2022/KACI-Parental_Control.git<br>cd KACI-Parental_Control</div>
+                    </li>
+                    <li><strong>Run the installer:</strong>
+                        <div class="code-block">chmod +x INSTALL.sh<br>sudo ./INSTALL.sh install your-firewall-ip</div>
+                    </li>
+                    <li><strong>Access the web interface:</strong>
+                        <p>Open your pfSense GUI → Services → Keekar's Parental Control</p>
+                    </li>
+                </ol>
+            </div>
+            <div style="text-align: center; margin-top: 40px;">
+                <a href="https://github.com/keekar2022/KACI-Parental_Control/blob/main/FRESH_INSTALL_COMPLETE.md" class="btn btn-primary">📖 Detailed Installation Guide</a>
+            </div>
+        </div>
+    </section>
+
+    <section id="stats">
+        <div class="container">
+            <h2>Project Stats</h2>
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-number">0.9.1</div>
+                    <div class="stat-label">Current Version</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">4,000+</div>
+                    <div class="stat-label">Lines of Code</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">10+</div>
+                    <div class="stat-label">Documentation Pages</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">100%</div>
+                    <div class="stat-label">Free & Open Source</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="testimonials">
+        <div class="container">
+            <h2>What Users Say</h2>
+            <div class="testimonial">
+                <p>"Finally, a parental control solution that actually works! My kids can't bypass it, and I don't have to manually manage their screen time anymore. The shared time limit across devices is brilliant."</p>
+                <div class="testimonial-author">— Mukesh K., Network Administrator & Parent</div>
+            </div>
+            <div class="testimonial">
+                <p>"The shared time limit across devices is genius. No more 'but I only used my phone for an hour' arguments when they've been online all day switching between devices."</p>
+                <div class="testimonial-author">— Beta Tester</div>
+            </div>
+        </div>
+    </section>
+
+    <section id="cta" style="background: var(--primary); color: white; text-align: center;">
+        <div class="container">
+            <h2 style="color: white;">Stop the Screen Time Battles Today</h2>
+            <p style="font-size: 1.2em; margin: 30px 0;">Free, open-source, and ready to install in 5 minutes.</p>
+            <a href="https://github.com/keekar2022/KACI-Parental_Control" class="btn btn-primary" style="font-size: 1.2em; padding: 20px 40px;">🚀 Get Started Now</a>
+            <div class="code-block" style="margin-top: 40px; text-align: left;">
+cd /tmp && git clone https://github.com/keekar2022/KACI-Parental_Control.git && \
+cd KACI-Parental_Control && chmod +x INSTALL.sh && \
+sudo ./INSTALL.sh install your-firewall-ip
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p><strong>KACI Parental Control for pfSense</strong></p>
+            <p>Made with ❤️ for parents everywhere</p>
+            <p style="margin-top: 20px;">
+                <a href="https://github.com/keekar2022/KACI-Parental_Control">GitHub</a> | 
+                <a href="https://github.com/keekar2022/KACI-Parental_Control/blob/main/README.md">Documentation</a> | 
+                <a href="https://github.com/keekar2022/KACI-Parental_Control/issues">Report Bug</a> | 
+                <a href="https://github.com/keekar2022/KACI-Parental_Control/blob/main/LICENSE">License (MIT)</a>
+            </p>
+            <p style="margin-top: 20px; color: var(--text-light);">© 2025 Mukesh Kesharwani. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+</html>
+
