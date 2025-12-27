@@ -1358,11 +1358,13 @@ function pc_is_in_blocked_schedule($device) {
 				continue;
 			}
 			
-			// Check if today matches the schedule days
-			$days = isset($schedule['days']) && is_array($schedule['days']) ? $schedule['days'] : array();
-			if (is_string($days)) {
-				$days = array_map('trim', explode(',', $days));
-			}
+		// Check if today matches the schedule days
+		$days = isset($schedule['days']) ? $schedule['days'] : array();
+		if (is_string($days)) {
+			$days = array_map('trim', explode(',', $days));
+		} elseif (!is_array($days)) {
+			$days = array();
+		}
 			$day_matches = false;
 			
 			foreach ($days as $day) {

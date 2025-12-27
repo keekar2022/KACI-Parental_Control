@@ -83,8 +83,8 @@ if (isset($_POST['save'])) {
 	if (empty($input_errors)) {
 		$schedule = array(
 			'name' => trim($_POST['name']),
-			'profile_names' => $_POST['profile_names'], // Array
-			'days' => $_POST['days'], // Array
+			'profile_names' => is_array($_POST['profile_names']) ? implode(',', $_POST['profile_names']) : $_POST['profile_names'],
+			'days' => is_array($_POST['days']) ? implode(',', $_POST['days']) : $_POST['days'],
 			'start_time' => trim($_POST['start_time']),
 			'end_time' => trim($_POST['end_time']),
 			'enabled' => isset($_POST['enabled']) ? 'on' : 'off'
@@ -134,6 +134,10 @@ if (isset($_GET['act']) && $_GET['act'] === 'edit' && isset($_GET['id']) && is_n
 		// Convert old format to new if needed
 		if (isset($edit_schedule['profile_name']) && !isset($edit_schedule['profile_names'])) {
 			$edit_schedule['profile_names'] = array($edit_schedule['profile_name']);
+		}
+		// Convert comma-separated strings to arrays for display
+		if (isset($edit_schedule['profile_names']) && is_string($edit_schedule['profile_names'])) {
+			$edit_schedule['profile_names'] = array_map('trim', explode(',', $edit_schedule['profile_names']));
 		}
 		if (isset($edit_schedule['days']) && is_string($edit_schedule['days'])) {
 			$edit_schedule['days'] = array_map('trim', explode(',', $edit_schedule['days']));
