@@ -12,21 +12,41 @@
 require_once("guiconfig.inc");
 require_once("/usr/local/pkg/parental_control.inc");
 
+// DEBUG: Log page access
+error_log("PARENTAL_CONTROL_DEBUG: === PAGE LOADED ===");
+error_log("PARENTAL_CONTROL_DEBUG: REQUEST_METHOD: " . $_SERVER['REQUEST_METHOD']);
+error_log("PARENTAL_CONTROL_DEBUG: REQUEST_URI: " . $_SERVER['REQUEST_URI']);
+
 // Check if user has permission
 if (!isAllowedPage($_SERVER['SCRIPT_NAME'])) {
+	error_log("PARENTAL_CONTROL_DEBUG: Permission denied, redirecting");
 	header("Location: /");
 	exit;
 }
+
+error_log("PARENTAL_CONTROL_DEBUG: Permission check passed");
 
 $pgtitle = array("Services", "Parental Control", "Profiles");
 $pglinks = array("", "/pkg_edit.php?xml=parental_control.xml", "@self");
 
 // Get configuration
 $profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', []);
+error_log("PARENTAL_CONTROL_DEBUG: Loaded " . count($profiles) . " existing profiles");
 
 // Handle form submissions
 $input_errors = [];
 $savemsg = '';
+
+// DEBUG: Check if this is a POST request
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+	error_log("PARENTAL_CONTROL_DEBUG: POST request detected");
+	error_log("PARENTAL_CONTROL_DEBUG: POST keys: " . implode(", ", array_keys($_POST)));
+	error_log("PARENTAL_CONTROL_DEBUG: isset(_POST['save']): " . (isset($_POST['save']) ? 'YES' : 'NO'));
+	error_log("PARENTAL_CONTROL_DEBUG: value of _POST['save']: '" . ($_POST['save'] ?? 'NULL') . "'");
+	error_log("PARENTAL_CONTROL_DEBUG: if (_POST['save']) would be: " . ($_POST['save'] ? 'TRUE' : 'FALSE'));
+} else {
+	error_log("PARENTAL_CONTROL_DEBUG: GET request (just viewing page)");
+}
 
 // DELETE action
 if ($_POST['act'] === 'del' && isset($_POST['id']) && is_numeric($_POST['id'])) {
@@ -75,7 +95,7 @@ if ($_POST['act'] === 'del_device' && isset($_POST['profile_id']) && isset($_POS
 }
 
 // SAVE action (Add or Edit Profile)
-if ($_POST['save']) {
+if (isset($_POST['save'])) {
 	// DEBUG: Log that save was triggered
 	error_log("PARENTAL_CONTROL_DEBUG: Save button clicked");
 	error_log("PARENTAL_CONTROL_DEBUG: POST data: " . print_r($_POST, true));

@@ -38,7 +38,13 @@ if ($_POST['act'] === 'del' && isset($_POST['id']) && is_numeric($_POST['id'])) 
 		$schedules = array_values($schedules); // Re-index
 		config_set_path('installedpackages/parentalcontrolschedules/config', $schedules);
 		write_config("Deleted schedule: {$schedule_name}");
-		parental_control_sync();
+		
+		try {
+			parental_control_sync();
+		} catch (Exception $e) {
+			pc_log("Sync failed but schedule deleted: " . $e->getMessage(), 'warning');
+		}
+		
 		$savemsg = "Schedule '{$schedule_name}' has been deleted successfully.";
 		pc_log("Schedule deleted via GUI", 'info', array(
 			'schedule.name' => $schedule_name,
@@ -48,7 +54,7 @@ if ($_POST['act'] === 'del' && isset($_POST['id']) && is_numeric($_POST['id'])) 
 }
 
 // SAVE action (Add or Edit)
-if ($_POST['save']) {
+if (isset($_POST['save'])) {
 	// Validation
 	if (empty($_POST['name'])) {
 		$input_errors[] = "Schedule name is required.";
@@ -97,7 +103,15 @@ if ($_POST['save']) {
 		
 		config_set_path('installedpackages/parentalcontrolschedules/config', $schedules);
 		write_config("{$action} schedule: {$schedule['name']}");
-		parental_control_sync();
+		
+		// Try to sync, but don't fail if it doesn't work
+		try {
+			parental_control_sync();
+		} catch (Exception $e) {
+			// Log error but continue - schedule was already saved
+			pc_log("Sync failed but schedule saved: " . $e->getMessage(), 'warning');
+		}
+		
 		$savemsg = "Schedule '{$schedule['name']}' has been {$action} successfully.";
 		
 		pc_log("Schedule {$action} via GUI", 'info', array(
