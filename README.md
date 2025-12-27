@@ -15,14 +15,13 @@ A comprehensive parental control package for pfSense that helps parents manage a
 
 ```bash
 ./INSTALL.sh <pfsense_ip_address>
-# Example: ./INSTALL.sh 192.168.64.3
+# Example: ./INSTALL.sh 192.168.1.1
 ```
 
 **Requirements:**
-- pfSense 2.7.0+ with SSH enabled
+- pfSense 2.6.0+ with SSH enabled
 - Network access to pfSense
-
-**Need a test pfSense VM?** See `../test_environment/`
+- Basic SSH/command-line knowledge
 
 ---
 
@@ -236,8 +235,8 @@ Child 2 (Age 14):
 
 ### Package Not Appearing in Menu
 ```bash
-# SSH to pfSense
-ssh admin@192.168.64.10
+# SSH to pfSense (replace YOUR-FIREWALL-IP)
+ssh admin@YOUR-FIREWALL-IP
 
 # Check files are present
 ls -la /usr/local/pkg/parental_control*
@@ -245,16 +244,17 @@ ls -la /usr/local/pkg/parental_control*
 # Check system log
 tail -50 /var/log/system.log | grep parental
 
-# Try reinstalling
-cd /Users/mkesharw/Documents/Pfsense-ext/Parental_Control
-./INSTALL.sh 192.168.64.10
+# Try reinstalling (from your local machine)
+cd /path/to/KACI-Parental_Control
+./INSTALL.sh YOUR-FIREWALL-IP
 ```
 
 ### Rules Not Blocking
-1. **Check enforcement mode**: Must be "Strict" or "Moderate"
-2. **Verify MAC address**: Use `arp -a` on pfSense to find correct MAC
-3. **Check firewall rules**: Go to Firewall > Rules > LAN, look for parental control rules
-4. **View logs**: `tail -f /var/log/parental_control.jsonl`
+See [User Guide](docs/USER_GUIDE.md#troubleshooting) for complete troubleshooting steps including:
+- Checking enforcement mode
+- Verifying MAC addresses
+- Inspecting firewall rules
+- Viewing and analyzing logs
 
 ### Time Not Being Tracked
 1. **Check cron job**: `crontab -l` should show parental_control entry
@@ -323,14 +323,14 @@ Executes: `/usr/local/bin/php -f /usr/local/pkg/parental_control.inc -- cron`
 To update after making changes:
 
 ```bash
-# Edit files in Parental_Control/
+# Edit files locally
 vim parental_control.inc  # or other files
 
 # Test syntax (PHP files only)
 php -l parental_control.inc
 
-# Reinstall on pfSense
-./INSTALL.sh 192.168.64.10
+# Reinstall on pfSense (replace YOUR-FIREWALL-IP)
+./INSTALL.sh YOUR-FIREWALL-IP
 
 # Check pfSense web UI
 # Verify changes took effect
@@ -351,27 +351,26 @@ php -l parental_control.inc
 **See also:**
 - **[Changelog](CHANGELOG.md)** - Complete version history
 - **[Documentation Index](docs/README.md)** - Navigate all documentation
-
-### Related Directories
-- **`../test_environment/`** - How to set up pfSense VM for testing
-- **`../core/`** - pfSense source code (reference)
+- **[Release Notes](RELEASE_NOTES_v1.0.0.md)** - What's new in v1.0.0
 
 ### Useful Commands
 ```bash
+# Replace YOUR-FIREWALL-IP with your actual pfSense IP address
+
 # View logs in real-time
-ssh admin@192.168.64.10 "tail -f /var/log/parental_control.jsonl"
+ssh admin@YOUR-FIREWALL-IP "tail -f /var/log/parental_control.jsonl"
 
 # Check cron job
-ssh admin@192.168.64.10 "crontab -l | grep parental"
+ssh admin@YOUR-FIREWALL-IP "crontab -l | grep parental"
 
 # View ARP table (find device MACs)
-ssh admin@192.168.64.10 "arp -an"
+ssh admin@YOUR-FIREWALL-IP "arp -an"
 
 # Check firewall rules
-ssh admin@192.168.64.10 "pfctl -sr | grep parental"
+ssh admin@YOUR-FIREWALL-IP "pfctl -sr | grep parental"
 
 # Reinstall package
-./INSTALL.sh 192.168.64.10
+./INSTALL.sh YOUR-FIREWALL-IP
 ```
 
 ### Logs
@@ -411,14 +410,16 @@ ssh admin@192.168.64.10 "pfctl -sr | grep parental"
 
 **Query Logs:**
 ```bash
-# View logs prettified
-ssh admin@192.168.64.10 "cat /var/log/parental_control.jsonl | jq '.'"
+# Replace YOUR-FIREWALL-IP with your actual pfSense IP address
 
-# Filter by child
-ssh admin@192.168.64.10 "cat /var/log/parental_control.jsonl | jq 'select(.Attributes.\"child.name\" == \"Emma\")'"
+# View logs prettified
+ssh admin@YOUR-FIREWALL-IP "cat /var/log/parental_control.jsonl | jq '.'"
+
+# Filter by child (replace "Emma" with your child's name)
+ssh admin@YOUR-FIREWALL-IP "cat /var/log/parental_control.jsonl | jq 'select(.Attributes.\"child.name\" == \"Emma\")'"
 
 # Get error logs only
-ssh admin@192.168.64.10 "cat /var/log/parental_control.jsonl | jq 'select(.SeverityText == \"ERROR\")'"
+ssh admin@YOUR-FIREWALL-IP "cat /var/log/parental_control.jsonl | jq 'select(.SeverityText == \"ERROR\")'"
 ```
 
 **SIEM Integration:**  
@@ -426,7 +427,7 @@ The package uses OpenTelemetry-compliant JSONL format for logs:
 - Compatible with Splunk, Elasticsearch, Grafana Loki, Graylog
 - Stream-friendly format (works with `tail -f`)
 - One JSON object per line for efficient parsing
-- See [Configuration Guide](docs/CONFIGURATION.md) for advanced logging options
+- See [User Guide](docs/USER_GUIDE.md#configuration-guide) for advanced logging options
 
 ---
 
@@ -440,4 +441,4 @@ The package uses OpenTelemetry-compliant JSONL format for logs:
 
 ---
 
-**Need help setting up a test environment?** See `../test_environment/README.md`
+**Need help?** See our comprehensive [Documentation](docs/README.md) for installation, configuration, and troubleshooting guides.
