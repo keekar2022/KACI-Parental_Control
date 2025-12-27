@@ -18,7 +18,7 @@ require_once("shaper.inc");
 require_once("notices.inc");
 
 // Package version - Auto-increment on each .inc update
-define('PC_VERSION', '0.7.3');
+define('PC_VERSION', '0.7.4');
 define('PC_AUTHOR', 'Mukesh Kesharwani');
 define('PC_BUILD_DATE', '2025-12-26');
 
@@ -2033,11 +2033,12 @@ function pc_apply_smart_firewall_changes($old_blocked, $new_blocked, $state) {
 /**
  * Add firewall block for a specific device using pfSense anchor
  * 
- * Adds a block rule to the parental_control anchor for device's IP address.
- * This avoids calling filter_configure() which causes AQM errors.
+ * Creates rules that:
+ * 1. Allow access to pfSense (so user can see block page)
+ * 2. Redirect HTTP/HTTPS to block page
+ * 3. Block all other traffic
  * 
- * The anchor approach is efficient and persistent - rules are managed in
- * /tmp/rules.parental_control and loaded dynamically with pfctl.
+ * This provides user-friendly blocking with explanation instead of silent drop.
  * 
  * @param array $device Device information
  * @param string $enforcement_mode 'strict' or 'moderate'
@@ -2045,6 +2046,7 @@ function pc_apply_smart_firewall_changes($old_blocked, $new_blocked, $state) {
  * @param array $state Current state (for IP lookup)
  * @return bool True if rule added successfully
  * @since 0.7.0
+ * @updated 0.7.4 Added block page redirect
  */
 function pc_add_device_block($device, $enforcement_mode, $reason, $state) {
 	$mac = pc_normalize_mac($device['mac_address']);
@@ -2064,36 +2066,55 @@ function pc_add_device_block($device, $enforcement_mode, $reason, $state) {
 		return false;
 	}
 	
-	// Add rule to anchor file
+	// Get pfSense LAN IP for redirect
+	$lan_ip = get_interface_ip('lan');
+	if (empty($lan_ip)) {
+		$lan_ip = '192.168.1.1'; // Fallback
+	}
+	
+	// Add rules to anchor file
 	$anchor_file = '/tmp/rules.parental_control';
 	$device_name = isset($device['device_name']) ? $device['device_name'] : 'Unknown';
 	
 	// Read existing rules to avoid duplicates
 	$existing_rules = file_exists($anchor_file) ? file_get_contents($anchor_file) : '';
 	
-	// Check if rule already exists for this IP
-	if (strpos($existing_rules, "block drop quick from {$ip}") !== false) {
-		// Rule already exists, no need to add
+	// Check if rules already exist for this IP
+	if (strpos($existing_rules, "# Device: {$ip}") !== false) {
+		// Rules already exist, no need to add
 		return true;
 	}
 	
-	// Build the rule
-	$rule = "block drop quick from {$ip} to any label \"PC:{$device_name}\" # {$reason}\n";
+	// Build the rules for this device
+	// Rule 1: Allow DNS (so they can resolve the firewall hostname)
+	// Rule 2: Allow access to pfSense itself (for block page)
+	// Rule 3: Redirect HTTP to block page
+	// Rule 4: Redirect HTTPS to block page (will show cert warning, but works)
+	// Rule 5: Block everything else
+	
+	$rules = "# Device: {$ip} ({$device_name}) - {$reason}\n";
+	$rules .= "pass quick proto udp from {$ip} to any port 53 label \"PC-DNS:{$device_name}\"\n";
+	$rules .= "pass quick from {$ip} to {$lan_ip} label \"PC-Allow:{$device_name}\"\n";
+	$rules .= "rdr pass proto tcp from {$ip} to any port 80 -> {$lan_ip} port 443 label \"PC-HTTP:{$device_name}\"\n";
+	$rules .= "rdr pass proto tcp from {$ip} to any port 443 -> {$lan_ip} port 443 label \"PC-HTTPS:{$device_name}\"\n";
+	$rules .= "block drop quick from {$ip} to any label \"PC-Block:{$device_name}\"\n";
+	$rules .= "\n";
 	
 	// Append to anchor file
-	file_put_contents($anchor_file, $rule, FILE_APPEND | LOCK_EX);
+	file_put_contents($anchor_file, $rules, FILE_APPEND | LOCK_EX);
 	
 	// Reload anchor (fast, no filter_configure needed)
 	exec("/sbin/pfctl -a parental_control -f {$anchor_file} 2>&1", $output, $return_code);
 	
 	if ($return_code === 0) {
-		pc_log("Blocked {$ip} ({$mac}) via anchor - {$reason}", 'info', array(
+		pc_log("Blocked {$ip} ({$mac}) with redirect to block page - {$reason}", 'info', array(
 			'event.action' => 'device_blocked',
 			'device.ip' => $ip,
 			'device.mac' => $mac,
 			'device.name' => $device_name,
 			'block.reason' => $reason,
-			'enforcement.mode' => $enforcement_mode
+			'enforcement.mode' => $enforcement_mode,
+			'redirect.enabled' => true
 		));
 		return true;
 	} else {
@@ -2110,13 +2131,14 @@ function pc_add_device_block($device, $enforcement_mode, $reason, $state) {
 /**
  * Remove firewall block for a specific device
  * 
- * Removes device's block rule from the parental_control anchor.
- * Rebuilds the anchor file without the device's rule and reloads.
+ * Removes all rules for device's IP from the parental_control anchor.
+ * This includes pass rules, redirect rules, and block rules.
  * 
  * @param string $mac Device MAC address
  * @param array $state Current state (for IP lookup)
  * @return bool True if rule removed successfully
  * @since 0.7.0
+ * @updated 0.7.4 Removes entire device rule block
  */
 function pc_remove_device_block($mac, $state) {
 	$mac = pc_normalize_mac($mac);
@@ -2138,19 +2160,29 @@ function pc_remove_device_block($mac, $state) {
 	}
 	
 	// Read existing rules
-	$rules = file($anchor_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+	$rules = file($anchor_file, FILE_IGNORE_NEW_LINES);
 	$new_rules = array();
+	$skip_until_blank = false;
 	$removed = false;
 	
-	// Filter out the rule for this IP
+	// Filter out all rules for this IP (including the comment header)
 	foreach ($rules as $rule) {
-		// Skip comment lines and rules for this IP
-		if (strpos($rule, '#') === 0 || strpos($rule, "from {$ip} ") !== false) {
-			if (strpos($rule, "from {$ip} ") !== false) {
-				$removed = true;
+		// Check if this is the start of this device's rule block
+		if (strpos($rule, "# Device: {$ip}") !== false) {
+			$skip_until_blank = true;
+			$removed = true;
+			continue;
+		}
+		
+		// If we're skipping, continue until we hit a blank line
+		if ($skip_until_blank) {
+			if (trim($rule) === '') {
+				$skip_until_blank = false;
 			}
 			continue;
 		}
+		
+		// Keep this rule
 		$new_rules[] = $rule;
 	}
 	
@@ -2161,7 +2193,7 @@ function pc_remove_device_block($mac, $state) {
 	exec("/sbin/pfctl -a parental_control -f {$anchor_file} 2>&1", $output, $return_code);
 	
 	if ($return_code === 0 && $removed) {
-		pc_log("Unblocked {$ip} ({$mac}) via anchor", 'info', array(
+		pc_log("Unblocked {$ip} ({$mac}) - all rules removed", 'info', array(
 			'event.action' => 'device_unblocked',
 			'device.ip' => $ip,
 			'device.mac' => $mac

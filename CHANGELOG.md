@@ -7,6 +7,95 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.4] - 2025-12-28 🎨 FEATURE: User-Friendly Block Page with Auto-Redirect
+
+### What's New
+**Users now see WHY they're blocked!** 
+
+When a device is blocked, instead of silent connection drops, users are automatically redirected to a friendly block page that shows:
+- **Why they're blocked** (time limit exceeded, scheduled block time, etc.)
+- **How much time they've used today**
+- **When their time resets**
+- **Parent override option** (if enabled)
+
+### How It Works
+
+**Smart Redirect System**:
+1. When device is blocked, we create 5 rules (not just 1):
+   - ✅ Allow DNS (so they can resolve hostnames)
+   - ✅ Allow access to pfSense (so they can see block page)
+   - 🔄 Redirect HTTP → Block page
+   - 🔄 Redirect HTTPS → Block page
+   - ❌ Block everything else
+
+2. **User tries to browse** → Automatically redirected to block page
+3. **Block page shows**:
+   - Custom message (configurable)
+   - Block reason (time limit / schedule)
+   - Usage statistics
+   - Parent override form
+
+### Technical Implementation
+
+**Anchor Rules** (per blocked device):
+```
+# Device: 192.168.1.111 (MukeshMacPro) - Time limit exceeded
+pass quick proto udp from 192.168.1.111 to any port 53 label "PC-DNS:MukeshMacPro"
+pass quick from 192.168.1.111 to 192.168.1.1 label "PC-Allow:MukeshMacPro"
+rdr pass proto tcp from 192.168.1.111 to any port 80 -> 192.168.1.1 port 443 label "PC-HTTP:MukeshMacPro"
+rdr pass proto tcp from 192.168.1.111 to any port 443 -> 192.168.1.1 port 443 label "PC-HTTPS:MukeshMacPro"
+block drop quick from 192.168.1.111 to any label "PC-Block:MukeshMacPro"
+```
+
+**Block Page** (`parental_control_blocked.php`):
+- Detects redirect automatically
+- Shows original URL user tried to visit
+- Displays device-specific information
+- Allows parent override with password
+
+### User Experience
+
+**Before** (v0.7.3):
+```
+User: "Why isn't the internet working?" 🤔
+Parent: "You used up your time!"
+User: "How much time did I use?"
+Parent: "Let me check..." 🔍
+```
+
+**After** (v0.7.4):
+```
+User tries to browse → Sees block page:
+┌─────────────────────────────────────┐
+│  ⏰ Internet Time Limit Reached     │
+│                                     │
+│  You've used 8 hours today          │
+│  Your limit is 8 hours              │
+│                                     │
+│  Time resets at midnight            │
+│                                     │
+│  [Parent Override Password: ____]   │
+│  [Grant Access]                     │
+└─────────────────────────────────────┘
+```
+
+### Configuration
+
+**Settings** (Services > Parental Control > Settings):
+- **Blocked Message**: Custom message shown to users
+- **Override Password**: Password for parent override
+- **Override Duration**: How long override lasts (minutes)
+
+### Benefits
+
+✅ **User-friendly** - Clear explanation instead of confusion  
+✅ **Transparent** - Users see their usage and limits  
+✅ **Flexible** - Parent can grant temporary override  
+✅ **Automatic** - No manual intervention needed  
+✅ **Secure** - Password-protected override  
+
+---
+
 ## [0.7.3] - 2025-12-28 ✅ FIXED: Proper pfSense Anchor Implementation
 
 ### What Changed

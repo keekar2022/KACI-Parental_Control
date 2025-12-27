@@ -16,6 +16,10 @@ require_once("/usr/local/pkg/parental_control.inc");
 $client_ip = $_SERVER['REMOTE_ADDR'];
 $client_mac = null;
 
+// Detect if this is a redirect (user tried to browse somewhere)
+$is_redirect = isset($_SERVER['HTTP_HOST']) && $_SERVER['HTTP_HOST'] !== $_SERVER['SERVER_NAME'];
+$original_url = $is_redirect ? 'http://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'] : '';
+
 // Try to find MAC address from ARP table
 exec("arp -an | grep " . escapeshellarg($client_ip), $arp_output);
 if (!empty($arp_output)) {
