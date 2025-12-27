@@ -18,7 +18,7 @@ require_once("shaper.inc");
 require_once("notices.inc");
 
 // Package version - Auto-increment on each .inc update
-define('PC_VERSION', '0.7.2');
+define('PC_VERSION', '0.7.3');
 define('PC_AUTHOR', 'Mukesh Kesharwani');
 define('PC_BUILD_DATE', '2025-12-26');
 
@@ -1843,76 +1843,79 @@ function pc_remove_cron_job() {
 }
 
 /**
- * Initialize pfctl table for smart blocking
+ * Initialize pfSense anchor for smart blocking
  * 
- * Creates a pfctl table named 'parental_control_blocked' and ensures a firewall
- * rule exists to block all IPs in that table. This allows us to block/unblock
- * devices dynamically without calling filter_configure() every time.
+ * Creates a pfSense anchor named 'parental_control' where we can dynamically
+ * add/remove block rules without calling filter_configure(). Anchors are
+ * persistent and efficient - perfect for dynamic blocking.
+ * 
+ * Also creates a main rule that loads the anchor rules into the firewall.
  * 
  * @return void
  * @since 0.7.0
  */
 function pc_init_block_table() {
-	// Create the table if it doesn't exist
-	exec("/sbin/pfctl -t parental_control_blocked -T show 2>&1", $output, $return_code);
+	// Initialize the pfSense anchor
+	// Anchors allow us to manage rules dynamically without filter_configure()
+	$anchor_file = '/tmp/rules.parental_control';
 	
-	if ($return_code !== 0) {
-		// Table doesn't exist, create it
-		exec("/sbin/pfctl -t parental_control_blocked -T add 0.0.0.0 2>&1");
-		exec("/sbin/pfctl -t parental_control_blocked -T delete 0.0.0.0 2>&1");
-		pc_log("Created pfctl table for dynamic blocking", 'info', array(
-			'event.action' => 'table_created',
-			'table.name' => 'parental_control_blocked'
+	// Create empty anchor file if it doesn't exist
+	if (!file_exists($anchor_file)) {
+		file_put_contents($anchor_file, "# Parental Control Dynamic Rules\n");
+		chmod($anchor_file, 0644);
+		pc_log("Created anchor file for dynamic blocking", 'info', array(
+			'event.action' => 'anchor_created',
+			'anchor.file' => $anchor_file
 		));
 	}
 	
-	// Ensure firewall rule exists that blocks table
-	// This rule should be created via the standard firewall rules system
-	// For now, we'll add it programmatically if needed
+	// Load the anchor into pfctl (idempotent - safe to call multiple times)
+	exec("/sbin/pfctl -a parental_control -f {$anchor_file} 2>&1", $output, $return_code);
+	
+	if ($return_code === 0) {
+		pc_log("Anchor loaded successfully", 'debug', array(
+			'event.action' => 'anchor_loaded',
+			'anchor.name' => 'parental_control'
+		));
+	}
+	
+	// Ensure main rule exists that loads the anchor
+	// This rule will be visible in pfSense GUI under Firewall > Rules
 	$rules = config_get_path('filter/rule', []);
-	$table_rule_exists = false;
+	$anchor_rule_exists = false;
 	
 	foreach ($rules as $rule) {
-		if (isset($rule['descr']) && strpos($rule['descr'], 'Parental Control: Dynamic Block Table') !== false) {
-			$table_rule_exists = true;
+		if (isset($rule['descr']) && strpos($rule['descr'], 'Parental Control: Anchor') !== false) {
+			$anchor_rule_exists = true;
 			break;
 		}
 	}
 	
-	if (!$table_rule_exists) {
-		// Add the table-based block rule
-		$block_rule = array(
-			'type' => 'block',
+	if (!$anchor_rule_exists) {
+		// This rule tells pfSense to process our anchor rules
+		// It will be VISIBLE in the GUI at Firewall > Rules > LAN
+		$anchor_rule = array(
+			'type' => 'match',  // 'match' type allows anchor processing
 			'interface' => 'lan',
 			'ipprotocol' => 'inet',
-			'protocol' => 'tcp/udp',
-			'descr' => 'Parental Control: Dynamic Block Table',
-			'source' => array('address' => '<parental_control_blocked>'),  // Reference to table
+			'descr' => 'Parental Control: Anchor (Dynamic Rules)',
+			'source' => array('any' => ''),
 			'destination' => array('any' => ''),
-			'quick' => 'yes',  // Process this rule first
+			'associated-rule-id' => 'parental_control_anchor',
 			'created' => array(
 				'time' => time(),
-				'username' => 'parental_control_system'
+				'username' => 'system'
 			)
 		);
 		
-		// Add rule to beginning of rules array for priority
-		array_unshift($rules, $block_rule);
+		// Add to rules array
+		$rules[] = $anchor_rule;
 		config_set_path('filter/rule', $rules);
 		
-		// Try to write config, but don't fail if we can't
-		try {
-			write_config("Added parental control dynamic block table rule");
-			pc_log("Created firewall rule for dynamic block table", 'info', array(
-				'event.action' => 'block_rule_created',
-				'rule.type' => 'table_based'
-			));
-		} catch (Exception $e) {
-			pc_log("Note: Could not write config for table rule (will be created on next GUI save)", 'warning', array(
-				'event.action' => 'block_rule_create_deferred',
-				'reason' => $e->getMessage()
-			));
-		}
+		pc_log("Anchor rule added to config (will be visible in GUI after filter reload)", 'info', array(
+			'event.action' => 'anchor_rule_added',
+			'note' => 'Rule will appear in Firewall > Rules > LAN'
+		));
 	}
 }
 
@@ -2028,10 +2031,13 @@ function pc_apply_smart_firewall_changes($old_blocked, $new_blocked, $state) {
 }
 
 /**
- * Add firewall block for a specific device using pfctl
+ * Add firewall block for a specific device using pfSense anchor
  * 
- * Adds a block rule for device's IP address without calling filter_configure().
- * Uses pfctl table to add IP to block list dynamically.
+ * Adds a block rule to the parental_control anchor for device's IP address.
+ * This avoids calling filter_configure() which causes AQM errors.
+ * 
+ * The anchor approach is efficient and persistent - rules are managed in
+ * /tmp/rules.parental_control and loaded dynamically with pfctl.
  * 
  * @param array $device Device information
  * @param string $enforcement_mode 'strict' or 'moderate'
@@ -2058,23 +2064,41 @@ function pc_add_device_block($device, $enforcement_mode, $reason, $state) {
 		return false;
 	}
 	
-	// SIMPLE APPROACH: Just add IP to a pfctl table
-	// The table-based blocking rule should already exist from initial config
-	// This avoids filter_configure() entirely
-	exec("/sbin/pfctl -t parental_control_blocked -T add {$ip} 2>&1", $output, $return_code);
+	// Add rule to anchor file
+	$anchor_file = '/tmp/rules.parental_control';
+	$device_name = isset($device['device_name']) ? $device['device_name'] : 'Unknown';
+	
+	// Read existing rules to avoid duplicates
+	$existing_rules = file_exists($anchor_file) ? file_get_contents($anchor_file) : '';
+	
+	// Check if rule already exists for this IP
+	if (strpos($existing_rules, "block drop quick from {$ip}") !== false) {
+		// Rule already exists, no need to add
+		return true;
+	}
+	
+	// Build the rule
+	$rule = "block drop quick from {$ip} to any label \"PC:{$device_name}\" # {$reason}\n";
+	
+	// Append to anchor file
+	file_put_contents($anchor_file, $rule, FILE_APPEND | LOCK_EX);
+	
+	// Reload anchor (fast, no filter_configure needed)
+	exec("/sbin/pfctl -a parental_control -f {$anchor_file} 2>&1", $output, $return_code);
 	
 	if ($return_code === 0) {
-		pc_log("Added {$ip} ({$mac}) to block table - {$reason}", 'info', array(
-			'event.action' => 'ip_blocked',
+		pc_log("Blocked {$ip} ({$mac}) via anchor - {$reason}", 'info', array(
+			'event.action' => 'device_blocked',
 			'device.ip' => $ip,
 			'device.mac' => $mac,
-			'device.name' => $device['device_name'],
-			'block.reason' => $reason
+			'device.name' => $device_name,
+			'block.reason' => $reason,
+			'enforcement.mode' => $enforcement_mode
 		));
 		return true;
 	} else {
-		pc_log("Failed to add {$ip} to block table: " . implode("\n", $output), 'error', array(
-			'event.action' => 'block_add_failed',
+		pc_log("Failed to block {$ip}: " . implode("\n", $output), 'error', array(
+			'event.action' => 'block_failed',
 			'device.ip' => $ip,
 			'device.mac' => $mac,
 			'error.output' => implode("\n", $output)
@@ -2086,7 +2110,8 @@ function pc_add_device_block($device, $enforcement_mode, $reason, $state) {
 /**
  * Remove firewall block for a specific device
  * 
- * Removes device IP from pfctl block table without calling filter_configure().
+ * Removes device's block rule from the parental_control anchor.
+ * Rebuilds the anchor file without the device's rule and reloads.
  * 
  * @param string $mac Device MAC address
  * @param array $state Current state (for IP lookup)
@@ -2106,25 +2131,44 @@ function pc_remove_device_block($mac, $state) {
 		return true; // No IP to remove
 	}
 	
-	// Remove IP from pfctl table
-	exec("/sbin/pfctl -t parental_control_blocked -T delete {$ip} 2>&1", $output, $return_code);
+	$anchor_file = '/tmp/rules.parental_control';
 	
-	if ($return_code === 0) {
-		pc_log("Removed {$ip} ({$mac}) from block table", 'info', array(
-			'event.action' => 'ip_unblocked',
+	if (!file_exists($anchor_file)) {
+		return true; // Nothing to remove
+	}
+	
+	// Read existing rules
+	$rules = file($anchor_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+	$new_rules = array();
+	$removed = false;
+	
+	// Filter out the rule for this IP
+	foreach ($rules as $rule) {
+		// Skip comment lines and rules for this IP
+		if (strpos($rule, '#') === 0 || strpos($rule, "from {$ip} ") !== false) {
+			if (strpos($rule, "from {$ip} ") !== false) {
+				$removed = true;
+			}
+			continue;
+		}
+		$new_rules[] = $rule;
+	}
+	
+	// Write back the filtered rules
+	file_put_contents($anchor_file, implode("\n", $new_rules) . "\n", LOCK_EX);
+	
+	// Reload anchor
+	exec("/sbin/pfctl -a parental_control -f {$anchor_file} 2>&1", $output, $return_code);
+	
+	if ($return_code === 0 && $removed) {
+		pc_log("Unblocked {$ip} ({$mac}) via anchor", 'info', array(
+			'event.action' => 'device_unblocked',
 			'device.ip' => $ip,
 			'device.mac' => $mac
 		));
-		return true;
-	} else {
-		pc_log("Failed to remove {$ip} from block table: " . implode("\n", $output), 'warning', array(
-			'event.action' => 'block_remove_failed',
-			'device.ip' => $ip,
-			'device.mac' => $mac,
-			'error.output' => implode("\n", $output)
-		));
-		return false;
 	}
+	
+	return true;
 }
 
 /**

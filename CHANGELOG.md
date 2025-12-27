@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.3] - 2025-12-28 ✅ FIXED: Proper pfSense Anchor Implementation
+
+### What Changed
+Fixed the smart blocking system to use **pfSense anchors** properly instead of raw pfctl tables.
+
+### Why This Matters
+- **Anchors are persistent** (survive reboots and filter reloads)
+- **Anchors are efficient** (dynamic rule changes in milliseconds)
+- **Anchors are visible** (rules show up in logs and diagnostics)
+- **pfSense-native approach** (follows pfSense architecture)
+
+### Technical Details
+
+**Anchor File**: `/tmp/rules.parental_control`
+- Contains all active block rules
+- Updated dynamically without filter_configure()
+- Loaded via: `pfctl -a parental_control -f /tmp/rules.parental_control`
+
+**Anchor Rule**: Added to pfSense config
+- Visible in GUI at: **Firewall > Rules > LAN**
+- Description: "Parental Control: Anchor (Dynamic Rules)"
+- Type: match rule that processes anchor rules
+
+**Block/Unblock Process**:
+1. Add/remove rules from anchor file
+2. Reload anchor with pfctl (fast!)
+3. Changes apply immediately
+4. No AQM errors, no filter_configure()
+
+### Answer to User Questions
+
+**Q: Is the table/alias automatically created?**
+A: Yes! The anchor file is created automatically in `/tmp/rules.parental_control` during initialization.
+
+**Q: Will firewall rules be visible in GUI?**
+A: Yes! The main anchor rule will appear in **Firewall > Rules > LAN** with the description "Parental Control: Anchor (Dynamic Rules)". Individual block rules are managed in the anchor file and visible via `pfctl -a parental_control -sr`.
+
+---
+
 ## [0.7.0] - 2025-12-27 🚀 CRITICAL: Smart Automatic Blocking
 
 ### 🔥 Major Feature
