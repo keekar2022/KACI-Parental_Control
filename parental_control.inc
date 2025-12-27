@@ -18,7 +18,7 @@ require_once("shaper.inc");
 require_once("notices.inc");
 
 // Package version - Auto-increment on each .inc update
-define('PC_VERSION', '0.7.6');
+define('PC_VERSION', '0.7.7');
 define('PC_AUTHOR', 'Mukesh Kesharwani');
 define('PC_BUILD_DATE', '2025-12-26');
 
@@ -1910,10 +1910,19 @@ function pc_init_block_table() {
 	// Save cleaned rules if we removed any
 	if ($removed_invalid) {
 		config_set_path('filter/rule', $new_rules);
-		write_config("Removed invalid parental control table-based rule");
-		pc_log("Invalid rules cleaned up", 'info', array(
-			'event.action' => 'cleanup_complete'
-		));
+		try {
+			write_config("Removed invalid parental control table-based rule");
+			pc_log("Invalid rules cleaned up and config saved", 'info', array(
+				'event.action' => 'cleanup_complete'
+			));
+		} catch (Exception $e) {
+			// If write fails (e.g., from command line), just update in memory
+			// Will be saved on next GUI save
+			pc_log("Invalid rules removed from memory (will be saved on next GUI save)", 'info', array(
+				'event.action' => 'cleanup_deferred',
+				'note' => 'write_config failed, changes in memory only'
+			));
+		}
 	}
 	
 	// Note: We no longer create GUI-visible anchor rules
