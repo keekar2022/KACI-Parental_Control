@@ -76,15 +76,23 @@ if ($_POST['act'] === 'del_device' && isset($_POST['profile_id']) && isset($_POS
 
 // SAVE action (Add or Edit Profile)
 if ($_POST['save']) {
+	// DEBUG: Log that save was triggered
+	error_log("PARENTAL_CONTROL_DEBUG: Save button clicked");
+	error_log("PARENTAL_CONTROL_DEBUG: POST data: " . print_r($_POST, true));
+	
 	// Validation
 	if (empty($_POST['name'])) {
 		$input_errors[] = "Profile name is required.";
+		error_log("PARENTAL_CONTROL_DEBUG: Validation failed - name empty");
 	}
 	if (empty($_POST['daily_limit']) || !is_numeric($_POST['daily_limit'])) {
 		$input_errors[] = "Daily limit must be a number (minutes).";
+		error_log("PARENTAL_CONTROL_DEBUG: Validation failed - daily_limit invalid");
 	}
 	
 	if (empty($input_errors)) {
+		error_log("PARENTAL_CONTROL_DEBUG: Validation passed, creating profile");
+		
 		$profile = array(
 			'name' => trim($_POST['name']),
 			'daily_limit' => intval($_POST['daily_limit']),
@@ -92,9 +100,12 @@ if ($_POST['save']) {
 			'enabled' => isset($_POST['enabled']) ? 'on' : 'off'
 		);
 		
+		error_log("PARENTAL_CONTROL_DEBUG: Profile data: " . print_r($profile, true));
+		
 		// Handle devices (if editing existing profile, preserve devices)
 		if (isset($_POST['id']) && is_numeric($_POST['id'])) {
 			$id = intval($_POST['id']);
+			error_log("PARENTAL_CONTROL_DEBUG: Updating existing profile ID: $id");
 			// Preserve existing devices
 			if (isset($profiles[$id]['row'])) {
 				$profile['row'] = $profiles[$id]['row'];
@@ -102,24 +113,40 @@ if ($_POST['save']) {
 			$profiles[$id] = $profile;
 			$action = "Updated";
 		} else {
+			error_log("PARENTAL_CONTROL_DEBUG: Adding new profile");
 			// New profile, initialize empty devices array
 			$profile['row'] = [];
 			$profiles[] = $profile;
 			$action = "Added";
 		}
 		
+		error_log("PARENTAL_CONTROL_DEBUG: Calling config_set_path");
 		config_set_path('installedpackages/parentalcontrolprofiles/config', $profiles);
-		write_config("{$action} profile: {$profile['name']}");
+		
+		error_log("PARENTAL_CONTROL_DEBUG: Calling write_config");
+		try {
+			write_config("{$action} profile: {$profile['name']}");
+			error_log("PARENTAL_CONTROL_DEBUG: write_config SUCCESS");
+		} catch (Exception $e) {
+			error_log("PARENTAL_CONTROL_DEBUG: write_config FAILED: " . $e->getMessage());
+			$input_errors[] = "Failed to save configuration: " . $e->getMessage();
+		}
 		
 		// Try to sync, but don't fail if it doesn't work
+		error_log("PARENTAL_CONTROL_DEBUG: Calling parental_control_sync");
 		try {
 			parental_control_sync();
+			error_log("PARENTAL_CONTROL_DEBUG: Sync SUCCESS");
 		} catch (Exception $e) {
+			error_log("PARENTAL_CONTROL_DEBUG: Sync FAILED: " . $e->getMessage());
 			// Log error but continue - profile was already saved
 			pc_log("Sync failed but profile saved: " . $e->getMessage(), 'warning');
 		}
 		
-		$savemsg = "Profile '{$profile['name']}' has been {$action} successfully.";
+		if (empty($input_errors)) {
+			$savemsg = "Profile '{$profile['name']}' has been {$action} successfully.";
+			error_log("PARENTAL_CONTROL_DEBUG: SUCCESS - Setting savemsg: $savemsg");
+		}
 		
 		pc_log("Profile {$action} via GUI", 'info', array(
 			'profile.name' => $profile['name'],
@@ -128,6 +155,9 @@ if ($_POST['save']) {
 		
 		// Reload profiles
 		$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', []);
+		error_log("PARENTAL_CONTROL_DEBUG: Reloaded profiles, count: " . count($profiles));
+	} else {
+		error_log("PARENTAL_CONTROL_DEBUG: Save failed due to validation errors");
 	}
 }
 
