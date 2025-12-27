@@ -341,17 +341,32 @@ php -l parental_control.inc
 
 ### 📚 Documentation
 
-**Quick Links:**
+**Getting Started:**
+- **[Installation Guide](docs/INSTALLATION.md)** - Complete installation walkthrough
 - **[Quick Start Guide](docs/QUICKSTART.md)** - Get started in 5 minutes
-- **[Development Workflow](docs/DEVELOPMENT.md)** - Git branching and contribution guide
-- **[API Documentation](docs/API.md)** - REST API reference
+- **[Announcement](docs/ANNOUNCEMENT.md)** - Package overview and features
+
+**User Guides:**
 - **[Configuration Guide](docs/CONFIGURATION.md)** - All configuration options
 - **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** - Common issues and solutions
+- **[Auto-Update Guide](docs/AUTO_UPDATE.md)** - Automatic update feature
+
+**Technical Documentation:**
+- **[API Documentation](docs/API.md)** - REST API reference
+- **[Architecture Guide](docs/ARCHITECTURE.md)** - System architecture
+- **[Anchor Guide](docs/ANCHOR_GUIDE.md)** - Firewall anchor implementation
+- **[Block Page Guide](docs/BLOCK_PAGE_GUIDE.md)** - Block page details
+
+**Development:**
+- **[Development Workflow](docs/DEVELOPMENT_WORKFLOW.md)** - Version bumping and Git workflow
+- **[Development Guide](docs/DEVELOPMENT.md)** - Contributing guidelines
 
 **Release Information:**
-- **[Latest Release Notes](docs/RELEASE_v0.2.1_CRITICAL_FIX.md)** - v0.2.1 details
-- **[Architecture Documentation](docs/ARCHITECTURE_FIX_v0.2.1.md)** - Layer 3 architecture
-- **[Project Status](docs/PROJECT_STATUS_v0.2.1.md)** - Current project status
+- **[Latest Fix (v0.9.1)](docs/CRITICAL_FIX_v0.9.1.md)** - Config corruption fix
+- **[Changelog](CHANGELOG.md)** - Complete version history
+
+**Deployment:**
+- **[GitHub Pages Setup](docs/GITHUB_PAGES_SETUP.md)** - Host the landing page
 
 ### Related Directories
 - **`../test_environment/`** - How to set up pfSense VM for testing
