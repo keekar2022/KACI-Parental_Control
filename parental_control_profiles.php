@@ -37,7 +37,14 @@ if ($_POST['act'] === 'del' && isset($_POST['id']) && is_numeric($_POST['id'])) 
 		$profiles = array_values($profiles); // Re-index
 		config_set_path('installedpackages/parentalcontrolprofiles/config', $profiles);
 		write_config("Deleted profile: {$profile_name}");
-		parental_control_sync();
+		
+		// Try to sync, but don't fail if it doesn't work
+		try {
+			parental_control_sync();
+		} catch (Exception $e) {
+			pc_log("Sync failed but profile deleted: " . $e->getMessage(), 'warning');
+		}
+		
 		$savemsg = "Profile '{$profile_name}' has been deleted successfully.";
 		pc_log("Profile deleted via GUI", 'info', array(
 			'profile.name' => $profile_name,
@@ -56,7 +63,13 @@ if ($_POST['act'] === 'del_device' && isset($_POST['profile_id']) && isset($_POS
 		$profiles[$profile_id]['row'] = array_values($profiles[$profile_id]['row']); // Re-index
 		config_set_path('installedpackages/parentalcontrolprofiles/config', $profiles);
 		write_config("Deleted device: {$device_name} from profile: {$profiles[$profile_id]['name']}");
-		parental_control_sync();
+		
+		try {
+			parental_control_sync();
+		} catch (Exception $e) {
+			pc_log("Sync failed but device deleted: " . $e->getMessage(), 'warning');
+		}
+		
 		$savemsg = "Device '{$device_name}' has been deleted successfully.";
 	}
 }
@@ -97,7 +110,15 @@ if ($_POST['save']) {
 		
 		config_set_path('installedpackages/parentalcontrolprofiles/config', $profiles);
 		write_config("{$action} profile: {$profile['name']}");
-		parental_control_sync();
+		
+		// Try to sync, but don't fail if it doesn't work
+		try {
+			parental_control_sync();
+		} catch (Exception $e) {
+			// Log error but continue - profile was already saved
+			pc_log("Sync failed but profile saved: " . $e->getMessage(), 'warning');
+		}
+		
 		$savemsg = "Profile '{$profile['name']}' has been {$action} successfully.";
 		
 		pc_log("Profile {$action} via GUI", 'info', array(
@@ -149,7 +170,13 @@ if ($_POST['save_device']) {
 		
 		config_set_path('installedpackages/parentalcontrolprofiles/config', $profiles);
 		write_config("{$action} device: {$device['device_name']} to profile: {$profiles[$profile_id]['name']}");
-		parental_control_sync();
+		
+		try {
+			parental_control_sync();
+		} catch (Exception $e) {
+			pc_log("Sync failed but device saved: " . $e->getMessage(), 'warning');
+		}
+		
 		$savemsg = "Device '{$device['device_name']}' has been {$action} successfully.";
 		
 		// Reload profiles

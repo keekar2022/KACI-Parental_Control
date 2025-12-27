@@ -2,7 +2,7 @@
 <packagegui>
 	<title>Services/Keekar's Parental Control</title>
 	<name>KACI-Parental_Control</name>
-	<version>0.8.0</version>
+	<version>0.8.1</version>
 	<include_file>/usr/local/pkg/parental_control.inc</include_file>
 	<configpath>installedpackages/parentalcontrol/config/0</configpath>
 	
