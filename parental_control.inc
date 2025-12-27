@@ -18,7 +18,7 @@ require_once("shaper.inc");
 require_once("notices.inc");
 
 // Package version - Auto-increment on each .inc update
-define('PC_VERSION', '0.7.4');
+define('PC_VERSION', '0.7.5');
 define('PC_AUTHOR', 'Mukesh Kesharwani');
 define('PC_BUILD_DATE', '2025-12-26');
 
@@ -639,7 +639,12 @@ function parental_control_sync() {
 	}
 	
 	// Initialize pfctl table for smart blocking
-	pc_init_block_table();
+	try {
+		pc_init_block_table();
+	} catch (Exception $e) {
+		pc_log("Warning: Could not initialize block table: " . $e->getMessage(), 'warning');
+		// Continue anyway - not critical for config save
+	}
 	
 	// Update firewall rules
 	pc_update_firewall_rules();
@@ -650,16 +655,17 @@ function parental_control_sync() {
 	// Initialize state file if needed
 	pc_init_state();
 	
-	// Filter reload - ONLY when config changes via GUI, not on every cron run
-	// WHY: Excessive filter_configure() calls cause AQM flowset errors
-	// This function (parental_control_sync) is called when user saves config changes
-	// Firewall reload is appropriate here, but NOT during cron execution
-	filter_configure();
+	// Filter reload - SKIP to prevent GUI save timeouts
+	// WHY: filter_configure() takes 5-10 seconds and causes HTTP timeouts
+	// when saving profiles/schedules. The anchor-based blocking system
+	// doesn't need full filter reload - cron job will apply blocks.
+	// filter_configure();  // DISABLED to fix GUI save timeout issue
 	
-	pc_log("Configuration sync completed", 'info', array(
+	pc_log("Configuration sync completed (anchor-based blocking active)", 'info', array(
 		'event.action' => 'config_sync_complete',
 		'event.category' => 'configuration',
-		'event.outcome' => 'success'
+		'event.outcome' => 'success',
+		'note' => 'Filter reload skipped - using anchor system'
 	));
 	} catch (Exception $e) {
 		$error_msg = "Configuration sync failed: " . $e->getMessage();

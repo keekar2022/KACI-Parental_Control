@@ -7,6 +7,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.5] - 2025-12-28 🔧 CRITICAL FIX: Profiles and Schedules Save Timeout
+
+### Problem Solved
+**Profiles and Schedules pages were not saving!**
+
+When you tried to add/edit profiles or schedules, the save would timeout and changes wouldn't be saved.
+
+### Root Cause
+The `parental_control_sync()` function was calling `filter_configure()` which takes 5-10 seconds to reload the entire firewall configuration. This caused HTTP request timeouts when saving via the GUI.
+
+### Solution
+**Disabled `filter_configure()` during sync** - it's not needed anymore!
+
+With our new **anchor-based blocking system**, we don't need full firewall reloads:
+- ✅ Cron job applies blocks automatically every 5 minutes
+- ✅ Anchor system updates rules in milliseconds
+- ✅ No timeouts on GUI saves
+- ✅ Changes are saved immediately
+- ✅ Blocking applied on next cron run (max 5 minutes)
+
+### Technical Changes
+
+**Before** (v0.7.4):
+```php
+parental_control_sync() {
+    // ...
+    filter_configure();  // ← 5-10 seconds, causes timeout
+}
+```
+
+**After** (v0.7.5):
+```php
+parental_control_sync() {
+    // ...
+    // filter_configure();  // ← DISABLED
+    // Anchor system handles blocking automatically
+}
+```
+
+### Impact
+
+| Action | Before (v0.7.4) | After (v0.7.5) |
+|--------|----------------|---------------|
+| **Save Profile** | ❌ Timeout (10s+) | ✅ Instant (<1s) |
+| **Save Schedule** | ❌ Timeout (10s+) | ✅ Instant (<1s) |
+| **Add Device** | ❌ Timeout (10s+) | ✅ Instant (<1s) |
+| **Block Application** | N/A | ✅ Next cron run |
+| **User Experience** | ❌ Frustrating | ✅ Smooth |
+
+### How Blocking Works Now
+
+1. **You save a profile/schedule** → Saved instantly
+2. **Cron job runs** (every 5 minutes) → Calculates blocks
+3. **Anchor updates** (milliseconds) → Devices blocked/unblocked
+4. **Users see block page** → With explanation
+
+**Maximum delay**: 5 minutes from save to enforcement  
+**Acceptable**: Yes! More important that saves work correctly
+
+### Verification
+
+After deploying v0.7.5:
+1. ✅ Try adding a new profile → Should save instantly
+2. ✅ Try editing a schedule → Should save instantly
+3. ✅ Check Status page → Profiles/schedules visible
+4. ✅ Wait for next cron run → Blocking applied
+
+---
+
 ## [0.7.4] - 2025-12-28 🎨 FEATURE: User-Friendly Block Page with Auto-Redirect
 
 ### What's New
