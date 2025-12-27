@@ -1,142 +1,153 @@
 # KACI Parental Control Documentation
 
-Welcome to the comprehensive documentation for KACI Parental Control for pfSense!
+**Comprehensive documentation for KACI Parental Control for pfSense**
 
 ---
 
-## 📚 Documentation Index
+## 📚 Complete Documentation (4 Files)
 
-### 🚀 Getting Started
+### 1. 🚀 [Getting Started](GETTING_STARTED.md)
+**Everything you need to install and start using KACI Parental Control**
 
-| Document | Description |
-|----------|-------------|
-| **[Installation Guide](INSTALLATION.md)** | Complete step-by-step installation walkthrough with troubleshooting |
-| **[Quick Start](QUICKSTART.md)** | Get up and running in 5 minutes |
-| **[Announcement](ANNOUNCEMENT.md)** | Package overview, features, and why choose KACI PC |
+Includes:
+- ✨ **Overview & Features** - What is KACI PC and why use it
+- 📦 **Installation Guide** - Step-by-step installation with troubleshooting
+- ⚡ **Quick Start** - Get up and running in 5 minutes
+- 🎯 **Problem & Solution** - What problems we solve and how
 
-### 📖 User Guides
-
-| Document | Description |
-|----------|-------------|
-| **[Configuration Guide](CONFIGURATION.md)** | All configuration options explained in detail |
-| **[Troubleshooting Guide](TROUBLESHOOTING.md)** | Common issues and their solutions |
-| **[Auto-Update Guide](AUTO_UPDATE.md)** | How the automatic update feature works |
-
-### 🔧 Technical Documentation
-
-| Document | Description |
-|----------|-------------|
-| **[API Documentation](API.md)** | Complete REST API reference with examples |
-| **[Architecture Guide](ARCHITECTURE.md)** | System architecture and design decisions |
-| **[Anchor Guide](ANCHOR_GUIDE.md)** | How pfSense anchors are used for firewall rules |
-| **[Block Page Guide](BLOCK_PAGE_GUIDE.md)** | Block page implementation and user experience |
-
-### 👨‍💻 Development
-
-| Document | Description |
-|----------|-------------|
-| **[Development Workflow](DEVELOPMENT_WORKFLOW.md)** | Version bumping, Git workflow, and release process |
-| **[Development Guide](DEVELOPMENT.md)** | Contributing guidelines and code standards |
-
-### 📦 Deployment
-
-| Document | Description |
-|----------|-------------|
-| **[GitHub Pages Setup](GITHUB_PAGES_SETUP.md)** | How to host the landing page on GitHub Pages |
-
-### 🐛 Release Notes
-
-| Document | Description |
-|----------|-------------|
-| **[Latest Fix (v0.9.1)](CRITICAL_FIX_v0.9.1.md)** | Critical config corruption fix |
-| **[Changelog](../CHANGELOG.md)** | Complete version history with all changes |
+**Start here if you're new!**
 
 ---
 
-## 🎯 Quick Links by Task
+### 2. 📖 [User Guide](USER_GUIDE.md)
+**Complete user documentation for daily use and maintenance**
 
-### I want to...
+Includes:
+- ⚙️ **Configuration Guide** - All settings explained in detail
+- 🔧 **Troubleshooting** - Common issues and solutions
+- 🔄 **Auto-Update Feature** - How automatic updates work
+- 🐛 **Latest Fixes** - Recent updates and bug fixes
 
-**Install the package**
-→ [Installation Guide](INSTALLATION.md)
+**Your go-to reference for configuration and troubleshooting**
 
-**Create my first profile**
-→ [Quick Start Guide](QUICKSTART.md)
+---
 
-**Add devices to a profile**
-→ [Configuration Guide](CONFIGURATION.md) → Device Management
+### 3. 🔬 [Technical Reference](TECHNICAL_REFERENCE.md)
+**Complete technical documentation for developers and advanced users**
 
-**Set up schedules (bedtime, school hours)**
-→ [Configuration Guide](CONFIGURATION.md) → Schedules
+Includes:
+- 🔌 **API Documentation** - REST API reference with examples
+- 🏗️ **Architecture** - System design and implementation details
+- ⚓ **pfSense Anchors** - How firewall rules are managed
+- 🚫 **Block Page** - Block page implementation details
+- 👨‍💻 **Development Guide** - Contributing guidelines
+- 📦 **Development Workflow** - Version bumping and release process
+- 🌐 **GitHub Pages Setup** - Hosting the landing page
 
-**Troubleshoot an issue**
-→ [Troubleshooting Guide](TROUBLESHOOTING.md)
+**For developers, integrators, and those who want to understand how it works**
 
-**Use the API**
-→ [API Documentation](API.md)
+---
 
-**Understand how it works**
-→ [Architecture Guide](ARCHITECTURE.md)
+## 🎯 Quick Navigation
 
-**Contribute to the project**
-→ [Development Guide](DEVELOPMENT.md)
+**I want to...**
 
-**Host the landing page**
-→ [GitHub Pages Setup](GITHUB_PAGES_SETUP.md)
+| Task | Document | Section |
+|------|----------|---------|
+| **Install the package** | [Getting Started](GETTING_STARTED.md) | Installation Guide |
+| **Create my first profile** | [Getting Started](GETTING_STARTED.md) | Quick Start |
+| **Configure settings** | [User Guide](USER_GUIDE.md) | Configuration Guide |
+| **Fix an issue** | [User Guide](USER_GUIDE.md) | Troubleshooting |
+| **Use the API** | [Technical Reference](TECHNICAL_REFERENCE.md) | API Documentation |
+| **Understand the architecture** | [Technical Reference](TECHNICAL_REFERENCE.md) | Architecture |
+| **Contribute code** | [Technical Reference](TECHNICAL_REFERENCE.md) | Development Guide |
 
 ---
 
 ## 📋 Documentation Standards
 
-All documentation in this folder follows these standards:
+All documentation follows these principles:
 
-- **Markdown format** - Easy to read and version control
-- **Clear headings** - Hierarchical structure with H2-H4
-- **Code examples** - Practical, copy-paste ready
-- **Screenshots** - Visual aids where helpful
-- **Cross-references** - Links to related documentation
-- **Version info** - Indicates which version features apply to
+- ✅ **Comprehensive** - Complete information in one place
+- ✅ **Well-organized** - Clear table of contents and navigation
+- ✅ **Practical** - Code examples you can copy-paste
+- ✅ **Up-to-date** - Synced with latest code
+- ✅ **Searchable** - Easy to find what you need
 
 ---
 
-## 🔄 Keeping Documentation Updated
+## 📂 Additional Files
 
-When making changes to the package:
+- **[../CHANGELOG.md](../CHANGELOG.md)** - Complete version history
+- **[../README.md](../README.md)** - Project overview
+- **[../LICENSE](../LICENSE)** - MIT License
 
-1. **Update relevant docs** - Keep documentation in sync with code
-2. **Add to CHANGELOG.md** - Document all notable changes
-3. **Update version numbers** - In affected documentation
-4. **Test examples** - Ensure code examples still work
-5. **Review cross-references** - Check all links are valid
+---
+
+## 🔄 Quick Links by User Type
+
+### 👨‍👩‍👧‍👦 **For Parents (End Users)**
+1. Start with [Getting Started](GETTING_STARTED.md) → Overview
+2. Follow [Getting Started](GETTING_STARTED.md) → Installation Guide
+3. Use [Getting Started](GETTING_STARTED.md) → Quick Start
+4. Reference [User Guide](USER_GUIDE.md) as needed
+
+### 🔧 **For System Administrators**
+1. Read [Getting Started](GETTING_STARTED.md) → Overview
+2. Review [Technical Reference](TECHNICAL_REFERENCE.md) → Architecture
+3. Follow [Getting Started](GETTING_STARTED.md) → Installation Guide
+4. Keep [User Guide](USER_GUIDE.md) → Troubleshooting handy
+
+### 👨‍💻 **For Developers**
+1. Read [Getting Started](GETTING_STARTED.md) → Overview
+2. Study [Technical Reference](TECHNICAL_REFERENCE.md) → Architecture
+3. Review [Technical Reference](TECHNICAL_REFERENCE.md) → API Documentation
+4. Follow [Technical Reference](TECHNICAL_REFERENCE.md) → Development Guide
+
+### 🔌 **For Integrators (Home Automation)**
+1. Check [Getting Started](GETTING_STARTED.md) → Overview
+2. Study [Technical Reference](TECHNICAL_REFERENCE.md) → API Documentation
+3. Reference [User Guide](USER_GUIDE.md) → Configuration Guide
+
+---
+
+## 🆘 Getting Help
+
+- **Installation Issues:** [Getting Started](GETTING_STARTED.md) → Installation Guide → Troubleshooting
+- **Configuration Questions:** [User Guide](USER_GUIDE.md) → Configuration Guide
+- **Technical Issues:** [User Guide](USER_GUIDE.md) → Troubleshooting
+- **API Questions:** [Technical Reference](TECHNICAL_REFERENCE.md) → API Documentation
+- **GitHub Issues:** https://github.com/keekar2022/KACI-Parental_Control/issues
 
 ---
 
 ## 📝 Contributing to Documentation
 
-Found a typo? Have a suggestion? Want to add an example?
+Found an issue? Want to improve the docs?
 
 1. Fork the repository
-2. Edit the relevant `.md` file in `docs/`
+2. Edit the relevant file in `docs/`
 3. Submit a pull request
-4. We'll review and merge!
-
-See [Development Guide](DEVELOPMENT.md) for details.
+4. See [Technical Reference](TECHNICAL_REFERENCE.md) → Development Guide for details
 
 ---
 
-## 🆘 Need Help?
+## 📊 Documentation Statistics
 
-- **GitHub Issues:** https://github.com/keekar2022/KACI-Parental_Control/issues
-- **Troubleshooting:** [Troubleshooting Guide](TROUBLESHOOTING.md)
-- **API Questions:** [API Documentation](API.md)
+- **Total Pages:** 3 main documents + 1 index
+- **Total Content:** ~5,600 lines
+- **Coverage:** Installation, Configuration, Troubleshooting, API, Architecture, Development
+- **Format:** Markdown with code examples
+- **Last Updated:** December 2025
 
 ---
 
 ## 📄 License
 
-All documentation is licensed under the same [MIT License](../LICENSE) as the package itself.
+All documentation is licensed under the [MIT License](../LICENSE).
 
 ---
 
-**Happy reading! 📚**
+**Navigate to:** [Getting Started](GETTING_STARTED.md) | [User Guide](USER_GUIDE.md) | [Technical Reference](TECHNICAL_REFERENCE.md)
 
+**Happy reading! 📚**

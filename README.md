@@ -341,32 +341,15 @@ php -l parental_control.inc
 
 ### 📚 Documentation
 
-**Getting Started:**
-- **[Installation Guide](docs/INSTALLATION.md)** - Complete installation walkthrough
-- **[Quick Start Guide](docs/QUICKSTART.md)** - Get started in 5 minutes
-- **[Announcement](docs/ANNOUNCEMENT.md)** - Package overview and features
+**Complete documentation in 3 comprehensive guides:**
 
-**User Guides:**
-- **[Configuration Guide](docs/CONFIGURATION.md)** - All configuration options
-- **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** - Common issues and solutions
-- **[Auto-Update Guide](docs/AUTO_UPDATE.md)** - Automatic update feature
+- **[🚀 Getting Started](docs/GETTING_STARTED.md)** - Installation, Quick Start, and Overview
+- **[📖 User Guide](docs/USER_GUIDE.md)** - Configuration, Troubleshooting, and Maintenance
+- **[🔬 Technical Reference](docs/TECHNICAL_REFERENCE.md)** - API, Architecture, and Development
 
-**Technical Documentation:**
-- **[API Documentation](docs/API.md)** - REST API reference
-- **[Architecture Guide](docs/ARCHITECTURE.md)** - System architecture
-- **[Anchor Guide](docs/ANCHOR_GUIDE.md)** - Firewall anchor implementation
-- **[Block Page Guide](docs/BLOCK_PAGE_GUIDE.md)** - Block page details
-
-**Development:**
-- **[Development Workflow](docs/DEVELOPMENT_WORKFLOW.md)** - Version bumping and Git workflow
-- **[Development Guide](docs/DEVELOPMENT.md)** - Contributing guidelines
-
-**Release Information:**
-- **[Latest Fix (v0.9.1)](docs/CRITICAL_FIX_v0.9.1.md)** - Config corruption fix
+**See also:**
 - **[Changelog](CHANGELOG.md)** - Complete version history
-
-**Deployment:**
-- **[GitHub Pages Setup](docs/GITHUB_PAGES_SETUP.md)** - Host the landing page
+- **[Documentation Index](docs/README.md)** - Navigate all documentation
 
 ### Related Directories
 - **`../test_environment/`** - How to set up pfSense VM for testing
