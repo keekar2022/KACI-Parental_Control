@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.2] - 2025-12-29 🔥 HOTFIX: Status Page Usage Display
+
+### 🐛 Critical Bug Fix
+**Status page now correctly displays shared profile usage (v1.1.0 feature was not showing)**
+
+### Fixed
+- **Status Page Display Bug:** Fixed critical bug where status page showed "0:00" for all devices despite actual usage being tracked
+- **Root Cause:** Line 181 was overwriting `$profile_name` with non-existent `$device['profile_name']`, causing profile lookup to fail
+- **Impact:** Usage was being tracked correctly in state file, but display showed zeros
+- **Solution:** Removed incorrect profile name override, now reads directly from `$profile['name']`
+
+### Verification
+- Backend tracking confirmed working (e.g., Mukesh: 40 min, GunGun: 75 min in state file)
+- Status page now displays these values correctly
+- All devices in a profile now show the same shared usage total
+
+---
+
 ## [1.1.1] - 2025-12-29 ✨ FEATURE: Firewall Rules Visibility in Status Page
 
 ### 🎯 Enhancement

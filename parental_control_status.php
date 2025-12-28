@@ -173,17 +173,18 @@ if (is_array($profiles)) {
 							$device_name = htmlspecialchars($device['device_name']);
 							$mac_display = htmlspecialchars($device['mac_address']);
 							
-							// CRITICAL: Get usage from PROFILE (shared time accounting)
-							// WHY: All devices in a profile share the same time budget
-							// Example: 4 hour limit = 4 hours TOTAL across ALL devices in profile
-							$usage_today = 0;
-							$device_ip = null;
-							$profile_name = isset($device['profile_name']) ? $device['profile_name'] : null;
-							
-							// Get PROFILE usage (not individual device usage)
-							if ($profile_name && isset($state['profiles'][$profile_name]['usage_today'])) {
-								$usage_today = intval($state['profiles'][$profile_name]['usage_today']);
-							}
+						// CRITICAL: Get usage from PROFILE (shared time accounting)
+						// WHY: All devices in a profile share the same time budget
+						// Example: 4 hour limit = 4 hours TOTAL across ALL devices in profile
+						$usage_today = 0;
+						$device_ip = null;
+						// Note: $profile_name is already set from outer loop at line 149
+						
+						// Get PROFILE usage (not individual device usage)
+						// Note: $profile_name is from $profile['name'], NOT $device['profile_name']
+						if (isset($state['profiles'][$profile['name']]['usage_today'])) {
+							$usage_today = intval($state['profiles'][$profile['name']]['usage_today']);
+						}
 							
 							// Also get device IP for status display
 							if (isset($state['mac_to_ip_cache'][$mac])) {
