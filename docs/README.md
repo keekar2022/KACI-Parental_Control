@@ -20,15 +20,18 @@ Includes:
 ---
 
 ### 2. 📖 [User Guide](USER_GUIDE.md)
-**Complete user documentation for daily use and maintenance**
+**Complete user documentation for daily use, maintenance, and version history**
 
 Includes:
 - ⚙️ **Configuration Guide** - All settings explained in detail
 - 🔧 **Troubleshooting** - Common issues and solutions
 - 🔄 **Auto-Update Feature** - How automatic updates work
 - 🐛 **Latest Fixes** - Recent updates and bug fixes
+- 📜 **Complete Changelog** - Full version history from v0.1.0 to current
+- 📋 **Release Notes** - Detailed release documentation
+- 🔥 **Hotfix Documentation** - Critical bug fixes and patches
 
-**Your go-to reference for configuration and troubleshooting**
+**Your go-to reference for configuration, troubleshooting, and version history**
 
 ---
 
@@ -43,8 +46,19 @@ Includes:
 - 👨‍💻 **Development Guide** - Contributing guidelines
 - 📦 **Development Workflow** - Version bumping and release process
 - 🌐 **GitHub Pages Setup** - Hosting the landing page
+- 🎯 **Feature Deep Dives:**
+  - Shared Profile Time Accounting (v1.1.0)
+  - Schedules & Time Limits Explained
+  - Firewall Rules Visibility (v1.1.1)
+  - Where to See Firewall Rules
+  - Automatic Version Management
 
 **For developers, integrators, and those who want to understand how it works**
+
+---
+
+### 4. 📑 [Documentation Index](README.md) *(This File)*
+**Navigation hub for all documentation**
 
 ---
 
@@ -58,45 +72,19 @@ Includes:
 | **Create my first profile** | [Getting Started](GETTING_STARTED.md) | Quick Start |
 | **Configure settings** | [User Guide](USER_GUIDE.md) | Configuration Guide |
 | **Fix an issue** | [User Guide](USER_GUIDE.md) | Troubleshooting |
+| **See version history** | [User Guide](USER_GUIDE.md) | Changelog |
+| **Understand a hotfix** | [User Guide](USER_GUIDE.md) | Hotfix Documentation |
 | **Use the API** | [Technical Reference](TECHNICAL_REFERENCE.md) | API Documentation |
 | **Understand the architecture** | [Technical Reference](TECHNICAL_REFERENCE.md) | Architecture |
+| **Learn about features** | [Technical Reference](TECHNICAL_REFERENCE.md) | Feature Deep Dives |
 | **Contribute code** | [Technical Reference](TECHNICAL_REFERENCE.md) | Development Guide |
 
 ---
 
-## 📋 Documentation Standards
+## 📂 Additional Files
 
-All documentation follows these principles:
-
-- ✅ **Comprehensive** - Complete information in one place
-- ✅ **Well-organized** - Clear table of contents and navigation
-- ✅ **Practical** - Code examples you can copy-paste
-- ✅ **Up-to-date** - Synced with latest code
-- ✅ **Searchable** - Easy to find what you need
-
----
-
-## 📂 Additional Documentation
-
-### Core Documentation
-- **[CHANGELOG.md](CHANGELOG.md)** - Complete version history
 - **[../README.md](../README.md)** - Project overview (stays in root for GitHub)
 - **[../LICENSE](../LICENSE)** - MIT License
-
-### Release Documentation
-- **[RELEASE_NOTES_v1.0.0.md](RELEASE_NOTES_v1.0.0.md)** - v1.0.0 release notes
-- **[RELEASE_CHECKLIST_v1.0.0.md](RELEASE_CHECKLIST_v1.0.0.md)** - v1.0.0 release checklist
-
-### Feature Documentation
-- **[SHARED_PROFILE_TIME_v1.1.0.md](SHARED_PROFILE_TIME_v1.1.0.md)** - Shared profile time accounting feature
-- **[FIREWALL_RULES_STATUS_PAGE_v1.1.1.md](FIREWALL_RULES_STATUS_PAGE_v1.1.1.md)** - Firewall rules visibility feature
-- **[SCHEDULES_AND_TIME_LIMITS_EXPLAINED.md](SCHEDULES_AND_TIME_LIMITS_EXPLAINED.md)** - How schedules and time limits work
-- **[WHERE_TO_SEE_FIREWALL_RULES.md](WHERE_TO_SEE_FIREWALL_RULES.md)** - Where to find firewall rules
-- **[AUTOMATIC_VERSION_GUIDE.md](AUTOMATIC_VERSION_GUIDE.md)** - Automatic version management system
-
-### Hotfix Documentation
-- **[HOTFIX_v1.1.2_STATUS_PAGE.md](HOTFIX_v1.1.2_STATUS_PAGE.md)** - v1.1.2 status page display fix
-- **[HOTFIX_v1.0.1_SUMMARY.md](HOTFIX_v1.0.1_SUMMARY.md)** - v1.0.1 cron installation fix
 
 ---
 
@@ -127,11 +115,25 @@ All documentation follows these principles:
 
 ---
 
+## 📋 Documentation Standards
+
+All documentation follows these principles:
+
+- ✅ **Comprehensive** - Complete information in one place
+- ✅ **Well-organized** - Clear table of contents and navigation
+- ✅ **Practical** - Code examples you can copy-paste
+- ✅ **Up-to-date** - Synced with latest code
+- ✅ **Searchable** - Easy to find what you need
+- ✅ **Consolidated** - Maximum 4 files for easy maintenance
+
+---
+
 ## 🆘 Getting Help
 
 - **Installation Issues:** [Getting Started](GETTING_STARTED.md) → Installation Guide → Troubleshooting
 - **Configuration Questions:** [User Guide](USER_GUIDE.md) → Configuration Guide
 - **Technical Issues:** [User Guide](USER_GUIDE.md) → Troubleshooting
+- **Version Questions:** [User Guide](USER_GUIDE.md) → Changelog
 - **API Questions:** [Technical Reference](TECHNICAL_REFERENCE.md) → API Documentation
 - **GitHub Issues:** https://github.com/keekar2022/KACI-Parental_Control/issues
 
@@ -150,9 +152,9 @@ Found an issue? Want to improve the docs?
 
 ## 📊 Documentation Statistics
 
-- **Total Pages:** 3 main documents + 1 index
-- **Total Content:** ~5,600 lines
-- **Coverage:** Installation, Configuration, Troubleshooting, API, Architecture, Development
+- **Total Pages:** 4 consolidated documents
+- **Total Content:** ~9,500 lines
+- **Coverage:** Installation, Configuration, Troubleshooting, API, Architecture, Development, Features, Changelog, Hotfixes
 - **Format:** Markdown with code examples
 - **Last Updated:** December 2025
 

@@ -2590,3 +2590,1686 @@ You now have:
 
 **Next step:** Enable GitHub Pages and start spreading the word!
 
+# 🎯 Shared Profile Time Accounting - v1.1.0
+
+## 🚨 CRITICAL FIX: Bypass-Proof Time Limits
+
+**Release Date:** December 29, 2025  
+**Version:** 1.1.0  
+**Severity:** CRITICAL - Security/Bypass Fix
+
+---
+
+## 💡 The Problem You Identified
+
+> "When I allocated 4 Hrs to Vishesh Profile, I meant to say that cumulative of all devices it should be 4 hrs. Not like 4Hrs for each devices in the profile."
+
+**You were 100% correct!** The old implementation had a MAJOR flaw:
+
+###Before v1.1.0 (BROKEN):
+- **Vishesh Profile:** 5 devices × 4 hours = **20 hours/day total** ❌
+- **Mukesh Profile:** 2 devices × 10 hours = **20 hours/day total** ❌
+- **Anita Profile:** 3 devices × 6 hours = **18 hours/day total** ❌
+
+**Children could bypass limits by switching between devices!**
+
+---
+
+## ✅ The Solution (v1.1.0)
+
+### After v1.1.0 (FIXED):
+- **Vishesh Profile:** 4 hours **TOTAL** across all 5 devices ✅
+- **Mukesh Profile:** 10 hours **TOTAL** across all 2 devices ✅
+- **Anita Profile:** 6 hours **TOTAL** across all 3 devices ✅
+
+**Truly bypass-proof - usage is SHARED across all devices!**
+
+---
+
+## 📊 Real-World Example
+
+### Vishesh Profile (4 hour daily limit):
+
+**Scenario:**
+1. Uses iPhone for 1 hour → Profile usage: 1:00
+2. Switches to iPad for 2 hours → Profile usage: 3:00
+3. Switches to MacBook for 1 hour → Profile usage: 4:00
+4. **ALL 5 devices now BLOCKED** (limit reached)
+
+**Old behavior (v1.0.x):**
+- Each device would get 4 hours = 20 hours total! ❌
+
+**New behavior (v1.1.0):**
+- All devices share 4 hours = 4 hours total! ✅
+
+---
+
+## 🔧 Technical Changes
+
+### 1. Profile-Level Usage Tracking
+
+**New State Structure:**
+```json
+{
+  "profiles": {
+    "Vishesh": {
+      "usage_today": 135,
+      "usage_week": 890,
+      "last_reset": 1766950647
+    },
+    "Mukesh": {
+      "usage_today": 245,
+      "usage_week": 1520,
+      "last_reset": 1766950647
+    }
+  }
+}
+```
+
+### 2. Modified Functions
+
+#### `pc_update_device_usage()`
+```php
+// OLD: Added time to device counter
+$state['devices_by_ip'][$ip]['usage_today'] += $interval_minutes;
+
+// NEW: Also adds time to PROFILE counter
+$state['profiles'][$profile_name]['usage_today'] += $interval_minutes;
+```
+
+#### `pc_is_time_limit_exceeded()`
+```php
+// OLD: Checked device usage
+$usage_today = $state['devices'][$mac]['usage_today'];
+
+// NEW: Checks PROFILE usage (shared)
+$usage_today = $state['profiles'][$profile_name]['usage_today'];
+```
+
+#### `pc_reset_daily_counters()`
+```php
+// NEW: Also resets profile counters at midnight
+foreach ($state['profiles'] as $profile_name => &$profile_state) {
+    $profile_state['usage_today'] = 0;
+}
+```
+
+### 3. Status Page Updates
+
+**Now shows SHARED profile usage:**
+- All devices in same profile show the SAME usage value
+- "Usage Today" displays profile total, not individual device time
+- "Remaining" calculates from profile usage
+
+---
+
+## 📅 Current Status (Your Firewall)
+
+```
+Profile          Devices    Daily Limit    Current Usage    Shared?
+─────────────────────────────────────────────────────────────────────
+Vishesh          5          4:00          0:00             ✅ YES
+Mukesh           2         10:00          0:00             ✅ YES
+Anita            3          6:00          0:00             ✅ YES
+```
+
+**All counters reset to 0:00 after v1.1.0 deployment.**
+
+---
+
+## 🔄 How It Works Now
+
+### Usage Accumulation:
+1. **Any device** in a profile is active
+2. Usage adds to the **PROFILE counter** (not device)
+3. All devices check against the **same profile usage**
+4. When limit reached, **ALL devices** in profile are blocked
+
+### Example Timeline (Vishesh - 4hr limit):
+
+| Time  | Device      | Activity       | Profile Usage | Status |
+|-------|-------------|----------------|---------------|---------|
+| 08:00 | iPhone      | Browsing (1hr) | 1:00          | ✅ Active |
+| 09:00 | iPad        | Gaming (1.5hr) | 2:30          | ✅ Active |
+| 10:30 | MacBook     | Homework (1hr) | 3:30          | ✅ Active |
+| 11:30 | TV          | Streaming (30m)| 4:00          | ⚠️ Limit! |
+| 12:00 | **ALL 5**   | **BLOCKED**    | 4:00          | 🚫 Blocked |
+
+---
+
+## 🎯 Benefits
+
+### For Parents:
+- ✅ **True Control:** 4 hours means 4 hours, not 20!
+- ✅ **Bypass-Proof:** Can't switch devices to get more time
+- ✅ **Fair:** All devices share the same budget
+- ✅ **Predictable:** Know exactly how much time is available
+
+### For Children:
+- ✅ **Flexible:** Choose which device to use
+- ✅ **Fair:** Can't hog time on one device
+- ✅ **Transparent:** See total time remaining
+- ✅ **Consistent:** Same rules across all devices
+
+### For System:
+- ✅ **Secure:** No bypass vulnerability
+- ✅ **Efficient:** Single counter to track
+- ✅ **Reliable:** No sync issues between devices
+- ✅ **Scalable:** Works with any number of devices
+
+---
+
+## 🚀 Testing & Verification
+
+### 1. Check Status Page
+Navigate to: **Services → KACI Parental Control → Status**
+
+**What you should see:**
+- All devices in same profile show **SAME** usage
+- Example: If Vishesh uses iPhone for 30min, ALL 5 devices show 0:30
+
+### 2. Test Multi-Device Usage
+1. Use device A for 1 hour
+2. Check device B's remaining time
+3. **Should show:** 3:00 remaining (not 4:00!)
+
+### 3. Verify Blocking
+1. Use profile time until limit reached
+2. **ALL devices** in profile should be blocked
+3. **Other profiles** should still work
+
+---
+
+## 📊 Expected Behavior
+
+### Vishesh Profile (4:00 limit):
+- Device 1: 1:00 used → Profile: 1:00, Remaining: 3:00
+- Device 2: 1:30 used → Profile: 2:30, Remaining: 1:30
+- Device 3: 1:00 used → Profile: 3:30, Remaining: 0:30
+- Device 4: 0:30 used → Profile: 4:00, **ALL BLOCKED** ✅
+
+### Mukesh Profile (10:00 limit):
+- Currently 30 mins used across devices
+- Profile shows: 0:30 used, 9:30 remaining
+- Shared across MacBook Pro + iPhone
+
+### Anita Profile (6:00 limit):
+- Currently 0 mins used
+- Profile shows: 0:00 used, 6:00 remaining
+- Shared across iPhone + iPad + other device
+
+---
+
+## 🔄 Migration Notes
+
+### Automatic Migration:
+- ✅ **No config changes needed**
+- ✅ **All counters start at 0:00**
+- ✅ **Works immediately after upgrade**
+- ✅ **No data loss**
+
+### What Changed:
+- Usage now accumulates at profile level
+- Blocking affects all devices in profile
+- Status page shows shared usage
+
+### What Stayed Same:
+- Profile limits (4hrs, 10hrs, 6hrs)
+- Weekend bonuses
+- Schedule blocking
+- Device management
+
+---
+
+## 📝 Frequently Asked Questions
+
+### Q: Why did usage drop to 0:00?
+**A:** Counters were reset during v1.1.0 deployment for clean start with new shared accounting system.
+
+### Q: Will devices share time across different days?
+**A:** No! Counters reset at midnight daily (as before).
+
+### Q: Can I still set different limits per profile?
+**A:** Yes! Each profile has its own limit, but devices IN that profile share it.
+
+### Q: What if device changes profiles?
+**A:** Usage tracks to the profile it's assigned to. Moving devices doesn't transfer usage.
+
+### Q: Does this affect schedules?
+**A:** No. Schedule blocking still works independently per device.
+
+---
+
+## 🎉 Success Criteria
+
+✅ **All profiles showing 0:00 usage after reset**  
+✅ **v1.1.0 deployed successfully**  
+✅ **Profile tracking structure created**  
+✅ **Cron job active and running**  
+✅ **Status page updated to show shared usage**
+
+**Your system is now properly configured with bypass-proof shared profile time accounting!**
+
+---
+
+## 🔮 Next Steps
+
+1. **Monitor:** Watch status page as devices are used
+2. **Verify:** Confirm usage accumulates at profile level
+3. **Test:** Try switching devices, verify shared counter
+4. **Enjoy:** True parental control, finally bypass-proof!
+
+---
+
+**Built with ❤️ by Mukesh Kesharwani**  
+**© 2025 Keekar**
+
+# 🕐 Schedules & Time Limits - How They Work Together
+
+## 📋 Overview
+
+The parental control system uses **TWO independent blocking mechanisms** that work together:
+
+1. **⏰ Time Schedules** - Block during specific hours (e.g., bedtime)
+2. **⏱️ Time Limits** - Block when daily usage quota exhausted
+
+Both are enforced through **pfSense anchor rules** for dynamic, fast blocking without full firewall reloads.
+
+---
+
+## 🔄 The Check Flow (Every 5 Minutes)
+
+### Cron Job Execution Sequence:
+
+```
+┌─────────────────────────────────────────────┐
+│ 1. Load current state                       │
+│    - Profile usage counters                 │
+│    - Currently blocked devices              │
+│    - Last reset time                        │
+└─────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────┐
+│ 2. Check if midnight reset needed           │
+│    - Reset profile usage_today to 0:00     │
+│    - Unblock ALL devices (fresh start)      │
+└─────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────┐
+│ 3. Update usage for active devices          │
+│    - Check active connections (pfctl)       │
+│    - Add 5 mins to PROFILE counter         │
+│    - Track device activity                  │
+└─────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────┐
+│ 4. Calculate which devices to block         │
+│    ┌────────────────────────────────────┐  │
+│    │ For each device:                   │  │
+│    │                                    │  │
+│    │ Step 1: Check parent override?    │  │
+│    │   YES → Skip (allow access)       │  │
+│    │   NO  → Continue                  │  │
+│    │                                    │  │
+│    │ Step 2: In blocked schedule? ⏰    │  │
+│    │   YES → BLOCK (reason: schedule)  │  │
+│    │   NO  → Continue                  │  │
+│    │                                    │  │
+│    │ Step 3: Time limit exceeded? ⏱️    │  │
+│    │   YES → BLOCK (reason: limit)     │  │
+│    │   NO  → Allow                     │  │
+│    └────────────────────────────────────┘  │
+└─────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────┐
+│ 5. Apply firewall changes (only diff)       │
+│    - Devices newly blocked → Add rules     │
+│    - Devices unblocked → Remove rules      │
+│    - No change → Skip (optimization)       │
+└─────────────────────────────────────────────┘
+```
+
+---
+
+## ⏰ Schedule Blocking (Detailed)
+
+### How It Works:
+
+**Function:** `pc_is_in_blocked_schedule($device)`
+
+**Location:** `parental_control.inc` line 1321
+
+### Check Logic:
+
+```php
+1. Get current day & time
+   - Day: Monday (1) to Sunday (7)
+   - Time: HH:MM format (24-hour)
+
+2. Get device's profile name
+   - From: $device['child_name'] or $device['profile_name']
+
+3. Load all schedules from config
+   - Path: installedpackages/parentalcontrolschedules/config
+
+4. For each ENABLED schedule:
+   a. Does this schedule apply to device's profile?
+      - Check profile_names list
+      - Skip if profile not in list
+   
+   b. Does today match schedule days?
+      - Example: ["mon", "tue", "wed", "thu", "fri"]
+      - Skip if today not in list
+   
+   c. Is current time in blocked range?
+      - Start: 20:00, End: 23:59
+      - Current: 22:30 → BLOCKED ✅
+      - Current: 14:00 → ALLOWED ✅
+   
+   d. If ALL conditions match:
+      - Return TRUE (device is in blocked schedule)
+
+5. If no schedules match:
+   - Return FALSE (device allowed by schedules)
+```
+
+### Example Schedule Configuration:
+
+**Schedule Name:** "Bedtime-1"  
+**Profile:** Vishesh  
+**Days:** Sun, Mon, Tue, Wed, Thu, Fri, Sat (all days)  
+**Time:** 20:00 - 23:59  
+**Status:** Enabled
+
+**Result:**
+- At 22:30 (any day) → Vishesh's devices BLOCKED
+- At 14:00 (any day) → Vishesh's devices ALLOWED
+
+---
+
+## ⏱️ Time Limit Blocking (Detailed)
+
+### How It Works:
+
+**Function:** `pc_is_time_limit_exceeded($device, $state)`
+
+**Location:** `parental_control.inc` line 1573
+
+### Check Logic:
+
+```php
+1. Get device's profile name
+   - From: $device['profile_name']
+
+2. Get profile's daily limit
+   - Example: 240 minutes (4 hours)
+   - If 0 → UNLIMITED (skip check)
+
+3. Check if weekend (Sat/Sun)
+   - Add weekend bonus if applicable
+   - Example: 4hrs + 30min bonus = 4:30 on weekends
+
+4. Get PROFILE usage (shared across all devices!)
+   - From: $state['profiles'][$profile_name]['usage_today']
+   - Example: 245 minutes (4:05)
+
+5. Compare usage vs limit:
+   - 245 >= 240 → BLOCKED ✅
+   - 180 <  240 → ALLOWED ✅
+```
+
+### Example (Vishesh Profile):
+
+**Daily Limit:** 4:00 (240 mins)  
+**Devices:** 5 (iPhone, iPad, MacBook, TV, Laptop)
+
+**Usage Timeline:**
+```
+08:00 - Uses iPhone for 1:00
+        Profile Usage: 60 mins → ALLOWED
+
+10:00 - Uses iPad for 1:30
+        Profile Usage: 150 mins → ALLOWED
+
+14:00 - Uses MacBook for 1:00
+        Profile Usage: 210 mins → ALLOWED
+
+17:00 - Uses TV for 0:30
+        Profile Usage: 240 mins → LIMIT REACHED!
+
+18:00 - Tries to use ANY device
+        Profile Usage: 240 mins → ALL 5 DEVICES BLOCKED ✅
+```
+
+---
+
+## 🚫 Firewall Rules (When Blocked)
+
+### The Anchor System:
+
+**File:** `/tmp/rules.parental_control`  
+**Anchor:** `parental_control` (pfSense anchor)
+
+### Rules Created Per Device:
+
+When a device is blocked, **5 rules** are added:
+
+```pf
+# Device: 192.168.1.115 (Vishesh-iPhone) - Scheduled block time
+
+# 1. Allow DNS (resolve hostnames)
+pass quick proto udp from 192.168.1.115 to any port 53 \
+  label "PC-DNS:Vishesh-iPhone"
+
+# 2. Allow access to pfSense GUI (for block page)
+pass quick from 192.168.1.115 to 192.168.1.1 \
+  label "PC-Allow:Vishesh-iPhone"
+
+# 3. Redirect HTTP to block page
+rdr pass proto tcp from 192.168.1.115 to any port 80 \
+  -> 192.168.1.1 port 443 \
+  label "PC-HTTP:Vishesh-iPhone"
+
+# 4. Redirect HTTPS to block page
+rdr pass proto tcp from 192.168.1.115 to any port 443 \
+  -> 192.168.1.1 port 443 \
+  label "PC-HTTPS:Vishesh-iPhone"
+
+# 5. Block ALL other traffic
+block drop quick from 192.168.1.115 to any \
+  label "PC-Block:Vishesh-iPhone"
+```
+
+### Rule Explanation:
+
+| Rule | Purpose | Why Needed |
+|------|---------|------------|
+| **Pass DNS** | Allow name resolution | User can see block page by hostname |
+| **Pass pfSense** | Allow access to firewall | User can access block page |
+| **RDR HTTP** | Redirect port 80 | Shows block page instead of timeout |
+| **RDR HTTPS** | Redirect port 443 | Shows block page (cert warning) |
+| **Block Drop** | Block everything else | Enforce the block |
+
+### How Rules Are Applied:
+
+```bash
+# 1. Rules written to anchor file
+echo "# Device rules..." >> /tmp/rules.parental_control
+
+# 2. Anchor reloaded (FAST - no full firewall reload!)
+/sbin/pfctl -a parental_control -f /tmp/rules.parental_control
+
+# Result: Rules active immediately (< 1 second)
+```
+
+---
+
+## 🔀 Interaction: Schedules + Time Limits
+
+### Priority Order:
+
+1. **Parent Override** (highest priority)
+   - If active → ALLOW (bypass everything)
+
+2. **Schedule Blocking** (second priority)
+   - If in blocked schedule → BLOCK
+   - Reason: "Scheduled block time"
+
+3. **Time Limit** (third priority)
+   - If usage exceeded → BLOCK
+   - Reason: "Time limit exceeded"
+
+4. **Default** (lowest priority)
+   - ALLOW
+
+### Real-World Scenarios:
+
+#### Scenario 1: Schedule + Under Limit
+
+**Vishesh Profile:**
+- Time: 22:30 (during bedtime schedule)
+- Usage: 2:00 / 4:00 (under limit)
+
+**Result:**
+- ⏰ Schedule: BLOCKED ✅
+- ⏱️ Limit: ALLOWED
+- **Final: BLOCKED** (schedule takes precedence)
+- **Reason:** "Scheduled block time"
+
+---
+
+#### Scenario 2: Not in Schedule + Over Limit
+
+**Vishesh Profile:**
+- Time: 15:00 (outside schedule)
+- Usage: 4:30 / 4:00 (over limit)
+
+**Result:**
+- ⏰ Schedule: ALLOWED
+- ⏱️ Limit: BLOCKED ✅
+- **Final: BLOCKED** (limit exceeded)
+- **Reason:** "Time limit exceeded"
+
+---
+
+#### Scenario 3: Schedule + Over Limit (Both Apply!)
+
+**Vishesh Profile:**
+- Time: 22:30 (during bedtime schedule)
+- Usage: 4:30 / 4:00 (over limit)
+
+**Result:**
+- ⏰ Schedule: BLOCKED ✅
+- ⏱️ Limit: BLOCKED ✅
+- **Final: BLOCKED** (both conditions met)
+- **Reason:** "Scheduled block time" (checked first)
+
+**Note:** Even if schedule ends at 23:59, device remains blocked until midnight reset because limit is exceeded!
+
+---
+
+#### Scenario 4: Parent Override Active
+
+**Vishesh Profile:**
+- Time: 22:30 (during bedtime schedule)
+- Usage: 4:30 / 4:00 (over limit)
+- Override: ACTIVE (30 min duration)
+
+**Result:**
+- 🔓 Override: ACTIVE ✅
+- ⏰ Schedule: (skipped - override active)
+- ⏱️ Limit: (skipped - override active)
+- **Final: ALLOWED** (override bypasses everything)
+
+---
+
+## 📊 Example: Your Current Setup
+
+### Vishesh Profile:
+- **Limit:** 4:00 daily (240 mins)
+- **Schedule 1 (Bedtime-1):** 20:00 - 23:59 (every day)
+- **Schedule 2 (BedTime-2):** 00:00 - 06:30 (every day)
+- **Devices:** 5 (iPhone, iPad, MacBook, TV, Laptop)
+
+### Timeline Example (Monday):
+
+| Time  | Activity | Usage | Schedule? | Limit? | Result |
+|-------|----------|-------|-----------|--------|---------|
+| 06:00 | Wake up | 0:00/4:00 | 🚫 BedTime-2 | ✅ Under | 🚫 **BLOCKED** (schedule) |
+| 06:30 | Ready | 0:00/4:00 | ✅ Free | ✅ Under | ✅ **ALLOWED** |
+| 08:00 | Use iPad (1hr) | 1:00/4:00 | ✅ Free | ✅ Under | ✅ **ALLOWED** |
+| 12:00 | Use iPhone (2hr) | 3:00/4:00 | ✅ Free | ✅ Under | ✅ **ALLOWED** |
+| 16:00 | Use MacBook (1hr) | 4:00/4:00 | ✅ Free | ⚠️ At Limit | ✅ **ALLOWED** (last mins) |
+| 17:00 | Try any device | 4:00/4:00 | ✅ Free | 🚫 Exceeded | 🚫 **BLOCKED** (limit) |
+| 20:00 | Bedtime starts | 4:00/4:00 | 🚫 Bedtime-1 | 🚫 Exceeded | 🚫 **BLOCKED** (both!) |
+| 23:59 | Schedule ends | 4:00/4:00 | ✅ Free | 🚫 Exceeded | 🚫 **BLOCKED** (limit still) |
+| 00:00 | **MIDNIGHT RESET** | 0:00/4:00 | 🚫 BedTime-2 | ✅ Reset | 🚫 **BLOCKED** (schedule) |
+
+---
+
+## 🔍 Viewing Active Rules
+
+### Check Current Firewall Rules:
+
+```bash
+# View all rules in parental control anchor
+sudo pfctl -a parental_control -sr
+
+# View blocked devices
+cat /tmp/rules.parental_control
+
+# Check if specific IP is blocked
+sudo pfctl -a parental_control -sr | grep "192.168.1.115"
+```
+
+### Example Output:
+
+```pf
+# Device: 192.168.1.115 (Vishesh-iPhone) - Scheduled block time
+pass quick proto udp from 192.168.1.115 to any port = 53 flags S/SA keep state label "PC-DNS:Vishesh-iPhone"
+pass quick from 192.168.1.115 to 192.168.1.1 flags S/SA keep state label "PC-Allow:Vishesh-iPhone"
+block drop quick from 192.168.1.115 to any label "PC-Block:Vishesh-iPhone"
+```
+
+---
+
+## 🎯 Key Points
+
+### Schedule Blocking:
+✅ **Checked first** (highest priority after override)  
+✅ **Independent** of time limits  
+✅ **Day & time specific**  
+✅ **Multiple schedules** can apply to same profile  
+✅ **Applies immediately** when time range starts
+
+### Time Limit Blocking:
+✅ **Checked second** (after schedules)  
+✅ **Shared across all devices** in profile  
+✅ **Accumulates** throughout the day  
+✅ **Resets at midnight**  
+✅ **Applies when limit reached**
+
+### Firewall Rules:
+✅ **Created dynamically** via pfSense anchor  
+✅ **Fast application** (< 1 second)  
+✅ **Per-device** (one set per blocked IP)  
+✅ **Redirect to block page** (HTTP/HTTPS)  
+✅ **Removed when unblocked**
+
+---
+
+## 🛠️ Troubleshooting
+
+### Device not blocking during schedule?
+
+**Check:**
+1. Is schedule enabled?
+2. Is profile name correct?
+3. Are days configured correctly?
+4. Is time range correct (24-hour format)?
+5. Run: `tail -f /var/log/system.log | grep parental`
+
+### Device blocking at wrong time?
+
+**Check:**
+1. Firewall timezone settings
+2. Schedule time format (HH:MM)
+3. Day mapping (mon, tue, wed, etc.)
+
+### Rules not applying?
+
+**Check:**
+1. Anchor file exists: `ls -l /tmp/rules.parental_control`
+2. Cron job running: `sudo crontab -l | grep parental`
+3. Rules loaded: `sudo pfctl -a parental_control -sr`
+
+---
+
+**Built with ❤️ by Mukesh Kesharwani**  
+**© 2025 Keekar**
+
+# 🔍 Where to See Parental Control Firewall Rules
+
+## ❌ **NOT in the Standard GUI**
+
+The parental control firewall rules are **NOT visible** in the standard pfSense GUI locations:
+
+- ❌ **NOT** in Firewall → Rules → LAN
+- ❌ **NOT** in Firewall → Rules → WAN
+- ❌ **NOT** in Firewall → Rules → Floating
+- ❌ **NOT** in any interface tab
+
+**Why?** Because we use **pfSense Anchors** instead!
+
+---
+
+## 🎯 **What are pfSense Anchors?**
+
+**Anchors** are a special pfSense feature that allows:
+- ✅ **Dynamic rule management** without GUI
+- ✅ **Fast updates** (< 1 second, no full firewall reload)
+- ✅ **No config.xml pollution** (thousands of rules would bloat it)
+- ✅ **Persistent across reboots** (when properly configured)
+
+**Trade-off:** Rules are NOT visible in the GUI - must use command line.
+
+---
+
+## 🖥️ **How to View the Rules**
+
+### Method 1: View Active Rules in pfSense (RECOMMENDED)
+
+SSH into your firewall and run:
+
+```bash
+# View all active rules in parental_control anchor
+sudo pfctl -a parental_control -sr
+```
+
+**Example Output:**
+```pf
+# Device: 192.168.1.115 (Vishesh-iPhone) - Scheduled block time
+pass quick proto udp from 192.168.1.115 to any port = 53 flags S/SA keep state label "PC-DNS:Vishesh-iPhone"
+pass quick from 192.168.1.115 to 192.168.1.1 flags S/SA keep state label "PC-Allow:Vishesh-iPhone"
+rdr pass proto tcp from 192.168.1.115 to any port = 80 -> 192.168.1.1 port 443
+rdr pass proto tcp from 192.168.1.115 to any port = 443 -> 192.168.1.1 port 443
+block drop quick from 192.168.1.115 to any label "PC-Block:Vishesh-iPhone"
+
+# Device: 192.168.1.117 (Anitasiphone) - Time limit exceeded
+pass quick proto udp from 192.168.1.117 to any port = 53 flags S/SA keep state label "PC-DNS:Anitasiphone"
+pass quick from 192.168.1.117 to 192.168.1.1 flags S/SA keep state label "PC-Allow:Anitasiphone"
+rdr pass proto tcp from 192.168.1.117 to any port = 80 -> 192.168.1.1 port 443
+rdr pass proto tcp from 192.168.1.117 to any port = 443 -> 192.168.1.1 port 443
+block drop quick from 192.168.1.117 to any label "PC-Block:Anitasiphone"
+```
+
+---
+
+### Method 2: View Anchor File (Before pfctl Processing)
+
+```bash
+# View the raw anchor file
+cat /tmp/rules.parental_control
+```
+
+**Example Output:**
+```pf
+# Parental Control Dynamic Rules
+
+# Device: 192.168.1.115 (Vishesh-iPhone) - Scheduled block time
+pass quick proto udp from 192.168.1.115 to any port 53 label "PC-DNS:Vishesh-iPhone"
+pass quick from 192.168.1.115 to 192.168.1.1 label "PC-Allow:Vishesh-iPhone"
+rdr pass proto tcp from 192.168.1.115 to any port 80 -> 192.168.1.1 port 443 label "PC-HTTP:Vishesh-iPhone"
+rdr pass proto tcp from 192.168.1.115 to any port 443 -> 192.168.1.1 port 443 label "PC-HTTPS:Vishesh-iPhone"
+block drop quick from 192.168.1.115 to any label "PC-Block:Vishesh-iPhone"
+
+# Device: 192.168.1.117 (Anitasiphone) - Time limit exceeded
+pass quick proto udp from 192.168.1.117 to any port 53 label "PC-DNS:Anitasiphone"
+pass quick from 192.168.1.117 to 192.168.1.1 label "PC-Allow:Anitasiphone"
+rdr pass proto tcp from 192.168.1.117 to any port 80 -> 192.168.1.1 port 443 label "PC-HTTP:Anitasiphone"
+rdr pass proto tcp from 192.168.1.117 to any port 443 -> 192.168.1.1 port 443 label "PC-HTTPS:Anitasiphone"
+block drop quick from 192.168.1.117 to any label "PC-Block:Anitasiphone"
+```
+
+---
+
+### Method 3: Check if Specific Device is Blocked
+
+```bash
+# Check if a specific IP is blocked
+sudo pfctl -a parental_control -sr | grep "192.168.1.115"
+```
+
+**Output if blocked:**
+```pf
+pass quick proto udp from 192.168.1.115 to any port = 53 flags S/SA keep state label "PC-DNS:Vishesh-iPhone"
+pass quick from 192.168.1.115 to 192.168.1.1 flags S/SA keep state label "PC-Allow:Vishesh-iPhone"
+block drop quick from 192.168.1.115 to any label "PC-Block:Vishesh-iPhone"
+```
+
+**Output if NOT blocked:**
+```
+(no output)
+```
+
+---
+
+### Method 4: View All pfSense Anchors
+
+```bash
+# List all anchors in pfSense
+sudo pfctl -sA
+```
+
+**Output:**
+```
+parental_control
+miniupnpd
+snort2c/*
+```
+
+The `parental_control` anchor is where our rules live!
+
+---
+
+### Method 5: View Anchor Statistics
+
+```bash
+# Show statistics for parental_control anchor
+sudo pfctl -a parental_control -vsr
+```
+
+**Example Output:**
+```pf
+@0 pass quick proto udp from 192.168.1.115 to any port = 53 flags S/SA keep state label "PC-DNS:Vishesh-iPhone"
+  [ Evaluations: 245     Packets: 120     Bytes: 8640     States: 0     ]
+
+@1 pass quick from 192.168.1.115 to 192.168.1.1 flags S/SA keep state label "PC-Allow:Vishesh-iPhone"
+  [ Evaluations: 245     Packets: 15      Bytes: 1200     States: 2     ]
+
+@2 block drop quick from 192.168.1.115 to any label "PC-Block:Vishesh-iPhone"
+  [ Evaluations: 245     Packets: 230     Bytes: 52800    States: 0     ]
+```
+
+This shows:
+- How many times each rule was evaluated
+- How many packets matched
+- How much data was blocked/allowed
+
+---
+
+## 📊 **Understanding the Rule Labels**
+
+Each rule has a **label** that explains its purpose:
+
+| Label | Purpose | Example |
+|-------|---------|---------|
+| `PC-DNS:DeviceName` | Allow DNS queries | `PC-DNS:Vishesh-iPhone` |
+| `PC-Allow:DeviceName` | Allow pfSense access | `PC-Allow:Vishesh-iPhone` |
+| `PC-HTTP:DeviceName` | Redirect HTTP to block page | `PC-HTTP:Vishesh-iPhone` |
+| `PC-HTTPS:DeviceName` | Redirect HTTPS to block page | `PC-HTTPS:Vishesh-iPhone` |
+| `PC-Block:DeviceName` | Block all other traffic | `PC-Block:Vishesh-iPhone` |
+
+You can filter by label:
+
+```bash
+# See only block rules
+sudo pfctl -a parental_control -sr | grep "PC-Block"
+
+# See only DNS allow rules
+sudo pfctl -a parental_control -sr | grep "PC-DNS"
+```
+
+---
+
+## 🔍 **Verification Commands**
+
+### Check if Parental Control is Active
+
+```bash
+# Check if anchor is loaded
+sudo pfctl -sA | grep parental_control
+```
+
+**If active:** `parental_control` (shows in list)  
+**If not active:** (no output)
+
+---
+
+### Check How Many Devices are Blocked
+
+```bash
+# Count blocked devices
+sudo pfctl -a parental_control -sr | grep -c "# Device:"
+```
+
+**Output:** `3` (means 3 devices currently blocked)
+
+---
+
+### Check Total Number of Rules
+
+```bash
+# Count all rules in anchor
+sudo pfctl -a parental_control -sr | wc -l
+```
+
+**Output:** `15` (means 15 rules total)
+
+**Note:** Each blocked device creates 5 rules, so:
+- 3 devices blocked = 15 rules (3 × 5)
+
+---
+
+### Monitor Real-Time Rule Hits
+
+```bash
+# Watch rules being hit in real-time
+watch -n 1 'sudo pfctl -a parental_control -vsr | grep -A1 "block drop"'
+```
+
+This updates every second showing which block rules are actively blocking traffic.
+
+---
+
+## 🛠️ **Troubleshooting**
+
+### Problem: No Rules Showing
+
+**Command:**
+```bash
+sudo pfctl -a parental_control -sr
+```
+
+**Output:** (empty)
+
+**Possible Causes:**
+1. No devices currently blocked
+2. Cron job not running
+3. Anchor not initialized
+
+**Fix:**
+```bash
+# 1. Check if cron is running
+sudo crontab -l | grep parental
+
+# 2. Check if any devices should be blocked
+cat /var/db/parental_control_state.json | jq '.blocked_devices'
+
+# 3. Manually run cron to force update
+sudo php /usr/local/bin/parental_control_cron.php
+```
+
+---
+
+### Problem: Rules Exist But Device Not Blocked
+
+**Command:**
+```bash
+# Check if rules exist
+sudo pfctl -a parental_control -sr | grep "192.168.1.115"
+
+# Test connectivity from device
+ping 8.8.8.8  # from the device
+```
+
+**Possible Causes:**
+1. Wrong IP address (DHCP changed it)
+2. Device bypassing via VPN/proxy
+3. Rules not applied correctly
+
+**Fix:**
+```bash
+# 1. Check device's current IP
+arp -an | grep "aa:bb:cc:dd:ee:ff"
+
+# 2. Check MAC to IP mapping in state
+cat /var/db/parental_control_state.json | jq '.mac_to_ip_cache'
+
+# 3. Manually reload anchor
+sudo pfctl -a parental_control -f /tmp/rules.parental_control
+```
+
+---
+
+## 📝 **Quick Reference**
+
+| Task | Command |
+|------|---------|
+| View all rules | `sudo pfctl -a parental_control -sr` |
+| View anchor file | `cat /tmp/rules.parental_control` |
+| Check specific IP | `sudo pfctl -a parental_control -sr \| grep "192.168.1.115"` |
+| Count blocked devices | `sudo pfctl -a parental_control -sr \| grep -c "# Device:"` |
+| View with statistics | `sudo pfctl -a parental_control -vsr` |
+| Reload anchor | `sudo pfctl -a parental_control -f /tmp/rules.parental_control` |
+| Check if anchor active | `sudo pfctl -sA \| grep parental` |
+
+---
+
+## 🎯 **Why Not Use GUI Rules?**
+
+### Problems with GUI Rules:
+
+1. **❌ Slow Updates** - Full firewall reload (5-10 seconds)
+2. **❌ AQM Errors** - Causes "flowset busy" kernel errors
+3. **❌ Config Bloat** - Thousands of rules = huge config.xml
+4. **❌ Not Dynamic** - Can't easily add/remove rules
+5. **❌ GUI Clutter** - Would fill firewall rules page
+
+### Benefits of Anchors:
+
+1. **✅ Fast Updates** - Rules apply instantly (< 1 second)
+2. **✅ No Errors** - No AQM flowset issues
+3. **✅ Clean Config** - Anchor file separate from config.xml
+4. **✅ Dynamic** - Easy to add/remove rules programmatically
+5. **✅ Clean GUI** - Doesn't clutter firewall rules page
+
+---
+
+## 💡 **Pro Tip: Create an Alias**
+
+Add this to your firewall's `.bashrc` for easy access:
+
+```bash
+# Add to /root/.bashrc
+alias pc-rules='pfctl -a parental_control -sr'
+alias pc-stats='pfctl -a parental_control -vsr'
+alias pc-blocked='pfctl -a parental_control -sr | grep -c "# Device:"'
+alias pc-reload='pfctl -a parental_control -f /tmp/rules.parental_control'
+```
+
+Then you can just run:
+```bash
+pc-rules      # View all rules
+pc-stats      # View with statistics  
+pc-blocked    # Count blocked devices
+pc-reload     # Reload anchor
+```
+
+---
+
+## 🎉 **Summary**
+
+**Q: Where are the firewall rules?**  
+**A:** In the `parental_control` pfSense anchor (command-line only)
+
+**Q: Why not in GUI?**  
+**A:** Anchors are faster, cleaner, and don't cause AQM errors
+
+**Q: How do I see them?**  
+**A:** `sudo pfctl -a parental_control -sr`
+
+**Q: Which interface?**  
+**A:** None! Anchors work at a lower level than interface rules
+
+**Q: Are they persistent?**  
+**A:** Yes, as long as the cron job keeps running (every 5 mins)
+
+---
+
+**Built with ❤️ by Mukesh Kesharwani**  
+**© 2025 Keekar**
+
+# 🔍 Firewall Rules Now Visible in Status Page - v1.1.1
+
+## ✨ New Feature: No CLI Required!
+
+**You asked for it, we delivered!**
+
+The Status page now displays active firewall rules directly in the GUI - **no more SSH or command-line access needed!**
+
+---
+
+## 📺 What You'll See
+
+### When NO Devices are Blocked:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 🛡️ Active Firewall Rules (pfSense Anchor)    [0 blocked]   │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│ ✅ No Blocking Active - All devices currently have access.  │
+│                                                              │
+│ ℹ️ Firewall rules will appear here automatically when      │
+│    devices are blocked due to:                              │
+│    • Time limit exceeded                                    │
+│    • Blocked schedule time (e.g., bedtime)                  │
+│                                                              │
+│ Location: Anchor: parental_control                          │
+│ File: /tmp/rules.parental_control                          │
+│ CLI Command: pfctl -a parental_control -sr                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### When Devices ARE Blocked:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 🛡️ Active Firewall Rules (pfSense Anchor)    [3 blocked]   │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│ ⚠️ Blocking Active - 3 device(s) currently blocked by      │
+│    parental control firewall rules.                         │
+│                                                              │
+│ ℹ️ Note: These rules are managed via pfSense anchors and   │
+│    are NOT visible in Firewall → Rules GUI.                │
+│    They are applied dynamically by the parental control     │
+│    system.                                                  │
+│                                                              │
+│ Rule Details:                                               │
+│ ┌───────────────────────────────────────────────────────┐  │
+│ │ # Device: 192.168.1.115 (Vishesh-iPhone) - Schedule  │  │
+│ │ pass quick proto udp from 192.168.1.115 port 53      │  │
+│ │ pass quick from 192.168.1.115 to 192.168.1.1         │  │
+│ │ rdr pass tcp from 192.168.1.115 port 80 → 192...     │  │
+│ │ rdr pass tcp from 192.168.1.115 port 443 → 192...    │  │
+│ │ block drop quick from 192.168.1.115 to any           │  │
+│ │                                                        │  │
+│ │ # Device: 192.168.1.117 (Anitasiphone) - Time limit  │  │
+│ │ pass quick proto udp from 192.168.1.117 port 53      │  │
+│ │ pass quick from 192.168.1.117 to 192.168.1.1         │  │
+│ │ rdr pass tcp from 192.168.1.117 port 80 → 192...     │  │
+│ │ rdr pass tcp from 192.168.1.117 port 443 → 192...    │  │
+│ │ block drop quick from 192.168.1.117 to any           │  │
+│ │                                                        │  │
+│ │ # Device: 192.168.1.96 (HISENSETV) - Schedule        │  │
+│ │ pass quick proto udp from 192.168.1.96 port 53       │  │
+│ │ pass quick from 192.168.1.96 to 192.168.1.1          │  │
+│ │ rdr pass tcp from 192.168.1.96 port 80 → 192...      │  │
+│ │ rdr pass tcp from 192.168.1.96 port 443 → 192...     │  │
+│ │ block drop quick from 192.168.1.96 to any            │  │
+│ └───────────────────────────────────────────────────────┘  │
+│                                                              │
+│ ℹ️ Rule Legend:                                             │
+│ • pass quick - Allow specific traffic (DNS, pfSense)        │
+│ • rdr pass - Redirect HTTP/HTTPS to block page             │
+│ • block drop - Block all other traffic                     │
+│                                                              │
+│ Location: Anchor: parental_control                          │
+│ File: /tmp/rules.parental_control                          │
+│ CLI Command: pfctl -a parental_control -sr                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🎨 Color Coding
+
+The rules are displayed with **syntax highlighting** for easy reading:
+
+| Color | Rule Type | Purpose |
+|-------|-----------|---------|
+| **🔴 Red/Bold** | `# Device:` header | Shows which device is blocked |
+| **🟢 Green** | `pass quick` | Allow DNS and pfSense access |
+| **🔵 Blue** | `rdr pass` | Redirect to block page |
+| **🔴 Red/Bold** | `block drop` | Block all other traffic |
+
+---
+
+## 📊 Information Displayed
+
+### For Each Blocked Device:
+
+1. **Device Header**
+   ```
+   # Device: 192.168.1.115 (Vishesh-iPhone) - Scheduled block time
+   ```
+   Shows: IP address, device name, reason for blocking
+
+2. **DNS Allow Rule**
+   ```
+   pass quick proto udp from 192.168.1.115 to any port = 53
+   ```
+   Purpose: Allow device to resolve domain names
+
+3. **pfSense Allow Rule**
+   ```
+   pass quick from 192.168.1.115 to 192.168.1.1
+   ```
+   Purpose: Allow device to access block page
+
+4. **HTTP Redirect**
+   ```
+   rdr pass proto tcp from 192.168.1.115 to any port = 80 -> 192.168.1.1 port 443
+   ```
+   Purpose: Redirect HTTP traffic to block page
+
+5. **HTTPS Redirect**
+   ```
+   rdr pass proto tcp from 192.168.1.115 to any port = 443 -> 192.168.1.1 port 443
+   ```
+   Purpose: Redirect HTTPS traffic to block page
+
+6. **Block Rule**
+   ```
+   block drop quick from 192.168.1.115 to any
+   ```
+   Purpose: Block all other internet traffic
+
+---
+
+## 🔄 Real-Time Updates
+
+The Status page shows **current state** when you view it:
+
+- **Refreshes:** Every time you reload the page
+- **Live Data:** Executes `pfctl -a parental_control -sr` on demand
+- **Accurate:** Always shows the actual active rules
+
+**Auto-refresh example:**
+1. Open Status page at 19:55 → Shows "0 blocked"
+2. Wait for 20:00 (Bedtime-1 starts)
+3. Refresh Status page at 20:05 → Shows "5 blocked" (Vishesh devices)
+
+---
+
+## 📍 Where to Find It
+
+**Navigation:**
+```
+Services → KACI Parental Control → Status
+```
+
+**Location on Page:**
+- Below "Active Schedules" section
+- Above "Recent Log Entries" section
+
+---
+
+## 🎯 Use Cases
+
+### 1. Verify Blocking is Working
+
+**Scenario:** "Is Vishesh really blocked during bedtime?"
+
+**Solution:**
+1. Open Status page at 20:00
+2. Look for "Active Firewall Rules" section
+3. See all 5 Vishesh devices listed with block rules
+4. Confirmed! ✅
+
+---
+
+### 2. Debug Issues
+
+**Scenario:** "Why can't I access internet?"
+
+**Solution:**
+1. Open Status page
+2. Check if your device IP appears in rules
+3. See reason: "Time limit exceeded" or "Scheduled block time"
+4. Mystery solved! ✅
+
+---
+
+### 3. Monitor Real-Time Changes
+
+**Scenario:** "Does blocking happen automatically?"
+
+**Solution:**
+1. Open Status page at 19:58 → Shows "0 blocked"
+2. Wait 2 minutes
+3. Refresh at 20:01 → Shows "5 blocked"
+4. Confirmed automatic! ✅
+
+---
+
+### 4. Check Specific Device
+
+**Scenario:** "Is Anitasiphone blocked?"
+
+**Solution:**
+1. Open Status page
+2. Search for "Anitasiphone" in rules
+3. If found → Blocked ✅
+4. If not found → Not blocked ✅
+
+---
+
+## 💡 Pro Tips
+
+### Tip 1: Use Browser Search
+
+Press `Ctrl+F` (or `Cmd+F`) to search for:
+- Device name: "Vishesh-iPhone"
+- IP address: "192.168.1.115"
+- Block reason: "Time limit exceeded"
+
+### Tip 2: Count Devices Quickly
+
+Look at the badge in the section header:
+- **Green badge "0 blocked"** = All clear
+- **Red badge "3 blocked"** = 3 devices blocked
+
+### Tip 3: Understand Block Reasons
+
+Rules show the reason in the device header:
+- `Scheduled block time` = During bedtime/schedule
+- `Time limit exceeded` = Used all daily time
+- `Parent override active` = Won't be in list!
+
+### Tip 4: Check Right After Changes
+
+Made a change to schedules or limits?
+1. Wait 5 minutes (cron cycle)
+2. Refresh Status page
+3. See updated rules
+
+---
+
+## 🆚 Before vs After v1.1.1
+
+### Before (v1.1.0 and earlier):
+
+```
+❌ Had to SSH to firewall
+❌ Run: sudo pfctl -a parental_control -sr
+❌ Command-line knowledge required
+❌ Copy/paste from terminal
+❌ Not user-friendly for non-technical users
+```
+
+### After (v1.1.1):
+
+```
+✅ Just open Status page in browser
+✅ Rules displayed automatically
+✅ Color-coded and explained
+✅ No CLI knowledge needed
+✅ User-friendly for everyone
+```
+
+---
+
+## 📊 Example Scenarios
+
+### Scenario 1: All Allowed (Morning, 8:00 AM)
+
+**Status Page Shows:**
+```
+✅ No Blocking Active - All devices currently have access.
+
+Profiles:
+- Vishesh: 0:00 / 4:00 (5 devices online)
+- Mukesh: 0:00 / 10:00 (2 devices online)
+- Anita: 0:00 / 6:00 (3 devices online)
+
+Firewall Rules: 0 blocked
+```
+
+---
+
+### Scenario 2: Time Limit Exceeded (Afternoon, 5:00 PM)
+
+**Status Page Shows:**
+```
+⚠️ Blocking Active - 5 device(s) currently blocked
+
+# Device: 192.168.1.115 (Vishesh-iPhone) - Time limit exceeded
+# Device: 192.168.1.113 (Vishesh-iphone) - Time limit exceeded
+# Device: 192.168.1.112 (Visheshbookpro14) - Time limit exceeded
+# Device: 192.168.1.96 (HISENSETV) - Time limit exceeded
+# Device: 192.168.1.95 (Basement-TV) - Time limit exceeded
+
+Profiles:
+- Vishesh: 4:00 / 4:00 (LIMIT REACHED)
+
+Firewall Rules: 5 blocked
+```
+
+---
+
+### Scenario 3: Bedtime (Evening, 10:00 PM)
+
+**Status Page Shows:**
+```
+⚠️ Blocking Active - 5 device(s) currently blocked
+
+# Device: 192.168.1.115 (Vishesh-iPhone) - Scheduled block time
+# Device: 192.168.1.113 (Vishesh-iphone) - Scheduled block time
+# Device: 192.168.1.112 (Visheshbookpro14) - Scheduled block time
+# Device: 192.168.1.96 (HISENSETV) - Scheduled block time
+# Device: 192.168.1.95 (Basement-TV) - Scheduled block time
+
+Active Schedules:
+- Bedtime-1 (20:00 - 23:59) → BLOCKING NOW
+
+Firewall Rules: 5 blocked
+```
+
+---
+
+## 🎉 Summary
+
+### What Changed:
+
+✅ **New Section:** "Active Firewall Rules (pfSense Anchor)"  
+✅ **Real-time Display:** Shows actual pfctl output  
+✅ **Color-coded:** Easy to understand  
+✅ **Device Count:** Badge shows blocked count  
+✅ **Rule Legend:** Explains each rule type  
+✅ **No CLI:** Everything in the GUI
+
+### Benefits:
+
+✅ **Transparency:** See exactly what's happening  
+✅ **Debugging:** Easy to verify and troubleshoot  
+✅ **User-friendly:** No technical knowledge needed  
+✅ **Real-time:** Always shows current state  
+✅ **Professional:** Clean, informative display
+
+---
+
+## 🚀 Try It Now!
+
+**Navigate to:**
+```
+https://fw.keekar.com/parental_control_status.php
+```
+
+**Or in pfSense GUI:**
+```
+Services → KACI Parental Control → Status
+```
+
+**Scroll to:**
+```
+"Active Firewall Rules (pfSense Anchor)" section
+```
+
+---
+
+**Your Status page is now a complete monitoring dashboard!** 🎉
+
+---
+
+**Built with ❤️ by Mukesh Kesharwani**  
+**© 2025 Keekar**
+
+# ✨ Automatic Version Management - v1.0.2
+
+## 🎯 Problem Solved
+
+**Before (v1.0.1 and earlier):**
+- Version numbers hardcoded in multiple files
+- Manual updates required in 6+ locations for each release
+- Prone to inconsistencies and forgotten updates
+- Fallback values that became outdated
+
+**After (v1.0.2):**
+- ✅ **Single Source of Truth**: VERSION file
+- ✅ **Zero Manual Updates**: All pages read version automatically
+- ✅ **Always Consistent**: All footers show same version
+- ✅ **DRY Principle**: Define once, use everywhere
+
+---
+
+## 🔧 How It Works
+
+### 1. VERSION File (Source of Truth)
+```ini
+VERSION=1.0.2
+BUILD_DATE=2025-12-29
+RELEASE_TYPE=feature
+STATUS=production-ready
+```
+
+Located at: `/usr/local/pkg/parental_control_VERSION` on pfSense
+
+### 2. Automatic Detection in parental_control.inc
+```php
+// Automatically read from VERSION file
+if (!defined('PC_VERSION')) {
+	$version_file = '/usr/local/pkg/parental_control_VERSION';
+	if (file_exists($version_file)) {
+		$version_data = parse_ini_file($version_file);
+		define('PC_VERSION', $version_data['VERSION'] ?? '1.0.2');
+		define('PC_BUILD_DATE', $version_data['BUILD_DATE'] ?? date('Y-m-d'));
+	} else {
+		// Fallback if VERSION file not deployed (should not happen)
+		define('PC_VERSION', '1.0.2');
+		define('PC_BUILD_DATE', '2025-12-29');
+	}
+}
+```
+
+### 3. PHP Pages Use PC_VERSION Directly
+**Before:**
+```php
+v<?=defined('PC_VERSION') ? PC_VERSION : '1.0.1'?>
+```
+
+**After:**
+```php
+v<?=PC_VERSION?>
+```
+
+No fallback needed - `PC_VERSION` is guaranteed to be defined!
+
+---
+
+## 📦 Deployment
+
+### Files Modified
+1. **`parental_control.inc`** - Reads VERSION file on load
+2. **`parental_control_status.php`** - Removed hardcoded fallback
+3. **`parental_control_profiles.php`** - Removed hardcoded fallback
+4. **`parental_control_schedules.php`** - Removed hardcoded fallback
+5. **`parental_control_blocked.php`** - Removed hardcoded fallback
+6. **`INSTALL.sh`** - Deploys VERSION file as `parental_control_VERSION`
+
+### Installation Process
+```bash
+./INSTALL.sh update fw.keekar.com
+```
+
+The script:
+1. Copies `VERSION` to `/tmp/VERSION`
+2. Moves it to `/usr/local/pkg/parental_control_VERSION`
+3. Sets permissions to 644 (readable by all)
+
+---
+
+## ✅ Verification
+
+### Check VERSION File Exists
+```bash
+ssh mkesharw@fw.keekar.com 'cat /usr/local/pkg/parental_control_VERSION'
+```
+
+Expected output:
+```
+VERSION=1.0.2
+BUILD_DATE=2025-12-29
+RELEASE_TYPE=feature
+STATUS=production-ready
+```
+
+### Check Footer Display
+Navigate to any page in the web GUI:
+- Services → KACI Parental Control → Status
+- Services → KACI Parental Control → Profiles
+- Services → KACI Parental Control → Schedules
+
+Footer should show:
+```
+Keekar's Parental Control v1.0.2
+Built with Passion by Mukesh Kesharwani | © 2025 Keekar
+Build Date: 2025-12-29
+```
+
+---
+
+## 🚀 Release Process (Simplified!)
+
+### Old Way (v1.0.1 and earlier)
+```bash
+# Update 6+ files manually:
+1. Edit VERSION
+2. Edit info.xml
+3. Edit parental_control.xml
+4. Edit parental_control.inc (PC_VERSION)
+5. Edit all PHP page fallbacks
+6. Edit index.html (2 places)
+7. Update CHANGELOG.md
+8. Commit & deploy
+```
+
+### New Way (v1.0.2+)
+```bash
+# Update 4 files only:
+1. Edit VERSION
+2. Edit info.xml
+3. Edit parental_control.xml
+4. Edit index.html (2 places)
+5. Update CHANGELOG.md
+6. Commit & deploy
+
+# PHP pages update automatically! 🎉
+```
+
+---
+
+## 📊 Files That Update Automatically
+
+| Page | Footer Version | Source |
+|------|----------------|--------|
+| Status | ✅ Auto | PC_VERSION → VERSION file |
+| Profiles | ✅ Auto | PC_VERSION → VERSION file |
+| Schedules | ✅ Auto | PC_VERSION → VERSION file |
+| Block Page | ✅ Auto | PC_VERSION → VERSION file |
+| API | ✅ Auto | PC_VERSION → VERSION file |
+| Health Check | ✅ Auto | PC_VERSION → VERSION file |
+
+---
+
+## 🎯 Benefits
+
+### For Developers
+- ✅ **Less Work**: Update 1 file instead of 6+
+- ✅ **No Mistakes**: Can't forget to update a file
+- ✅ **Faster Releases**: Fewer files to modify
+- ✅ **Clean Code**: No hardcoded values
+
+### For Users
+- ✅ **Consistency**: All pages show same version
+- ✅ **Reliability**: Version always accurate
+- ✅ **Transparency**: Clear what version they're running
+
+### For Maintenance
+- ✅ **DRY Principle**: Define once, use everywhere
+- ✅ **Scalability**: Easy to add new pages
+- ✅ **Testability**: Single point to verify
+- ✅ **Documentation**: VERSION file is self-documenting
+
+---
+
+## 🔄 Backward Compatibility
+
+### Fallback Behavior
+If VERSION file doesn't exist (e.g., manual installation without INSTALL.sh):
+- Falls back to `PC_VERSION = '1.0.2'`
+- Falls back to `PC_BUILD_DATE = '2025-12-29'`
+- System continues to function normally
+- All pages still display version (the fallback value)
+
+### Migration from v1.0.1
+- **Automatic**: Run `./INSTALL.sh update`
+- **No config changes needed**
+- **No data loss**
+- **Immediate effect**
+
+---
+
+## 📝 Example: Updating to v1.0.3
+
+```bash
+# 1. Edit VERSION file
+echo "VERSION=1.0.3
+BUILD_DATE=$(date +%Y-%m-%d)
+RELEASE_TYPE=bugfix
+STATUS=production-ready" > VERSION
+
+# 2. Edit info.xml
+sed -i '' 's/<version>1.0.2<\/version>/<version>1.0.3<\/version>/' info.xml
+
+# 3. Edit parental_control.xml
+sed -i '' 's/<version>1.0.2<\/version>/<version>1.0.3<\/version>/' parental_control.xml
+
+# 4. Edit index.html
+sed -i '' 's/Version 1.0.2/Version 1.0.3/' index.html
+sed -i '' 's/1.0.2<\/div>/1.0.3<\/div>/' index.html
+
+# 5. Update CHANGELOG.md
+# (Add your changelog entry)
+
+# 6. Commit
+git add -A
+git commit -m "Release v1.0.3"
+git tag -a v1.0.3 -m "v1.0.3"
+git push origin main --tags
+
+# 7. Deploy
+./INSTALL.sh update fw.keekar.com
+
+# DONE! All PHP pages now show v1.0.3 automatically! 🎉
+```
+
+---
+
+## 🎉 Result
+
+All PHP pages in your pfSense firewall **automatically display the correct version** from the VERSION file!
+
+**No more hardcoded version numbers!**  
+**No more manual footer updates!**  
+**Just works!** ✨
+
+---
+
+**Built with ❤️ by Mukesh Kesharwani**  
+**© 2025 Keekar**
+
