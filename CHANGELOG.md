@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.1] - 2025-12-29 ✨ FEATURE: Firewall Rules Visibility in Status Page
+
+### 🎯 Enhancement
+**Status page now shows active firewall rules - no CLI needed!**
+
+### Added
+- **New Section:** "Active Firewall Rules (pfSense Anchor)" in Status page
+- **Real-time Display:** Shows output of `pfctl -a parental_control -sr`
+- **Color-coded Rules:** 
+  - Green: Pass rules (DNS, pfSense access)
+  - Blue: Redirect rules (HTTP/HTTPS to block page)
+  - Red: Block rules (drop all traffic)
+- **Device Counter:** Badge showing number of blocked devices
+- **Rule Legend:** Explains what each rule type does
+- **Status Indicator:** Green "No Blocking Active" or Red "Blocking Active"
+
+### Changed
+- Status page now includes firewall rule visibility
+- Users can see which devices are blocked without SSH/CLI
+
+### Benefits
+- ✅ **Transparency:** See exactly what's blocked and why
+- ✅ **Debugging:** Easy to verify rules are working
+- ✅ **User-friendly:** No command-line knowledge needed
+- ✅ **Real-time:** Updates every page refresh
+
+### User Experience
+**Before v1.1.1:**
+- Had to SSH to firewall
+- Run: `sudo pfctl -a parental_control -sr`
+- Command-line knowledge required
+
+**After v1.1.1:**
+- Just open Status page
+- Rules displayed automatically
+- Color-coded and explained
+
+---
+
 ## [1.1.0] - 2025-12-29 🎯 MAJOR FEATURE: Shared Profile Time Accounting
 
 ### 🚨 CRITICAL CHANGE

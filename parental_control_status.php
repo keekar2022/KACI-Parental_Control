@@ -346,6 +346,115 @@ if (is_array($profiles)) {
 	</div>
 </div>
 
+<!-- Active Firewall Rules -->
+<div class="panel panel-default">
+	<div class="panel-heading">
+		<h2 class="panel-title">
+			<i class="fa-solid fa-shield-alt"></i> <?=gettext("Active Firewall Rules (pfSense Anchor)")?>
+			<span class="badge" style="background: #5bc0de; margin-left: 10px;" id="rule-count">Loading...</span>
+		</h2>
+	</div>
+	<div class="panel-body">
+		<?php
+		// Execute pfctl command to get anchor rules
+		$anchor_rules = array();
+		$anchor_output = '';
+		exec('pfctl -a parental_control -sr 2>&1', $anchor_rules, $return_code);
+		
+		// Check if anchor has rules
+		if ($return_code === 0 && !empty($anchor_rules)) {
+			// Count devices (lines starting with "# Device:")
+			$device_count = 0;
+			foreach ($anchor_rules as $line) {
+				if (strpos($line, '# Device:') === 0) {
+					$device_count++;
+				}
+			}
+			?>
+			<div class="alert alert-warning">
+				<i class="fa-solid fa-exclamation-triangle"></i>
+				<strong><?=gettext("Blocking Active")?></strong> - 
+				<?php echo $device_count; ?> device(s) currently blocked by parental control firewall rules.
+			</div>
+			
+			<p class="text-info">
+				<i class="fa-solid fa-info-circle"></i>
+				<strong>Note:</strong> These rules are managed via pfSense anchors and are NOT visible in Firewall → Rules GUI.
+				They are applied dynamically by the parental control system.
+			</p>
+			
+			<div style="margin-top: 15px;">
+				<strong><?=gettext("Rule Details:")?></strong>
+				<pre style="background: #f5f5f5; padding: 15px; border: 1px solid #ddd; border-radius: 4px; max-height: 400px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 12px;"><?php
+					foreach ($anchor_rules as $line) {
+						// Highlight different rule types
+						$line = htmlspecialchars($line);
+						
+						if (strpos($line, '# Device:') === 0) {
+							// Device header - make it bold and colored
+							echo '<span style="color: #d9534f; font-weight: bold;">' . $line . '</span>' . "\n";
+						} elseif (strpos($line, 'block drop') !== false) {
+							// Block rules - red
+							echo '<span style="color: #c9302c; font-weight: bold;">' . $line . '</span>' . "\n";
+						} elseif (strpos($line, 'pass quick') !== false) {
+							// Pass rules - green
+							echo '<span style="color: #5cb85c;">' . $line . '</span>' . "\n";
+						} elseif (strpos($line, 'rdr pass') !== false) {
+							// Redirect rules - blue
+							echo '<span style="color: #337ab7;">' . $line . '</span>' . "\n";
+						} else {
+							// Other lines
+							echo '<span style="color: #666;">' . $line . '</span>' . "\n";
+						}
+					}
+				?></pre>
+			</div>
+			
+			<div class="alert alert-info" style="margin-top: 15px;">
+				<h4><i class="fa-solid fa-question-circle"></i> <?=gettext("Rule Legend:")?></h4>
+				<ul style="margin-bottom: 0;">
+					<li><span style="color: #5cb85c; font-weight: bold;">pass quick</span> - Allow specific traffic (DNS, pfSense access)</li>
+					<li><span style="color: #337ab7; font-weight: bold;">rdr pass</span> - Redirect HTTP/HTTPS to block page</li>
+					<li><span style="color: #c9302c; font-weight: bold;">block drop</span> - Block all other traffic</li>
+				</ul>
+			</div>
+			
+			<script>
+				// Update badge count
+				document.getElementById('rule-count').textContent = '<?php echo $device_count; ?> blocked';
+				document.getElementById('rule-count').style.background = '#d9534f';
+			</script>
+			
+		<?php } else { ?>
+			<div class="alert alert-success">
+				<i class="fa-solid fa-check-circle"></i>
+				<strong><?=gettext("No Blocking Active")?></strong> - All devices currently have access.
+			</div>
+			<p class="text-muted">
+				<i class="fa-solid fa-info-circle"></i>
+				Firewall rules will appear here automatically when devices are blocked due to:
+			</p>
+			<ul class="text-muted">
+				<li>Time limit exceeded</li>
+				<li>Blocked schedule time (e.g., bedtime)</li>
+			</ul>
+			
+			<script>
+				// Update badge
+				document.getElementById('rule-count').textContent = '0 blocked';
+				document.getElementById('rule-count').style.background = '#5cb85c';
+			</script>
+		<?php } ?>
+		
+		<hr>
+		<p class="text-muted" style="font-size: 11px; margin-bottom: 0;">
+			<strong>Location:</strong> Anchor: <code>parental_control</code> | 
+			File: <code>/tmp/rules.parental_control</code> | 
+			<strong>CLI Command:</strong> <code>pfctl -a parental_control -sr</code>
+		</p>
+	</div>
+</div>
+
 <div class="panel panel-default">
 	<div class="panel-heading">
 		<h2 class="panel-title"><?=gettext("Recent Log Entries")?></h2>
