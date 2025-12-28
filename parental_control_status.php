@@ -379,7 +379,7 @@ if (is_array($profiles)) {
 <!-- Package Footer -->
 <div style="text-align: center; margin-top: 30px; padding: 15px; border-top: 2px solid #ddd; background: #f9f9f9;">
 	<p style="margin: 5px 0; color: #666; font-size: 13px;">
-		<strong>Keekar's Parental Control</strong> v<?php echo defined('PC_VERSION') ? PC_VERSION : '0.0.9'; ?> 
+		<strong>Keekar's Parental Control</strong> v<?php echo defined('PC_VERSION') ? PC_VERSION : '1.0.1'; ?> 
 		<span style="margin: 0 10px;">|</span>
 		Built with Passion by <strong>Mukesh Kesharwani</strong>
 		<span style="margin: 0 10px;">|</span>

@@ -781,7 +781,7 @@ function toggleAllDevices(checkbox) {
 
 <!-- Package Footer -->
 <div style="text-align: center; margin-top: 30px; padding: 15px; border-top: 2px solid #ddd; background: #f9f9f9;">
-	<strong>Keekar's Parental Control</strong> v<?=defined('PC_VERSION') ? PC_VERSION : '0.4.1'?><br>
+	<strong>Keekar's Parental Control</strong> v<?=defined('PC_VERSION') ? PC_VERSION : '1.0.1'?><br>
 	Built with Passion by <strong>Mukesh Kesharwani</strong> | © <?=date('Y')?> Keekar
 </div>
 
