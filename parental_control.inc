@@ -17,10 +17,20 @@ require_once("filter.inc");
 require_once("shaper.inc");
 require_once("notices.inc");
 
-// Package version - Auto-increment on each .inc update
-define('PC_VERSION', '1.0.1');
+// Package version - Automatically read from VERSION file
+if (!defined('PC_VERSION')) {
+	$version_file = '/usr/local/pkg/parental_control_VERSION';
+	if (file_exists($version_file)) {
+		$version_data = parse_ini_file($version_file);
+		define('PC_VERSION', $version_data['VERSION'] ?? '1.0.1');
+		define('PC_BUILD_DATE', $version_data['BUILD_DATE'] ?? date('Y-m-d'));
+	} else {
+		// Fallback if VERSION file not deployed (should not happen in production)
+		define('PC_VERSION', '1.0.1');
+		define('PC_BUILD_DATE', '2025-12-29');
+	}
+}
 define('PC_AUTHOR', 'Mukesh Kesharwani');
-define('PC_BUILD_DATE', '2025-12-26');
 
 // File paths - Support environment variable overrides for flexibility
 // This allows customization without editing code, useful for testing and containers

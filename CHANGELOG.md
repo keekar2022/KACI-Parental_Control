@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.2] - 2025-12-29 ✨ FEATURE: Automatic Version Management
+
+### 🎯 Enhancement
+**Version number is now automatically read from VERSION file**
+
+### Added
+- **Automatic Version Detection**: `PC_VERSION` constant now reads from VERSION file
+- **Single Source of Truth**: Version defined in one place (`VERSION` file)
+- **Zero Manual Updates**: No more hardcoded version numbers in PHP files
+- **Deployment Integration**: INSTALL.sh now deploys VERSION file as `parental_control_VERSION`
+
+### Changed
+- Modified `parental_control.inc` to read VERSION file dynamically using `parse_ini_file()`
+- Removed all hardcoded fallback versions from PHP footers (status, profiles, schedules, blocked pages)
+- Updated `INSTALL.sh` to copy and install VERSION file to `/usr/local/pkg/parental_control_VERSION`
+- Updated uninstall process to remove VERSION file
+
+### Technical Details
+- VERSION file location: `/usr/local/pkg/parental_control_VERSION`
+- Automatic parse on every page load via `require_once("parental_control.inc")`
+- Fallback to '1.0.2' only if VERSION file doesn't exist (should never happen in production)
+
+### Benefits
+- ✅ **DRY Principle**: Version defined once, used everywhere
+- ✅ **No Manual Updates**: Bump version in one file, all pages update automatically
+- ✅ **Consistent Display**: All pages show the same version
+- ✅ **Maintainability**: Easier to manage releases
+
+---
+
 ## [1.0.1] - 2025-12-29 🔧 CRITICAL HOTFIX
 
 ### 🐛 Critical Bug Fix

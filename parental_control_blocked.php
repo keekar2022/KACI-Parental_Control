@@ -450,7 +450,7 @@ body {
 	<?php endif; ?>
 	
 	<div class="footer-info">
-		<strong>Keekar's Parental Control</strong> v<?= defined('PC_VERSION') ? PC_VERSION : '1.0.1' ?><br>
+		<strong>Keekar's Parental Control</strong> v<?= PC_VERSION ?><br>
 		Built with Passion by <strong>Mukesh Kesharwani</strong> | © <?= date('Y') ?> Keekar
 	</div>
 </div>

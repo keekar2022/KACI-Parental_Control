@@ -250,6 +250,7 @@ upload_files() {
         "$PACKAGE_DIR/info.xml" \
         "$PACKAGE_DIR/parental_control.xml" \
         "$PACKAGE_DIR/parental_control.inc" \
+        "$PACKAGE_DIR/VERSION" \
         "$PACKAGE_DIR/parental_control_status.php" \
         "$PACKAGE_DIR/parental_control_profiles.php" \
         "$PACKAGE_DIR/parental_control_schedules.php" \
@@ -283,6 +284,7 @@ upload_files() {
         sudo -n mv /tmp/info.xml /usr/local/share/pfSense-pkg-KACI-Parental_Control/ && \
         sudo -n mv /tmp/parental_control.xml /usr/local/pkg/ && \
         sudo -n mv /tmp/parental_control.inc /usr/local/pkg/ && \
+        sudo -n mv /tmp/VERSION /usr/local/pkg/parental_control_VERSION && \
         sudo -n mv /tmp/parental_control_status.php /usr/local/www/ && \
         sudo -n mv /tmp/parental_control_profiles.php /usr/local/www/ && \
         sudo -n mv /tmp/parental_control_schedules.php /usr/local/www/ && \
@@ -296,6 +298,7 @@ upload_files() {
         sudo -n mv /tmp/TROUBLESHOOTING.md /usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/ 2>/dev/null; true && \
         sudo -n chmod 644 /usr/local/pkg/parental_control*.xml && \
         sudo -n chmod 644 /usr/local/pkg/parental_control.inc && \
+        sudo -n chmod 644 /usr/local/pkg/parental_control_VERSION && \
         sudo -n chmod 644 /usr/local/www/parental_control*.php && \
         sudo -n chmod 755 /usr/local/bin/parental_control_diagnostic.php 2>/dev/null; true && \
         sudo -n chmod 755 /usr/local/bin/parental_control_analyzer.sh 2>/dev/null; true && \
@@ -652,6 +655,7 @@ UNREGISTER_EOF
     if ssh $PFSENSE_USER@$PFSENSE_IP "
         sudo rm -f /usr/local/pkg/parental_control.xml 2>/dev/null
         sudo rm -f /usr/local/pkg/parental_control.inc 2>/dev/null
+        sudo rm -f /usr/local/pkg/parental_control_VERSION 2>/dev/null
         sudo rm -f /usr/local/www/parental_control_status.php 2>/dev/null
         sudo rm -f /usr/local/www/parental_control_profiles.php 2>/dev/null
         sudo rm -f /usr/local/www/parental_control_schedules.php 2>/dev/null
