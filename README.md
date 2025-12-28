@@ -349,9 +349,9 @@ php -l parental_control.inc
 - **[🔬 Technical Reference](docs/TECHNICAL_REFERENCE.md)** - API, Architecture, and Development
 
 **See also:**
-- **[Changelog](CHANGELOG.md)** - Complete version history
+- **[Changelog](docs/CHANGELOG.md)** - Complete version history
 - **[Documentation Index](docs/README.md)** - Navigate all documentation
-- **[Release Notes](RELEASE_NOTES_v1.0.0.md)** - What's new in v1.0.0
+- **[Release Notes](docs/RELEASE_NOTES_v1.0.0.md)** - What's new in v1.0.0
 
 ### Useful Commands
 ```bash

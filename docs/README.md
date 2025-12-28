@@ -76,11 +76,27 @@ All documentation follows these principles:
 
 ---
 
-## 📂 Additional Files
+## 📂 Additional Documentation
 
-- **[../CHANGELOG.md](../CHANGELOG.md)** - Complete version history
-- **[../README.md](../README.md)** - Project overview
+### Core Documentation
+- **[CHANGELOG.md](CHANGELOG.md)** - Complete version history
+- **[../README.md](../README.md)** - Project overview (stays in root for GitHub)
 - **[../LICENSE](../LICENSE)** - MIT License
+
+### Release Documentation
+- **[RELEASE_NOTES_v1.0.0.md](RELEASE_NOTES_v1.0.0.md)** - v1.0.0 release notes
+- **[RELEASE_CHECKLIST_v1.0.0.md](RELEASE_CHECKLIST_v1.0.0.md)** - v1.0.0 release checklist
+
+### Feature Documentation
+- **[SHARED_PROFILE_TIME_v1.1.0.md](SHARED_PROFILE_TIME_v1.1.0.md)** - Shared profile time accounting feature
+- **[FIREWALL_RULES_STATUS_PAGE_v1.1.1.md](FIREWALL_RULES_STATUS_PAGE_v1.1.1.md)** - Firewall rules visibility feature
+- **[SCHEDULES_AND_TIME_LIMITS_EXPLAINED.md](SCHEDULES_AND_TIME_LIMITS_EXPLAINED.md)** - How schedules and time limits work
+- **[WHERE_TO_SEE_FIREWALL_RULES.md](WHERE_TO_SEE_FIREWALL_RULES.md)** - Where to find firewall rules
+- **[AUTOMATIC_VERSION_GUIDE.md](AUTOMATIC_VERSION_GUIDE.md)** - Automatic version management system
+
+### Hotfix Documentation
+- **[HOTFIX_v1.1.2_STATUS_PAGE.md](HOTFIX_v1.1.2_STATUS_PAGE.md)** - v1.1.2 status page display fix
+- **[HOTFIX_v1.0.1_SUMMARY.md](HOTFIX_v1.0.1_SUMMARY.md)** - v1.0.1 cron installation fix
 
 ---
 
