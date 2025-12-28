@@ -173,22 +173,24 @@ if (is_array($profiles)) {
 							$device_name = htmlspecialchars($device['device_name']);
 							$mac_display = htmlspecialchars($device['mac_address']);
 							
-							// Get usage from state (IP-based tracking since v0.2.1)
+							// CRITICAL: Get usage from PROFILE (shared time accounting)
+							// WHY: All devices in a profile share the same time budget
+							// Example: 4 hour limit = 4 hours TOTAL across ALL devices in profile
 							$usage_today = 0;
 							$device_ip = null;
+							$profile_name = isset($device['profile_name']) ? $device['profile_name'] : null;
 							
-							// First, try to find IP from mac_to_ip_cache
+							// Get PROFILE usage (not individual device usage)
+							if ($profile_name && isset($state['profiles'][$profile_name]['usage_today'])) {
+								$usage_today = intval($state['profiles'][$profile_name]['usage_today']);
+							}
+							
+							// Also get device IP for status display
 							if (isset($state['mac_to_ip_cache'][$mac])) {
 								$device_ip = $state['mac_to_ip_cache'][$mac];
 							}
 							
-							// If IP found, get usage from devices_by_ip
-							if ($device_ip && isset($state['devices_by_ip'][$device_ip])) {
-								$usage_today = isset($state['devices_by_ip'][$device_ip]['usage_today']) ? 
-									intval($state['devices_by_ip'][$device_ip]['usage_today']) : 0;
-							}
-							
-							// Calculate remaining time
+							// Calculate remaining time based on PROFILE usage
 							$remaining = $daily_limit - $usage_today;
 							if ($remaining < 0) $remaining = 0;
 							

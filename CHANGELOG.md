@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0] - 2025-12-29 🎯 MAJOR FEATURE: Shared Profile Time Accounting
+
+### 🚨 CRITICAL CHANGE
+**Time limits are now SHARED across all devices in a profile** (bypass-proof!)
+
+### The Problem (Before v1.1.0)
+- Time was tracked PER DEVICE
+- Profile with 4-hour limit and 5 devices = **20 hours total** (4 hrs × 5 devices)
+- Children could bypass limits by switching between devices
+- Example: Vishesh profile (5 devices, 4hr limit) = 20 hours/day total!
+
+### The Solution (v1.1.0+)
+- ✅ Time tracked PER PROFILE (shared across all devices)
+- ✅ Profile with 4-hour limit and 5 devices = **4 hours total**
+- ✅ Usage accumulates across ALL devices in the profile
+- ✅ When limit reached, ALL devices in profile are blocked
+- ✅ **Truly bypass-proof** - can't game the system!
+
+### Changed
+- **`pc_update_device_usage()`**: Now tracks usage at profile level
+- **`pc_is_time_limit_exceeded()`**: Checks profile usage, not device usage
+- **`pc_reset_daily_counters()`**: Resets profile counters at midnight
+- **`parental_control_status.php`**: Displays shared profile usage
+
+### Technical Details
+- State structure now includes `profiles` array with `usage_today` counters
+- Each device activity adds time to its profile's shared counter
+- All devices in a profile check against the same usage value
+- Blocking logic evaluates profile limit, affecting all profile devices
+
+### Example (Vishesh Profile)
+**Before v1.1.0:**
+- Device 1: 4 hours, Device 2: 4 hours, Device 3: 4 hours, etc.
+- **Total: 20 hours/day** (4 hrs × 5 devices) ❌
+
+**After v1.1.0:**
+- Profile: 4 hours TOTAL shared across all 5 devices
+- **Total: 4 hours/day** (shared) ✅
+
+### Migration
+- Existing installations: Profile counters start fresh at 0
+- No config changes needed
+- All devices will now share profile time immediately
+
+### Impact
+- **HIGH**: Fixes bypass vulnerability where children switch devices
+- **Recommended**: All users should upgrade immediately
+- **Note**: Effective time available will be reduced (as intended!)
+
+---
+
 ## [1.0.2] - 2025-12-29 ✨ FEATURE: Automatic Version Management
 
 ### 🎯 Enhancement

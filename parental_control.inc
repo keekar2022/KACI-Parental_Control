@@ -1571,9 +1571,17 @@ function pc_matches_custom_schedule($schedule, $current_day, $current_time) {
  * @see pc_load_state() For state retrieval
  */
 function pc_is_time_limit_exceeded($device, $state) {
-	$mac = pc_normalize_mac($device['mac_address']);
+	// CRITICAL: Time limits are SHARED across all devices in a profile
+	// WHY: Parents want to limit total screen time, not per-device time
+	// Example: If profile limit is 4 hours, that's 4 hours TOTAL across all devices
+	// Not 4 hours per device (which would give 20 hours total for 5 devices!)
 	
-	// Get daily limit
+	$profile_name = isset($device['profile_name']) ? $device['profile_name'] : null;
+	if (!$profile_name) {
+		return false; // No profile assigned
+	}
+	
+	// Get daily limit from profile
 	$daily_limit = isset($device['daily_limit']) ? intval($device['daily_limit']) : 0;
 	if ($daily_limit == 0) {
 		return false; // Unlimited
@@ -1585,10 +1593,11 @@ function pc_is_time_limit_exceeded($device, $state) {
 		$daily_limit += intval($device['weekend_bonus']);
 	}
 	
-	// Get usage from state
+	// CRITICAL: Get usage from PROFILE, not device
+	// All devices in the same profile share the same usage counter
 	$usage_today = 0;
-	if (isset($state['devices'][$mac]['usage_today'])) {
-		$usage_today = $state['devices'][$mac]['usage_today'];
+	if (isset($state['profiles'][$profile_name]['usage_today'])) {
+		$usage_today = $state['profiles'][$profile_name]['usage_today'];
 	}
 	
 	return ($usage_today >= $daily_limit);
@@ -2471,6 +2480,7 @@ function pc_should_reset_counters($last_reset, $reset_time) {
  */
 function pc_reset_daily_counters(&$state) {
 	$reset_count = 0;
+	$profile_reset_count = 0;
 	
 	// Reset MAC-based tracking (legacy, for backward compatibility)
 	if (isset($state['devices']) && is_array($state['devices'])) {
@@ -2490,10 +2500,23 @@ function pc_reset_daily_counters(&$state) {
 		unset($device_state); // Break reference
 	}
 	
-	pc_log("Daily usage counters reset for $reset_count device entries", 'info', array(
+	// CRITICAL: Reset PROFILE counters (shared time accounting)
+	// WHY: Profiles track cumulative time across all devices
+	// This must be reset at midnight for daily limits to work correctly
+	if (isset($state['profiles']) && is_array($state['profiles'])) {
+		foreach ($state['profiles'] as $profile_name => &$profile_state) {
+			$profile_state['usage_today'] = 0;
+			$profile_state['last_reset'] = time();
+			$profile_reset_count++;
+		}
+		unset($profile_state); // Break reference
+	}
+	
+	pc_log("Daily usage counters reset", 'info', array(
 		'event.action' => 'daily_reset',
 		'event.category' => 'system',
 		'devices.reset' => $reset_count,
+		'profiles.reset' => $profile_reset_count,
 		'reset.type' => 'daily'
 	));
 }
@@ -2820,31 +2843,59 @@ function pc_update_device_usage(&$state) {
 			$state['devices_by_ip'][$ip]['last_seen'] = time();
 			$tracked_count++;
 			
+			// CRITICAL: SHARED PROFILE TIME ACCOUNTING
+			// WHY: Time limits are per PROFILE, not per device
+			// All devices in a profile share the same time budget
+			// Example: 4 hour limit = 4 hours TOTAL across ALL devices
+			$profile_name = isset($device['profile_name']) ? $device['profile_name'] : null;
+			if ($profile_name) {
+				// Initialize profile tracking if needed
+				if (!isset($state['profiles'])) {
+					$state['profiles'] = array();
+				}
+				if (!isset($state['profiles'][$profile_name])) {
+					$state['profiles'][$profile_name] = array(
+						'usage_today' => 0,
+						'usage_week' => 0,
+						'last_reset' => time()
+					);
+				}
+				
+				// Add usage to PROFILE counter (shared across all devices)
+				$state['profiles'][$profile_name]['usage_today'] += $interval_minutes;
+				$state['profiles'][$profile_name]['usage_week'] += $interval_minutes;
+				$state['profiles'][$profile_name]['last_update'] = time();
+				
+				$profile_usage_today = $state['profiles'][$profile_name]['usage_today'];
+			} else {
+				$profile_usage_today = 0;
+			}
+			
 			pc_log("Device $device_name ($mac @ $ip) active: added $interval_minutes minutes", 'info', array(
 				'event.action' => 'usage_tracked',
 				'device.mac' => $mac,
 				'device.name' => $device_name,
 				'client.address' => $ip,
+				'profile.name' => $profile_name,
 				'usage.minutes' => $interval_minutes,
-				'usage.today' => $state['devices_by_ip'][$ip]['usage_today'],
+				'usage.device_today' => $state['devices_by_ip'][$ip]['usage_today'],
+				'usage.profile_today' => $profile_usage_today,
 				'connections' => $connection_count,
 				'event.outcome' => 'success'
 			));
 			
-			// Check if device exceeded limits
-			if (isset($device['daily_limit']) && $device['daily_limit'] > 0) {
-				if ($state['devices_by_ip'][$ip]['usage_today'] >= $device['daily_limit']) {
-					pc_log("Device $device_name ($mac @ $ip) exceeded daily limit", 'warn', array(
-						'event.action' => 'limit_exceeded',
+			// Check if PROFILE exceeded limits (not individual device)
+			if ($profile_name && isset($device['daily_limit']) && $device['daily_limit'] > 0) {
+				if ($profile_usage_today >= $device['daily_limit']) {
+					pc_log("Profile $profile_name exceeded daily limit", 'warn', array(
+						'event.action' => 'profile_limit_exceeded',
+						'profile.name' => $profile_name,
+						'device.triggered_by' => $device_name,
 						'device.mac' => $mac,
-						'device.name' => $device_name,
 						'client.address' => $ip,
-						'usage.today' => $state['devices_by_ip'][$ip]['usage_today'],
+						'usage.profile_today' => $profile_usage_today,
 						'usage.limit' => $device['daily_limit']
 					));
-					
-					// TODO: Create/update firewall block rule BY IP
-					// This will be implemented in v0.3.0 with pfSense tables
 				}
 			}
 		} else {
