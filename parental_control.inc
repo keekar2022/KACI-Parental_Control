@@ -1780,19 +1780,7 @@ function pc_remove_firewall_rules() {
  * @see parental_control_cron_job() For the actual cron handler
  */
 function pc_setup_cron_job() {
-	install_cron_job(
-		"/usr/local/bin/php /usr/local/bin/parental_control_cron.php",
-		true,
-		PC_CRON_MINUTE,
-		"*",
-		"*",
-		"*",
-		"*",
-		"root",
-		false
-	);
-	
-	// Create cron script
+	// Create cron script first
 	$cron_script = <<<'EOD'
 #!/usr/local/bin/php-cgi -f
 <?php
@@ -1805,7 +1793,70 @@ EOD;
 	file_put_contents('/usr/local/bin/parental_control_cron.php', $cron_script);
 	chmod('/usr/local/bin/parental_control_cron.php', 0755);
 	
-	pc_log("Cron job installed", 'debug');
+	// Try pfSense's install_cron_job() first
+	try {
+		install_cron_job(
+			"/usr/local/bin/php /usr/local/bin/parental_control_cron.php",
+			true,
+			PC_CRON_MINUTE,
+			"*",
+			"*",
+			"*",
+			"*",
+			"root",
+			false
+		);
+		
+		// Verify it was actually installed
+		$output = array();
+		exec("crontab -l 2>&1 | grep -c 'parental_control'", $output, $ret);
+		$count = isset($output[0]) ? intval($output[0]) : 0;
+		
+		if ($count > 0) {
+			pc_log("Cron job installed successfully via install_cron_job()", 'info');
+			return;
+		}
+	} catch (Exception $e) {
+		pc_log("install_cron_job() failed: " . $e->getMessage(), 'warning');
+	}
+	
+	// Fallback: Direct crontab manipulation (more reliable)
+	pc_log("Using direct crontab manipulation as fallback", 'info');
+	
+	$cron_entry = PC_CRON_MINUTE . " * * * * /usr/local/bin/php /usr/local/bin/parental_control_cron.php";
+	
+	// Get current crontab
+	$current_crontab = array();
+	exec("crontab -l 2>/dev/null", $current_crontab, $ret);
+	
+	// Check if our entry already exists
+	$found = false;
+	foreach ($current_crontab as $line) {
+		if (strpos($line, 'parental_control_cron.php') !== false) {
+			$found = true;
+			break;
+		}
+	}
+	
+	if (!$found) {
+		// Add our cron entry
+		$current_crontab[] = $cron_entry;
+		
+		// Write new crontab
+		$temp_crontab = tempnam('/tmp', 'crontab_');
+		file_put_contents($temp_crontab, implode("\n", $current_crontab) . "\n");
+		
+		exec("crontab $temp_crontab 2>&1", $output, $ret);
+		unlink($temp_crontab);
+		
+		if ($ret === 0) {
+			pc_log("Cron job installed successfully via direct crontab", 'info');
+		} else {
+			pc_log("Failed to install cron job: " . implode("\n", $output), 'error');
+		}
+	} else {
+		pc_log("Cron job already exists", 'debug');
+	}
 }
 
 /**

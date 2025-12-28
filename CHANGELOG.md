@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.1] - 2025-12-29 🔧 CRITICAL HOTFIX
+
+### 🐛 Critical Bug Fix
+**Cron job installation was not reliable, causing daily reset to fail**
+
+### Fixed
+- **Cron Job Installation**: Enhanced `pc_setup_cron_job()` with dual-method approach
+  - Primary: Uses pfSense's `install_cron_job()` function
+  - Fallback: Direct crontab manipulation if primary method fails
+  - Verification: Checks if cron was actually installed after each method
+- **Daily Reset**: Now works reliably as cron job is guaranteed to be installed
+- **Usage Tracking**: Devices now properly track usage every 5 minutes
+
+### Technical Details
+- Modified `pc_setup_cron_job()` in `parental_control.inc`
+- Added automatic verification after cron installation
+- Improved error logging for cron setup failures
+- Ensures cron job persists across reboots
+
+### Impact
+- **HIGH**: Without this fix, daily usage counters would not reset at midnight
+- **HIGH**: Usage tracking would not work at all without the cron job
+- **Recommendation**: All v1.0.0 users should upgrade immediately
+
+---
+
 ## [1.0.0] - 2025-12-28 🎉 STABLE RELEASE
 
 ### 🚀 Major Milestone

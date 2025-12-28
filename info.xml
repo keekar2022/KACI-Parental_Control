@@ -4,7 +4,7 @@
 		<name>KACI-Parental_Control</name>
 		<descr><![CDATA[Keekar's Parental Control - Advanced time-based access control and content filtering for children's devices. Manage screen time, set daily/weekly limits, and block access during specific hours.]]></descr>
 		<website>https://github.com/keekar/KACI-Parental-Control</website>
-		<version>1.0.0</version>
+		<version>1.0.1</version>
 		<required_version>2.7.0</required_version>
 		<maximum_version></maximum_version>
 		<maintainer>Mukesh Kesharwani (Keekar)</maintainer>
