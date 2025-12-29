@@ -3132,35 +3132,32 @@ function pc_should_reset_counters($last_reset, $reset_time) {
 	$now = time();
 	$today_reset = strtotime("today " . str_replace(':', ':', $reset_time));
 	
-	// CRITICAL FIX: Check if we've crossed into a new day
-	// WHY: Old logic compared timestamps directly, which broke if manual reset
-	// happened after midnight. New logic checks if last reset was YESTERDAY.
+	// CRITICAL FIX: Proper daily reset boundary check
+	// WHY: We need to reset exactly once per day at the configured time
 	// 
-	// Design Decision: We reset at configured time (e.g., 6:00 AM) not midnight
-	// Rationale: Parents want the "day" to start when child wakes up, not at midnight
-	// when they're sleeping. This prevents gaming the system by staying up past midnight.
+	// The challenge: Determine if we've crossed a reset boundary since last reset
+	// - Can't just compare timestamps (breaks with manual resets after reset time)
+	// - Need to check if we've entered a NEW reset period
 	//
-	// Logic:
-	// 1. If current time >= today's reset time AND
-	// 2. Last reset was before today's reset time (could be yesterday or earlier)
-	// THEN reset is needed
+	// Solution: Check if last reset was in a PREVIOUS reset period
+	// - If now >= today's reset time, check if last reset < today's reset time
+	// - If now < today's reset time, check if last reset < yesterday's reset time
 	//
-	// Edge case: If manual reset happens after today's reset time, we use date comparison
-	// to ensure reset runs again at the next reset time (tomorrow)
+	// This ensures:
+	// 1. Reset runs once per day at configured time
+	// 2. Manual resets after the daily reset don't trigger another reset
+	// 3. Works with any reset time (midnight, 6am, etc.)
 	
 	if ($now >= $today_reset) {
-		// We're past today's reset time
-		if ($last_reset < $today_reset) {
-			// Last reset was before today's reset - need reset NOW
-			return true;
-		} else {
-			// Last reset was after today's reset (manual reset or already ran today)
-			// Don't reset again today
-			return false;
-		}
+		// We're currently past today's reset time
+		// Should reset if last reset was before today's reset time
+		// (could be yesterday, or earlier today before the reset time)
+		return ($last_reset < $today_reset);
 	} else {
 		// We haven't reached today's reset time yet
-		// Check if last reset was yesterday (or earlier)
+		// Should reset if last reset was before YESTERDAY's reset time
+		// (this handles the case where it's currently 3am, reset time is 6am,
+		// and last reset was yesterday before 6am)
 		$yesterday_reset = strtotime("yesterday " . str_replace(':', ':', $reset_time));
 		return ($last_reset < $yesterday_reset);
 	}
