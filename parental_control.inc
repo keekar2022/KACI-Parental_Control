@@ -2023,11 +2023,30 @@ function pc_calculate_blocked_devices($state) {
 		}
 		
 		if ($should_block) {
-			$blocked[$mac] = [
-				'device' => $device,
-				'reason' => $reason,
-				'enforcement_mode' => $enforcement_mode
-			];
+			// CRITICAL: Only block devices that are ONLINE (have an IP address)
+			// WHY: pfSense firewall rules require IP addresses, not MAC addresses
+			// Offline devices will be blocked automatically when they come online
+			
+			// Check if device has an IP address in the cache
+			$has_ip = isset($state['mac_to_ip_cache'][$mac]) && !empty($state['mac_to_ip_cache'][$mac]);
+			
+			if ($has_ip) {
+				// Device is online - can be blocked
+				$blocked[$mac] = [
+					'device' => $device,
+					'reason' => $reason,
+					'enforcement_mode' => $enforcement_mode
+				];
+			} else {
+				// Device is offline - skip for now, will block when it comes online
+				pc_log("Device {$mac} should be blocked but is offline - will block when online", 'debug', array(
+					'event.action' => 'block_deferred',
+					'device.mac' => $mac,
+					'device.name' => isset($device['device_name']) ? $device['device_name'] : 'Unknown',
+					'block.reason' => $reason,
+					'note' => 'Device offline - no IP address'
+				));
+			}
 		}
 	}
 	
@@ -2113,10 +2132,13 @@ function pc_add_device_block($device, $enforcement_mode, $reason, $state) {
 	}
 	
 	if (empty($ip)) {
-		pc_log("Cannot block device {$mac} - no IP address found", 'warning', array(
-			'event.action' => 'block_failed',
+		// Device is offline - this is normal, not an error
+		// Will be blocked automatically when it comes online
+		pc_log("Device {$mac} is offline - cannot block (no IP address)", 'debug', array(
+			'event.action' => 'block_skipped',
 			'device.mac' => $mac,
-			'reason' => 'no_ip_address'
+			'reason' => 'device_offline',
+			'note' => 'Will block automatically when device comes online'
 		));
 		return false;
 	}
@@ -2823,6 +2845,43 @@ function pc_update_device_usage(&$state) {
 		$state['devices_by_ip'][$ip]['name'] = $device_name;
 		$state['devices_by_ip'][$ip]['ip'] = $ip;
 		unset($state['devices_by_ip'][$ip]['offline_since']); // Clear offline flag
+		
+		// CRITICAL: Check if device should be blocked (for devices coming online)
+		// WHY: When offline devices come back online, they need to be blocked immediately
+		// if their profile has exceeded time limits or they're in a blocked schedule
+		$device_came_online = !isset($state['blocked_devices'][$mac]);
+		if ($device_came_online) {
+			// Check if this device should be blocked
+			$should_block = false;
+			$block_reason = '';
+			
+			// Check schedule
+			if (pc_is_in_blocked_schedule($device)) {
+				$should_block = true;
+				$block_reason = 'Scheduled block time';
+			}
+			
+			// Check time limit
+			if (!$should_block && pc_is_time_limit_exceeded($device, $state)) {
+				$should_block = true;
+				$block_reason = 'Time limit exceeded';
+			}
+			
+			// Block immediately if needed
+			if ($should_block) {
+				pc_log("Device $device_name came online and should be blocked - blocking now", 'info', array(
+					'event.action' => 'device_online_blocked',
+					'device.mac' => $mac,
+					'device.name' => $device_name,
+					'client.address' => $ip,
+					'block.reason' => $block_reason
+				));
+				
+				$pc_config = config_get_path('installedpackages/parentalcontrol/config/0', []);
+				$enforcement_mode = isset($pc_config['enforcement_mode']) ? $pc_config['enforcement_mode'] : 'strict';
+				pc_add_device_block($device, $enforcement_mode, $block_reason, $state);
+			}
+		}
 		
 		// CRITICAL: Check for REAL active connections BY IP (Layer 3)
 		$connection_count = pc_has_active_connections($ip);
