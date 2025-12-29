@@ -241,7 +241,7 @@ Child 2 (Age 14):
 | `docs/USER_GUIDE.md` | Complete user guide with changelog |
 | `docs/TECHNICAL_REFERENCE.md` | API, architecture, development guide |
 | `docs/GETTING_STARTED.md` | Installation and setup walkthrough |
-| `BEST_PRACTICES_KACI.md` | Lessons learned from the project |
+| `docs/BEST_PRACTICES_KACI.md` | Lessons learned from the project |
 
 ### Total Package Size
 - **Core Package**: ~3,500 lines of PHP code

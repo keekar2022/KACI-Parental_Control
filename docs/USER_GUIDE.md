@@ -2618,10 +2618,10 @@ Based on `wc -l` analysis:
 3. docs/TECHNICAL_REFERENCE.md - API & architecture
 4. docs/GETTING_STARTED.md - Installation walkthrough
 5. docs/README.md - Documentation navigation
-6. BEST_PRACTICES_KACI.md - Lessons learned
-7. CRITICAL_FIX_v1.1.4.md - Critical fix documentation
-8. REVERT_TO_v1.1.9.md - Revert guide
-9. SOLUTION_PLAN_v1.1.8.md - Architecture plan
+6. docs/BEST_PRACTICES_KACI.md - Lessons learned
+7. docs/CRITICAL_FIX_v1.1.4.md - Critical fix documentation
+8. docs/REVERT_TO_v1.1.9.md - Revert guide
+9. docs/SOLUTION_PLAN_v1.1.8.md - Architecture plan
 
 ### Why This Matters
 The updated stats better reflect:
