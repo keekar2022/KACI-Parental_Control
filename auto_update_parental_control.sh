@@ -45,12 +45,14 @@ fi
 if [ -f "$STATE_FILE" ]; then
     LAST_COMMIT=$(cat "$STATE_FILE")
     if [ "$LATEST_COMMIT" = "$LAST_COMMIT" ]; then
-        log "Auto-Update: Already up to date (commit: ${LATEST_COMMIT:0:8})"
+        COMMIT_SHORT=$(echo "$LATEST_COMMIT" | cut -c1-8)
+        log "Auto-Update: Already up to date (commit: $COMMIT_SHORT)"
         exit 0
     fi
 fi
 
-log "Auto-Update: New commit detected (${LATEST_COMMIT:0:8}), checking for updates..."
+COMMIT_SHORT=$(echo "$LATEST_COMMIT" | cut -c1-8)
+log "Auto-Update: New commit detected ($COMMIT_SHORT), checking for updates..."
 
 # Create temporary directory
 mkdir -p "$TMP_DIR"
