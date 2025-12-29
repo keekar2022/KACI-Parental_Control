@@ -336,7 +336,7 @@
             <h1>🎯 KACI Parental Control</h1>
             <p class="subtitle">Professional-Grade Internet Time Management for pfSense</p>
             <div>
-                <span class="version">Version 1.2.0</span>
+                <span class="version" id="header-version">Version Loading...</span>
                 <span class="version">Open Source</span>
                 <span class="version">Free Forever</span>
             </div>
@@ -463,7 +463,7 @@
                 <div class="feature">
                     <div class="feature-icon">🔄</div>
                     <h3>Auto-Update</h3>
-                    <p>Checks GitHub every 15 minutes. Deploys fixes automatically. Zero downtime updates.</p>
+                    <p>Checks GitHub every 8 hours. Deploys fixes automatically. Zero downtime updates.</p>
                 </div>
             </div>
         </div>
@@ -559,7 +559,7 @@
             <h2>Project Stats</h2>
             <div class="stats">
                 <div class="stat">
-                    <div class="stat-number">1.1.9</div>
+                    <div class="stat-number" id="stats-version">Loading...</div>
                     <div class="stat-label">Current Version</div>
                 </div>
                 <div class="stat">
@@ -618,6 +618,38 @@ sudo ./INSTALL.sh install your-firewall-ip
             <p style="margin-top: 20px; color: var(--text-light);">© 2025 Mukesh Kesharwani. All rights reserved.</p>
         </div>
     </footer>
+
+    <script>
+        // Dynamically fetch and display version from VERSION file (single source of truth)
+        async function loadVersion() {
+            try {
+                const response = await fetch('https://raw.githubusercontent.com/keekar2022/KACI-Parental_Control/main/VERSION');
+                const versionFile = await response.text();
+                
+                // Parse VERSION file to extract version number
+                const versionMatch = versionFile.match(/VERSION=(.+)/);
+                if (versionMatch && versionMatch[1]) {
+                    const version = versionMatch[1].trim();
+                    
+                    // Update both version displays
+                    document.getElementById('header-version').textContent = 'Version ' + version;
+                    document.getElementById('stats-version').textContent = version;
+                } else {
+                    // Fallback if parsing fails
+                    document.getElementById('header-version').textContent = 'Version 1.2.0';
+                    document.getElementById('stats-version').textContent = '1.2.0';
+                }
+            } catch (error) {
+                console.error('Failed to load version:', error);
+                // Fallback on error
+                document.getElementById('header-version').textContent = 'Version 1.2.0';
+                document.getElementById('stats-version').textContent = '1.2.0';
+            }
+        }
+        
+        // Load version when page loads
+        loadVersion();
+    </script>
 </body>
 </html>
 

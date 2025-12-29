@@ -1282,7 +1282,7 @@ This feature is perfect for development/testing environments where you want the 
 ## 🎯 What It Does
 
 The auto-update system:
-- ✅ Checks GitHub every 15 minutes for new commits
+- ✅ Checks GitHub every 8 hours for new commits
 - ✅ Automatically pulls latest changes if available
 - ✅ Deploys updated files to correct pfSense locations
 - ✅ Validates PHP syntax before deployment
@@ -1311,7 +1311,7 @@ sudo sh /tmp/setup_auto_update.sh
 
 ### Step 3: Done!
 
-Updates will now happen automatically every 15 minutes!
+Updates will now happen automatically every 8 hours!
 
 ---
 
@@ -1394,8 +1394,8 @@ sudo cp /root/parental_control_backups/backup_YYYYMMDD_HHMMSS/parental_control.i
 Edit the cron schedule:
 
 ```bash
-# Every 15 minutes (default)
-*/15 * * * * /usr/local/bin/auto_update_parental_control.sh
+# Every 8 hours (default)
+0 */8 * * * /usr/local/bin/auto_update_parental_control.sh
 
 # Every 5 minutes (not recommended - too frequent)
 */5 * * * * /usr/local/bin/auto_update_parental_control.sh
@@ -1425,7 +1425,7 @@ sudo crontab -l | grep -v auto_update_parental_control | sudo crontab -
 ### Re-enable Auto-Updates
 
 ```bash
-(sudo crontab -l 2>/dev/null; echo "*/15 * * * * /usr/local/bin/auto_update_parental_control.sh") | sudo crontab -
+(sudo crontab -l 2>/dev/null; echo "0 */8 * * * /usr/local/bin/auto_update_parental_control.sh") | sudo crontab -
 ```
 
 ---
@@ -1624,7 +1624,7 @@ grep "Update completed" /var/log/parental_control_auto_update.log | tail -10
 1. **Developer**: Make changes locally
 2. **Developer**: Test changes
 3. **Developer**: `git commit && git push` to GitHub
-4. **pfSense**: Auto-detects update within 15 minutes
+4. **pfSense**: Auto-detects update within 8 hours
 5. **pfSense**: Automatically deploys changes
 6. **Developer**: Verify deployment worked
 7. **Repeat**
@@ -2226,6 +2226,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.2] - 2025-12-30 📝 IMPROVEMENTS: Auto-Update Timing & Version Consistency
+
+### 🔄 Auto-Update Timing Changed
+**Changed auto-update frequency from 15 minutes to 8 hours**
+
+### Why This Change?
+- **Better for Production:** Less frequent checks reduce unnecessary network traffic
+- **More Reasonable:** 8 hours provides good balance between responsiveness and system load
+- **GitHub CDN Friendly:** Allows more time for GitHub CDN to propagate changes
+- **Firewall Friendly:** Fewer automatic reloads = less disruption
+
+### Changes
+1. **Cron Schedule:** Changed from `*/15 * * * *` to `0 */8 * * *`
+   - Was: Checks every 15 minutes (96 checks/day)
+   - Now: Checks every 8 hours (3 checks/day: midnight, 8am, 4pm)
+
+2. **Documentation:** Updated all references from "15 minutes" to "8 hours"
+   - setup_auto_update.sh
+   - INSTALL.sh
+   - index.html
+   - docs/USER_GUIDE.md
+   - Auto-update feature descriptions
+
+### 🎯 Version Consistency Fix
+**Removed hardcoded version numbers from index.html**
+
+### Problem
+index.html had multiple hardcoded version numbers that quickly became outdated:
+- Header showed "Version 1.2.0"
+- Stats section showed "1.1.9"
+- Both were incorrect (actual version was 1.2.2)
+
+### Solution
+Implemented dynamic version fetching using JavaScript:
+```javascript
+// Fetch VERSION file from GitHub (single source of truth)
+const response = await fetch('https://raw.githubusercontent.com/keekar2022/KACI-Parental_Control/main/VERSION');
+const versionFile = await response.text();
+const version = versionFile.match(/VERSION=(.+)/)[1];
+
+// Update all version displays
+document.getElementById('header-version').textContent = 'Version ' + version;
+document.getElementById('stats-version').textContent = version;
+```
+
+### Benefits
+- ✅ **Single Source of Truth:** VERSION file is the only place to update
+- ✅ **Always Accurate:** Page automatically shows correct version
+- ✅ **No Manual Updates:** No need to edit index.html for version changes
+- ✅ **Consistency:** All version displays show the same number
+- ✅ **Automatic:** Updates when VERSION file changes
+
+### Updated Files
+- `VERSION`: Bumped to 1.2.2
+- `setup_auto_update.sh`: Changed cron to 8 hours
+- `INSTALL.sh`: Updated messaging
+- `index.html`: Dynamic version loading + timing change
+- `docs/USER_GUIDE.md`: All references updated
+- `README.md`: Version updated
+
+### Verification
+Check auto-update schedule on firewall:
+```bash
+sudo crontab -l | grep auto_update
+# Should show: 0 */8 * * * /usr/local/bin/auto_update_parental_control.sh
+```
+
+Check index.html version display:
+- Visit https://keekar2022.github.io/KACI-Parental_Control/
+- Version should match VERSION file (1.2.2)
+- Both header and stats should show same version
+
+---
+
 ## [1.2.0] - 2025-12-30 🔄 NEW FEATURE: Auto-Update System
 
 ### 🚀 Major Feature Addition
@@ -2236,7 +2310,7 @@ The package now includes a complete auto-update system that automatically checks
 
 ### New Files
 1. **`auto_update_parental_control.sh`** - Main auto-update script
-   - Checks GitHub every 15 minutes for new commits
+   - Checks GitHub every 8 hours for new commits
    - Compares local vs remote version
    - Downloads and deploys updates automatically
    - Creates backups before updating
@@ -2251,7 +2325,7 @@ The package now includes a complete auto-update system that automatically checks
 
 ### How It Works
 ```bash
-# Automatic flow (every 15 minutes via cron):
+# Automatic flow (every 8 hours via cron):
 1. Check GitHub for latest commit hash
 2. Compare with last processed commit
 3. If new commit found, download VERSION file
@@ -2265,7 +2339,7 @@ The package now includes a complete auto-update system that automatically checks
 ```
 
 ### Features
-- ✅ **Automatic Updates:** Checks GitHub every 15 minutes
+- ✅ **Automatic Updates:** Checks GitHub every 8 hours
 - ✅ **Version Comparison:** Only updates when version changes
 - ✅ **Commit Tracking:** Prevents reprocessing same commits
 - ✅ **Automatic Backups:** Saves old version before updating
@@ -2283,7 +2357,7 @@ INSTALL.sh now prompts for auto-update setup:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 The auto-update feature will:
-  • Check GitHub for updates every 15 minutes
+  • Check GitHub for updates every 8 hours
   • Download and deploy updates automatically
   • Log all activities
 
@@ -2358,7 +2432,7 @@ sudo crontab -l | grep -v auto_update_parental_control | sudo crontab -
 
 **Cron Schedule:**
 ```
-*/15 * * * * /usr/local/bin/auto_update_parental_control.sh
+0 */8 * * * /usr/local/bin/auto_update_parental_control.sh
 ```
 
 **GitHub API:**
@@ -3701,7 +3775,7 @@ After extensive development and testing, we're proud to announce **KACI Parental
 - Home automation ready (Home Assistant, Node-RED)
 
 ### 🔄 Auto-Update
-- Checks GitHub every 15 minutes
+- Checks GitHub every 8 hours
 - Automatic deployment of fixes
 - Zero downtime updates
 - Rollback support
@@ -4204,7 +4278,7 @@ cd /path/to/KACI-Parental_Control
 ### For Existing v1.0.0 Users
 
 #### Option 1: Auto-Update (Recommended)
-The auto-update system will pull v1.0.1 automatically within 15 minutes.
+The auto-update system will pull v1.0.1 automatically within 8 hours.
 
 #### Option 2: Manual Update
 ```bash
@@ -4489,8 +4563,8 @@ Status Page Display (AFTER v1.1.2):
 ### Automatic (Recommended)
 If auto-update is enabled (default):
 ```bash
-# Runs every 15 minutes automatically
-*/15 * * * * /usr/local/bin/auto_update_parental_control.sh
+# Runs every 8 hours automatically
+0 */8 * * * /usr/local/bin/auto_update_parental_control.sh
 ```
 
 ### Manual

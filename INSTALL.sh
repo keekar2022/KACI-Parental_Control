@@ -511,7 +511,7 @@ setup_auto_update() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo "The auto-update feature will:"
-    echo "  • Check GitHub for updates every 15 minutes"
+    echo "  • Check GitHub for updates every 8 hours"
     echo "  • Download and deploy updates automatically"
     echo "  • Log all activities"
     echo ""

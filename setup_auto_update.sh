@@ -49,11 +49,11 @@ if [ "$CRON_EXISTS" -gt 0 ]; then
     fi
 fi
 
-# Add cron entry (runs every 15 minutes)
-(crontab -l 2>/dev/null; echo "*/15 * * * * /usr/local/bin/auto_update_parental_control.sh") | crontab -
+# Add cron entry (runs every 8 hours)
+(crontab -l 2>/dev/null; echo "0 */8 * * * /usr/local/bin/auto_update_parental_control.sh") | crontab -
 
 if [ $? -eq 0 ]; then
-    echo "✓ Cron job installed (checks every 15 minutes)"
+    echo "✓ Cron job installed (checks every 8 hours)"
 else
     echo "✗ Failed to install cron job"
     exit 1
@@ -65,7 +65,7 @@ echo "Auto-Update Setup Complete!"
 echo "=========================================="
 echo ""
 echo "The system will now:"
-echo "  • Check GitHub for updates every 15 minutes"
+echo "  • Check GitHub for updates every 8 hours"
 echo "  • Download and deploy updates automatically"
 echo "  • Log all activities to /var/log/parental_control_auto_update.log"
 echo ""
