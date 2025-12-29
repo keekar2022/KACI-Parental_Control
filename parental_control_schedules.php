@@ -300,7 +300,7 @@ display_top_tabs($tab_array);
 		<div class="form-group">
 			<label class="col-sm-2 control-label">Profile(s) <span class="text-danger">*</span></label>
 			<div class="col-sm-10">
-				<select name="profile_names[]" class="form-control" multiple size="4" required>
+				<select name="profile_names[]" class="form-control" multiple size="<?=empty($profiles) ? '1' : '4'?>" required>
 						<?php if (empty($profiles)): ?>
 							<option value="" disabled>No profiles configured - create profiles first</option>
 						<?php else: ?>
