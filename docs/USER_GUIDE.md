@@ -2226,6 +2226,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.16] - 2025-12-30 📝 Documentation Update: Package Files Section
+
+### 📚 Documentation Improvement
+**Updated README.md to accurately reflect current package structure**
+
+### What Was Fixed
+The "Package Files" section in README.md was outdated and showed only 6 files from the initial v0.1.0 release. The package has grown significantly since then but documentation wasn't updated.
+
+### Changes
+- **Complete File Inventory:** Added all 20+ package files organized by category
+- **Core Package Files:** Main engine, XML definitions, VERSION file
+- **Web Interface:** 7 PHP pages for UI and API
+- **Diagnostic Tools:** 3 tools for troubleshooting and monitoring
+- **Installation Scripts:** INSTALL.sh, UNINSTALL.sh, bump_version.sh
+- **Documentation:** 4 comprehensive guides totaling ~8,000 lines
+- **Package Metrics:** Added line counts and disk space requirements
+
+### Old README (Outdated)
+```markdown
+| File | Purpose |
+|------|---------|
+| info.xml | Package metadata |
+| parental_control.xml | Main settings UI |
+| parental_control_devices.xml | Device management UI |
+| parental_control.inc | Core PHP logic (~900 lines) |
+| parental_control_status.php | Real-time status dashboard |
+| INSTALL.sh | Installation script |
+```
+
+### New README (Accurate)
+- **4 Core Files:** Package engine, XML, metadata, VERSION
+- **7 Web UI Files:** Profiles, schedules, status, block pages, API, health
+- **3 Diagnostic Tools:** Diagnostic script, log analyzer, captive portal RC
+- **3 Management Scripts:** Install, uninstall, version bump
+- **5 Documentation Files:** README, user guide, technical reference, getting started, best practices
+
+### Impact
+✅ Users can now see the complete package structure  
+✅ Documentation accurately reflects v1.1.x capabilities  
+✅ Easier to understand what gets installed  
+✅ Better transparency about package size and complexity
+
+---
+
 ## [1.1.15] - 2025-12-30 🔧 CRITICAL FIX: Cron Schedule Not Updating on Reinstall
 
 ### 🐛 Critical Bug Fix

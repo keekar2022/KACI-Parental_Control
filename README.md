@@ -3,7 +3,7 @@
 A comprehensive parental control package for pfSense that helps parents manage and limit their children's internet access time.
 
 **Package ID:** KACI-Parental_Control  
-**Version:** 1.1.15 (Production Ready)  
+**Version:** 1.1.16 (Production Ready)  
 **Author:** Mukesh Kesharwani (Keekar)  
 **Status:** Production Ready  
 **License:** MIT  
@@ -196,14 +196,59 @@ Child 2 (Age 14):
 
 ## 📁 Package Files
 
+### Core Package Files
+
+| File | Purpose | Lines |
+|------|---------|-------|
+| `parental_control.inc` | Core PHP logic and enforcement engine | ~3,100 |
+| `parental_control.xml` | Main package definition and pfSense hooks | ~200 |
+| `info.xml` | Package metadata for pfSense registry | ~50 |
+| `VERSION` | Single source of truth for version number | ~5 |
+
+### Web Interface (PHP Pages)
+
 | File | Purpose |
 |------|---------|
-| `info.xml` | Package metadata |
-| `parental_control.xml` | Main settings UI |
-| `parental_control_devices.xml` | Device management UI |
-| `parental_control.inc` | Core PHP logic (~900 lines) |
-| `parental_control_status.php` | Real-time status dashboard |
-| `INSTALL.sh` | Installation script |
+| `parental_control_profiles.php` | Profile management UI (create/edit/delete profiles) |
+| `parental_control_schedules.php` | Schedule management UI (bedtime, no-internet times) |
+| `parental_control_status.php` | Real-time status dashboard with device usage |
+| `parental_control_blocked.php` | Block page shown to users (authenticated) |
+| `parental_control_captive.php` | Captive portal block page (non-authenticated) |
+| `parental_control_api.php` | RESTful API for external integrations |
+| `parental_control_health.php` | Health check endpoint for monitoring |
+
+### Diagnostic & Management Tools
+
+| File | Purpose |
+|------|---------|
+| `parental_control_diagnostic.php` | Comprehensive diagnostic tool for troubleshooting |
+| `parental_control_analyzer.sh` | Log analyzer and statistics generator |
+| `parental_control_captive.sh` | RC script for captive portal web server |
+
+### Installation & Maintenance
+
+| File | Purpose |
+|------|---------|
+| `INSTALL.sh` | Automated installation/update script (SSH-based) |
+| `UNINSTALL.sh` | Complete package removal script |
+| `bump_version.sh` | Version management automation script |
+
+### Documentation
+
+| Location | Contents |
+|----------|----------|
+| `README.md` | This file - overview and quick start |
+| `docs/USER_GUIDE.md` | Complete user guide with changelog |
+| `docs/TECHNICAL_REFERENCE.md` | API, architecture, development guide |
+| `docs/GETTING_STARTED.md` | Installation and setup walkthrough |
+| `BEST_PRACTICES_KACI.md` | Lessons learned from the project |
+
+### Total Package Size
+- **Core Package**: ~3,500 lines of PHP code
+- **Web UI**: ~2,000 lines across 7 PHP pages
+- **Scripts**: ~1,500 lines of shell scripts
+- **Documentation**: ~8,000 lines across 4 comprehensive guides
+- **Disk Space**: ~500KB total installed size
 
 ---
 
