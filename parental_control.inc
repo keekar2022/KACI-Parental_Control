@@ -649,12 +649,8 @@ function parental_control_sync() {
 		// Initialize state file if needed
 		pc_init_state();
 		
-		// Initialize anchor file if needed
-		$anchor_file = '/tmp/rules.parental_control';
-		if (!file_exists($anchor_file)) {
-			file_put_contents($anchor_file, "# Parental Control Dynamic Rules\n");
-			chmod($anchor_file, 0644);
-		}
+		// Initialize anchor and load it into pfctl
+		pc_init_block_table();
 		
 		pc_log("Configuration sync completed (minimal mode - anchor-based)", 'info', array(
 			'event.action' => 'config_sync_complete',
@@ -2145,17 +2141,14 @@ function pc_add_device_block($device, $enforcement_mode, $reason, $state) {
 	}
 	
 	// Build the rules for this device
-	// Rule 1: Allow DNS (so they can resolve the firewall hostname)
-	// Rule 2: Allow access to pfSense itself (for block page)
-	// Rule 3: Redirect HTTP to block page
-	// Rule 4: Redirect HTTPS to block page (will show cert warning, but works)
-	// Rule 5: Block everything else
+	// Rule 1: Allow DNS (so they can resolve names)
+	// Rule 2: Allow access to pfSense itself (for accessing block page if configured)
+	// Rule 3: Block everything else
+	// Note: Removed rdr rules - they cause syntax errors in pfSense anchors
 	
 	$rules = "# Device: {$ip} ({$device_name}) - {$reason}\n";
-	$rules .= "pass quick proto udp from {$ip} to any port 53 label \"PC-DNS:{$device_name}\"\n";
+	$rules .= "pass quick proto udp from {$ip} to any port = 53 label \"PC-DNS:{$device_name}\"\n";
 	$rules .= "pass quick from {$ip} to {$lan_ip} label \"PC-Allow:{$device_name}\"\n";
-	$rules .= "rdr pass proto tcp from {$ip} to any port 80 -> {$lan_ip} port 443 label \"PC-HTTP:{$device_name}\"\n";
-	$rules .= "rdr pass proto tcp from {$ip} to any port 443 -> {$lan_ip} port 443 label \"PC-HTTPS:{$device_name}\"\n";
 	$rules .= "block drop quick from {$ip} to any label \"PC-Block:{$device_name}\"\n";
 	$rules .= "\n";
 	
