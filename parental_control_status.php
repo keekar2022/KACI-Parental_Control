@@ -368,26 +368,56 @@ if (is_array($profiles)) {
 		$state = pc_load_state();
 		$blocked_devices = array();
 		
+		// Create reverse lookup: IP -> MAC
+		$ip_to_mac = array();
+		if (isset($state['mac_to_ip_cache']) && is_array($state['mac_to_ip_cache'])) {
+			foreach ($state['mac_to_ip_cache'] as $mac => $ip) {
+				$ip_to_mac[$ip] = $mac;
+			}
+		}
+		
 		foreach ($blocked_ips as $ip) {
 			$ip = trim($ip);
 			if (empty($ip)) continue;
 			
-			// Find device name from state
-			$device_name = 'Unknown';
+			// Find device info from state
+			$device_name = 'Unknown Device';
 			$device_mac = 'Unknown';
-			$reason = 'Unknown';
+			$profile_name = 'Unknown';
+			$reason = 'Time Limit Exceeded';
 			
-			if (isset($state['devices_by_ip'][$ip])) {
-				$device_name = $state['devices_by_ip'][$ip]['name'];
-				$device_mac = $state['devices_by_ip'][$ip]['mac'];
-			}
-			
-			// Find reason from blocked_devices
-			if (isset($state['blocked_devices'])) {
-				foreach ($state['blocked_devices'] as $mac => $block_info) {
-					if (isset($block_info['device']['ip_address']) && $block_info['device']['ip_address'] == $ip) {
-						$reason = isset($block_info['reason']) ? $block_info['reason'] : 'Unknown';
-						break;
+			// Get MAC from IP
+			if (isset($ip_to_mac[$ip])) {
+				$mac = $ip_to_mac[$ip];
+				$device_mac = $mac;
+				
+				// Get device details from state
+				if (isset($state['devices'][$mac])) {
+					$dev = $state['devices'][$mac];
+					$device_name = isset($dev['name']) ? $dev['name'] : (isset($dev['hostname']) ? $dev['hostname'] : $ip);
+				}
+				
+				// Get profile and reason from blocked_devices
+				if (isset($state['blocked_devices'][$mac])) {
+					$block_info = $state['blocked_devices'][$mac];
+					
+					// Get profile name
+					if (isset($block_info['device']['profile_name'])) {
+						$profile_name = $block_info['device']['profile_name'];
+					} elseif (isset($block_info['device']['child_name'])) {
+						$profile_name = $block_info['device']['child_name'];
+					} elseif (isset($block_info['profile'])) {
+						$profile_name = $block_info['profile'];
+					}
+					
+					// Get reason
+					if (isset($block_info['reason'])) {
+						$reason = $block_info['reason'];
+					}
+					
+					// Get device name from block info if not found yet
+					if ($device_name === 'Unknown Device' && isset($block_info['device']['device_name'])) {
+						$device_name = $block_info['device']['device_name'];
 					}
 				}
 			}
@@ -396,6 +426,7 @@ if (is_array($profiles)) {
 				'ip' => $ip,
 				'name' => $device_name,
 				'mac' => $device_mac,
+				'profile' => $profile_name,
 				'reason' => $reason
 			);
 		}
@@ -415,23 +446,45 @@ if (is_array($profiles)) {
 			</p>
 			
 			<div style="margin-top: 15px;">
-				<strong><?=gettext("Blocked Devices:")?></strong>
-				<table class="table table-striped table-hover" style="margin-top: 10px;">
+				<strong style="font-size: 15px;">
+					<i class="fa-solid fa-ban"></i> <?=gettext("Currently Blocked Devices:")?>
+				</strong>
+				<table class="table table-striped table-hover" style="margin-top: 10px; border: 1px solid #ddd;">
 					<thead>
-						<tr style="background: #f5f5f5;">
-							<th>IP Address</th>
-							<th>Device Name</th>
-							<th>MAC Address</th>
-							<th>Reason</th>
+						<tr style="background: #d9534f; color: white;">
+							<th><i class="fa-solid fa-network-wired"></i> IP Address</th>
+							<th><i class="fa-solid fa-laptop"></i> Device Name</th>
+							<th><i class="fa-solid fa-fingerprint"></i> MAC Address</th>
+							<th><i class="fa-solid fa-user"></i> Profile</th>
+							<th><i class="fa-solid fa-exclamation-circle"></i> Reason</th>
 						</tr>
 					</thead>
 					<tbody>
 						<?php foreach ($blocked_devices as $device): ?>
-						<tr>
-							<td><code style="color: #d9534f; font-weight: bold;"><?php echo htmlspecialchars($device['ip']); ?></code></td>
-							<td><?php echo htmlspecialchars($device['name']); ?></td>
-							<td><span style="font-family: monospace; font-size: 11px;"><?php echo htmlspecialchars($device['mac']); ?></span></td>
-							<td><span class="label label-danger"><?php echo htmlspecialchars($device['reason']); ?></span></td>
+						<tr style="background: #fff5f5;">
+							<td>
+								<code style="color: #d9534f; font-weight: bold; font-size: 13px; background: #ffe6e6; padding: 3px 8px; border-radius: 3px;">
+									<?php echo htmlspecialchars($device['ip']); ?>
+								</code>
+							</td>
+							<td>
+								<strong><?php echo htmlspecialchars($device['name']); ?></strong>
+							</td>
+							<td>
+								<span style="font-family: 'Courier New', monospace; font-size: 11px; color: #666; background: #f5f5f5; padding: 2px 6px; border-radius: 3px;">
+									<?php echo htmlspecialchars($device['mac']); ?>
+								</span>
+							</td>
+							<td>
+								<span class="label label-info" style="font-size: 11px;">
+									<i class="fa-solid fa-user-circle"></i> <?php echo htmlspecialchars($device['profile']); ?>
+								</span>
+							</td>
+							<td>
+								<span class="label label-danger" style="font-size: 11px;">
+									<i class="fa-solid fa-clock"></i> <?php echo htmlspecialchars($device['reason']); ?>
+								</span>
+							</td>
 						</tr>
 						<?php endforeach; ?>
 					</tbody>
