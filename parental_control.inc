@@ -649,18 +649,27 @@ function parental_control_sync() {
 		// Initialize state file if needed
 		pc_init_state();
 		
-		// Initialize anchor and load it into pfctl
-		pc_init_block_table();
+		// CRITICAL: Create pfSense alias (table) for dynamic blocking
+		// WHY: Tables integrate properly with pfSense's rule system (unlike anchors)
+		pc_create_blocking_alias();
 		
-		// CRITICAL: Ensure anchor is referenced in main firewall configuration
-		// This is needed for anchors to be evaluated (rule ordering issue)
-		pc_ensure_anchor_rule_exists();
+		// CRITICAL: Create floating rule that blocks traffic from the alias
+		// WHY: Floating rules are evaluated BEFORE interface rules (fixes rule ordering)
+		pc_create_blocking_rule();
 		
-		pc_log("Configuration sync completed (minimal mode - anchor-based)", 'info', array(
+		// Reload filter if needed (only if alias or rule was created)
+		if (is_subsystem_dirty('aliases') || is_subsystem_dirty('filter')) {
+			filter_configure();
+			clear_subsystem_dirty('aliases');
+			clear_subsystem_dirty('filter');
+		}
+		
+		pc_log("Configuration sync completed (table-based blocking)", 'info', array(
 			'event.action' => 'config_sync_complete',
 			'event.category' => 'configuration',
 			'event.outcome' => 'success',
-			'note' => 'Using anchor system - cron handles all blocking'
+			'method' => 'pf_table',
+			'note' => 'Using pfSense tables/aliases - proper rule ordering'
 		));
 		
 	} catch (Exception $e) {
@@ -2075,18 +2084,137 @@ function parental_control_generate_rules($type) {
 }
 
 /**
- * Ensure anchor reference exists in pfSense main firewall configuration
+ * Create pfSense alias (table) for blocked devices
  * 
- * This function is a no-op now since we use parental_control_generate_rules() hook.
- * Keeping it for backward compatibility but it does nothing.
+ * CRITICAL: This is the CORRECT way to do dynamic blocking in pfSense
+ * WHY: Tables/aliases are native pfSense features that integrate properly with
+ * the firewall rule system. Unlike anchors, rules using aliases ARE properly
+ * evaluated in the correct order.
  * 
- * @return void
- * @since 1.1.7
- * @deprecated Use parental_control_generate_rules() hook instead
+ * Creates an alias named "parental_control_blocked" that contains IP addresses
+ * of devices that should be blocked. This alias is then used by a floating rule.
+ * 
+ * @return bool True if alias exists or was created successfully
+ * @since 1.1.8
  */
-function pc_ensure_anchor_rule_exists() {
-	// No longer needed - using pfSense filter generation hook instead
-	pc_log("Anchor reference is handled by filter generation hook", 'debug');
+function pc_create_blocking_alias() {
+	// Check if alias already exists
+	$aliases = config_get_path('aliases/alias', []);
+	$alias_exists = false;
+	$alias_index = -1;
+	
+	foreach ($aliases as $index => $alias) {
+		if (isset($alias['name']) && $alias['name'] === 'parental_control_blocked') {
+			$alias_exists = true;
+			$alias_index = $index;
+			break;
+		}
+	}
+	
+	if ($alias_exists) {
+		pc_log("Blocking alias already exists", 'debug');
+		return true;
+	}
+	
+	// Create new alias
+	$new_alias = array(
+		'name' => 'parental_control_blocked',
+		'type' => 'host',
+		'address' => '',  // Initially empty
+		'descr' => 'Parental Control - Blocked Devices (Auto-managed - DO NOT EDIT)',
+		'detail' => 'This alias is automatically managed by Parental Control package||'
+	);
+	
+	$aliases[] = $new_alias;
+	config_set_path('aliases/alias', $aliases);
+	
+	write_config('Parental Control: Created blocking alias (table)');
+	
+	pc_log("Created blocking alias for dynamic IP management", 'info', array(
+		'event.action' => 'alias_created',
+		'alias.name' => 'parental_control_blocked',
+		'alias.type' => 'host'
+	));
+	
+	// Mark that filter needs reload
+	mark_subsystem_dirty('aliases');
+	
+	return true;
+}
+
+/**
+ * Create floating firewall rule that blocks traffic from parental control alias
+ * 
+ * CRITICAL: This rule will be in pfSense's main configuration and properly ordered
+ * WHY: Floating rules are evaluated BEFORE interface-specific rules, ensuring our
+ * blocking happens before any LAN allow rules.
+ * 
+ * Creates a floating rule that:
+ * - Blocks traffic from IPs in parental_control_blocked alias
+ * - Applies to LAN interface
+ * - Direction: IN (incoming from devices)
+ * - Action: BLOCK (drop packets silently)
+ * - Quick: YES (stop processing on match)
+ * 
+ * @return bool True if rule exists or was created successfully
+ * @since 1.1.8
+ */
+function pc_create_blocking_rule() {
+	// Check if rule already exists
+	$rules = config_get_path('filter/rule', []);
+	$rule_exists = false;
+	
+	foreach ($rules as $rule) {
+		if (isset($rule['descr']) && $rule['descr'] === 'Parental Control - Dynamic Blocking') {
+			$rule_exists = true;
+			break;
+		}
+	}
+	
+	if ($rule_exists) {
+		pc_log("Blocking rule already exists", 'debug');
+		return true;
+	}
+	
+	// Create floating rule that blocks traffic from our alias
+	$new_rule = array(
+		'type' => 'block',
+		'interface' => 'lan',  // Apply to LAN interface
+		'ipprotocol' => 'inet',
+		'direction' => 'in',
+		'floating' => 'yes',
+		'quick' => 'yes',  // Apply immediately on match
+		'source' => array(
+			'address' => 'parental_control_blocked'  // Use our alias
+		),
+		'destination' => array(
+			'any' => ''
+		),
+		'descr' => 'Parental Control - Dynamic Blocking',
+		'created' => array(
+			'time' => time(),
+			'username' => 'system@parentalcontrol'
+		)
+	);
+	
+	// Add at beginning of ruleset (highest priority)
+	array_unshift($rules, $new_rule);
+	config_set_path('filter/rule', $rules);
+	
+	write_config('Parental Control: Added blocking rule (table-based)');
+	
+	pc_log("Created blocking rule using alias", 'info', array(
+		'event.action' => 'rule_created',
+		'rule.type' => 'floating',
+		'rule.action' => 'block',
+		'rule.source' => 'parental_control_blocked',
+		'note' => 'Rule visible in GUI - Firewall → Rules → Floating'
+	));
+	
+	// Mark that filter needs reload
+	mark_subsystem_dirty('filter');
+	
+	return true;
 }
 
 /**
@@ -2189,8 +2317,8 @@ function pc_apply_smart_firewall_changes($old_blocked, $new_blocked, $state) {
 	// Find devices that need to be UNBLOCKED (were blocked, but should not be now)
 	foreach ($old_blocked as $mac => $info) {
 		if (!isset($new_blocked[$mac])) {
-			// Device should be unblocked
-			if (pc_remove_device_block($mac, $state)) {
+			// Device should be unblocked - use table-based method
+			if (pc_remove_device_block_table($mac, $state)) {
 				$changes++;
 				pc_log("Unblocked device: {$mac}", 'info', array(
 					'event.action' => 'device_unblocked',
@@ -2203,8 +2331,8 @@ function pc_apply_smart_firewall_changes($old_blocked, $new_blocked, $state) {
 	// Find devices that need to be BLOCKED (not blocked before, but should be now)
 	foreach ($new_blocked as $mac => $info) {
 		if (!isset($old_blocked[$mac])) {
-			// Device should be blocked
-			if (pc_add_device_block($info['device'], $info['enforcement_mode'], $info['reason'], $state)) {
+			// Device should be blocked - use table-based method
+			if (pc_add_device_block_table($info['device'], $info['enforcement_mode'], $info['reason'], $state)) {
 				$changes++;
 				pc_log("Blocked device: {$mac} - {$info['reason']}", 'info', array(
 					'event.action' => 'device_blocked',
@@ -2220,7 +2348,111 @@ function pc_apply_smart_firewall_changes($old_blocked, $new_blocked, $state) {
 }
 
 /**
+ * Add device IP to pfSense blocking table
+ * 
+ * CRITICAL: Uses pfSense tables (aliases) instead of anchors for proper rule ordering
+ * WHY: Tables work with pfSense's native rule system and are evaluated in correct order
+ * 
+ * Adds the device's IP address to the parental_control_blocked table. The floating
+ * rule will then block all traffic from this IP.
+ * 
+ * @param array $device Device information including mac_address
+ * @param string $enforcement_mode Enforcement mode (not used with tables)
+ * @param string $reason Reason for blocking
+ * @param array $state Current state for IP lookup
+ * @return bool True if device was blocked successfully
+ * @since 1.1.8
+ */
+function pc_add_device_block_table($device, $enforcement_mode, $reason, $state) {
+	$mac = pc_normalize_mac($device['mac_address']);
+	$device_name = isset($device['device_name']) ? $device['device_name'] : $mac;
+	
+	// Get device IP from state
+	$ip = null;
+	if (isset($state['mac_to_ip_cache'][$mac])) {
+		$ip = $state['mac_to_ip_cache'][$mac];
+	}
+	
+	if (empty($ip)) {
+		// Device is offline - cannot block
+		pc_log("Device {$mac} is offline - cannot block (no IP address)", 'debug', array(
+			'event.action' => 'block_skipped',
+			'device.mac' => $mac,
+			'reason' => 'device_offline'
+		));
+		return false;
+	}
+	
+	// Add IP to pfSense table
+	exec("/sbin/pfctl -t parental_control_blocked -T add {$ip} 2>&1", $output, $return_code);
+	
+	if ($return_code === 0) {
+		pc_log("Blocked {$ip} ({$device_name}) via pfSense table - {$reason}", 'info', array(
+			'event.action' => 'device_blocked',
+			'device.ip' => $ip,
+			'device.mac' => $mac,
+			'device.name' => $device_name,
+			'block.reason' => $reason,
+			'method' => 'pf_table',
+			'table.name' => 'parental_control_blocked'
+		));
+		return true;
+	} else {
+		pc_log("Failed to block {$ip}: " . implode("\n", $output), 'error', array(
+			'event.action' => 'block_failed',
+			'device.ip' => $ip,
+			'device.mac' => $mac,
+			'error.output' => implode("\n", $output)
+		));
+		return false;
+	}
+}
+
+/**
+ * Remove device IP from pfSense blocking table
+ * 
+ * Removes the device's IP address from the parental_control_blocked table,
+ * allowing traffic from this IP again.
+ * 
+ * @param string $mac Device MAC address
+ * @param array $state Current state for IP lookup
+ * @return bool True if device was unblocked successfully
+ * @since 1.1.8
+ */
+function pc_remove_device_block_table($mac, $state) {
+	$mac = pc_normalize_mac($mac);
+	
+	// Get device IP from state
+	$ip = null;
+	if (isset($state['mac_to_ip_cache'][$mac])) {
+		$ip = $state['mac_to_ip_cache'][$mac];
+	}
+	
+	if (empty($ip)) {
+		return true;  // Nothing to remove
+	}
+	
+	// Remove IP from pfSense table
+	exec("/sbin/pfctl -t parental_control_blocked -T delete {$ip} 2>&1", $output, $return_code);
+	
+	if ($return_code === 0) {
+		pc_log("Unblocked {$ip} ({$mac}) via pfSense table", 'info', array(
+			'event.action' => 'device_unblocked',
+			'device.ip' => $ip,
+			'device.mac' => $mac,
+			'method' => 'pf_table',
+			'table.name' => 'parental_control_blocked'
+		));
+		return true;
+	}
+	
+	return false;
+}
+
+/**
  * Add firewall block for a specific device using pfSense anchor
+ * 
+ * @deprecated since 1.1.8 - Use pc_add_device_block_table() instead
  * 
  * Creates rules that:
  * 1. Allow access to pfSense (so user can see block page)
@@ -2999,7 +3231,7 @@ function pc_update_device_usage(&$state) {
 				
 				$pc_config = config_get_path('installedpackages/parentalcontrol/config/0', []);
 				$enforcement_mode = isset($pc_config['enforcement_mode']) ? $pc_config['enforcement_mode'] : 'strict';
-				pc_add_device_block($device, $enforcement_mode, $block_reason, $state);
+				pc_add_device_block_table($device, $enforcement_mode, $block_reason, $state);
 			}
 		}
 		
