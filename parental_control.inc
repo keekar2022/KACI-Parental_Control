@@ -653,15 +653,26 @@ function parental_control_sync() {
 		// WHY: Tables integrate properly with pfSense's rule system (unlike anchors)
 		pc_create_blocking_alias();
 		
+		// CRITICAL: Create allow rules for DNS and pfSense access
+		// WHY: Blocked devices need DNS to resolve names and access to pfSense for block page
+		// ORDER: These MUST come BEFORE the block-all rule (floating rules with quick)
+		pc_create_allow_rules();
+		
+		// CRITICAL: Create NAT redirect rules for HTTP/HTTPS to block page
+		// WHY: Instead of silent blocking, show users a friendly explanation page
+		pc_create_redirect_rules();
+		
 		// CRITICAL: Create floating rule that blocks traffic from the alias
 		// WHY: Floating rules are evaluated BEFORE interface rules (fixes rule ordering)
+		// ORDER: This comes LAST so allow rules are checked first
 		pc_create_blocking_rule();
 		
-		// Reload filter if needed (only if alias or rule was created)
-		if (is_subsystem_dirty('aliases') || is_subsystem_dirty('filter')) {
+		// Reload filter/NAT if needed (only if alias or rules were created)
+		if (is_subsystem_dirty('aliases') || is_subsystem_dirty('filter') || is_subsystem_dirty('nat')) {
 			filter_configure();
 			clear_subsystem_dirty('aliases');
 			clear_subsystem_dirty('filter');
+			clear_subsystem_dirty('nat');
 		}
 		
 		pc_log("Configuration sync completed (table-based blocking)", 'info', array(
@@ -2291,6 +2302,232 @@ function pc_create_blocking_rule() {
 	
 	// Mark that filter needs reload
 	mark_subsystem_dirty('filter');
+	
+	return true;
+}
+
+/**
+ * Create NAT redirect rules for HTTP/HTTPS to block page
+ * 
+ * When devices are blocked, we want to redirect their HTTP/HTTPS traffic
+ * to a friendly block page instead of just silently dropping packets.
+ * 
+ * Creates NAT rules that redirect:
+ * - HTTP (port 80) → pfSense block page
+ * - HTTPS (port 443) → pfSense block page (will show cert warning)
+ * 
+ * @return bool True if rules exist or were created successfully
+ * @since 1.1.9
+ */
+function pc_create_redirect_rules() {
+	global $config;
+	
+	$lan_ip = get_interface_ip('lan');
+	if (empty($lan_ip)) {
+		$lan_ip = '192.168.1.1'; // Fallback
+	}
+	
+	// Get NAT rules
+	if (!isset($config['nat'])) {
+		$config['nat'] = array();
+	}
+	if (!isset($config['nat']['rule'])) {
+		$config['nat']['rule'] = array();
+	}
+	
+	$nat_rules = $config['nat']['rule'];
+	$needs_save = false;
+	
+	// Check if HTTP redirect rule exists
+	$http_redirect_exists = false;
+	$https_redirect_exists = false;
+	
+	foreach ($nat_rules as $rule) {
+		if (isset($rule['descr'])) {
+			if ($rule['descr'] === 'Parental Control - Redirect HTTP to Block Page') {
+				$http_redirect_exists = true;
+			}
+			if ($rule['descr'] === 'Parental Control - Redirect HTTPS to Block Page') {
+				$https_redirect_exists = true;
+			}
+		}
+	}
+	
+	// Create HTTP redirect rule if needed
+	if (!$http_redirect_exists) {
+		$http_rule = array(
+			'source' => array(
+				'address' => 'parental_control_blocked'
+			),
+			'destination' => array(
+				'any' => '',
+				'port' => '80'
+			),
+			'protocol' => 'tcp',
+			'target' => $lan_ip,
+			'local-port' => '80',
+			'interface' => 'lan',
+			'descr' => 'Parental Control - Redirect HTTP to Block Page',
+			'associated-rule-id' => 'pass'
+		);
+		
+		array_unshift($config['nat']['rule'], $http_rule);
+		$needs_save = true;
+		
+		pc_log("Created HTTP redirect rule for block page", 'info', array(
+			'event.action' => 'nat_rule_created',
+			'rule.type' => 'port_forward',
+			'rule.protocol' => 'HTTP',
+			'redirect.target' => $lan_ip
+		));
+	}
+	
+	// Create HTTPS redirect rule if needed
+	if (!$https_redirect_exists) {
+		$https_rule = array(
+			'source' => array(
+				'address' => 'parental_control_blocked'
+			),
+			'destination' => array(
+				'any' => '',
+				'port' => '443'
+			),
+			'protocol' => 'tcp',
+			'target' => $lan_ip,
+			'local-port' => '443',
+			'interface' => 'lan',
+			'descr' => 'Parental Control - Redirect HTTPS to Block Page',
+			'associated-rule-id' => 'pass'
+		);
+		
+		array_unshift($config['nat']['rule'], $https_rule);
+		$needs_save = true;
+		
+		pc_log("Created HTTPS redirect rule for block page", 'info', array(
+			'event.action' => 'nat_rule_created',
+			'rule.type' => 'port_forward',
+			'rule.protocol' => 'HTTPS',
+			'redirect.target' => $lan_ip
+		));
+	}
+	
+	if ($needs_save) {
+		write_config('Parental Control: Added redirect rules for block page');
+		mark_subsystem_dirty('nat');
+	}
+	
+	return true;
+}
+
+/**
+ * Create filter rules to allow DNS and pfSense access for blocked devices
+ * 
+ * Before blocking everything, we need to allow:
+ * 1. DNS queries (so domain names resolve)
+ * 2. Access to pfSense GUI (so block page can load)
+ * 
+ * These rules must be BEFORE the block-all rule (higher priority).
+ * 
+ * @return bool True if rules exist or were created successfully
+ * @since 1.1.9
+ */
+function pc_create_allow_rules() {
+	global $config;
+	
+	$lan_ip = get_interface_ip('lan');
+	if (empty($lan_ip)) {
+		$lan_ip = '192.168.1.1';
+	}
+	
+	$rules = config_get_path('filter/rule', []);
+	$needs_save = false;
+	
+	// Check if allow rules exist
+	$dns_allow_exists = false;
+	$pfsense_allow_exists = false;
+	
+	foreach ($rules as $rule) {
+		if (isset($rule['descr'])) {
+			if ($rule['descr'] === 'Parental Control - Allow DNS for Blocked Devices') {
+				$dns_allow_exists = true;
+			}
+			if ($rule['descr'] === 'Parental Control - Allow pfSense Access for Blocked Devices') {
+				$pfsense_allow_exists = true;
+			}
+		}
+	}
+	
+	// Create DNS allow rule if needed
+	if (!$dns_allow_exists) {
+		$dns_rule = array(
+			'type' => 'pass',
+			'interface' => 'lan',
+			'ipprotocol' => 'inet',
+			'protocol' => 'udp',
+			'source' => array(
+				'address' => 'parental_control_blocked'
+			),
+			'destination' => array(
+				'any' => '',
+				'port' => '53'
+			),
+			'floating' => 'yes',
+			'quick' => 'yes',
+			'descr' => 'Parental Control - Allow DNS for Blocked Devices',
+			'created' => array(
+				'time' => time(),
+				'username' => 'system@parentalcontrol'
+			)
+		);
+		
+		array_unshift($rules, $dns_rule);
+		$needs_save = true;
+		
+		pc_log("Created DNS allow rule for blocked devices", 'info', array(
+			'event.action' => 'filter_rule_created',
+			'rule.type' => 'pass',
+			'rule.protocol' => 'DNS'
+		));
+	}
+	
+	// Create pfSense access allow rule if needed
+	if (!$pfsense_allow_exists) {
+		$pfsense_rule = array(
+			'type' => 'pass',
+			'interface' => 'lan',
+			'ipprotocol' => 'inet',
+			'protocol' => 'tcp',
+			'source' => array(
+				'address' => 'parental_control_blocked'
+			),
+			'destination' => array(
+				'address' => $lan_ip,
+				'port' => '80-443'  // HTTP and HTTPS
+			),
+			'floating' => 'yes',
+			'quick' => 'yes',
+			'descr' => 'Parental Control - Allow pfSense Access for Blocked Devices',
+			'created' => array(
+				'time' => time(),
+				'username' => 'system@parentalcontrol'
+			)
+		);
+		
+		array_unshift($rules, $pfsense_rule);
+		$needs_save = true;
+		
+		pc_log("Created pfSense access allow rule for blocked devices", 'info', array(
+			'event.action' => 'filter_rule_created',
+			'rule.type' => 'pass',
+			'rule.destination' => $lan_ip
+		));
+	}
+	
+	if ($needs_save) {
+		config_set_path('filter/rule', $rules);
+		write_config('Parental Control: Added allow rules for blocked devices');
+		mark_subsystem_dirty('filter');
+	}
 	
 	return true;
 }
