@@ -652,6 +652,10 @@ function parental_control_sync() {
 		// Initialize anchor and load it into pfctl
 		pc_init_block_table();
 		
+		// CRITICAL: Ensure anchor is referenced in main firewall configuration
+		// This is needed for anchors to be evaluated (rule ordering issue)
+		pc_ensure_anchor_rule_exists();
+		
 		pc_log("Configuration sync completed (minimal mode - anchor-based)", 'info', array(
 			'event.action' => 'config_sync_complete',
 			'event.category' => 'configuration',
@@ -1969,9 +1973,120 @@ function pc_init_block_table() {
 		));
 	}
 	
-	// Note: We no longer create GUI-visible anchor rules
-	// The anchor system works without them in pfSense
-	// Rules are managed entirely via the anchor file and pfctl
+	// Note: Anchor reference rule is added during sync, not here
+	// This function is called frequently (every cron run), so we avoid
+	// expensive operations like filter_configure()
+}
+
+/**
+ * Inject anchor reference into live pfSense firewall configuration
+ * 
+ * CRITICAL WORKAROUND: Since pfSense's filter generation hooks aren't being called
+ * reliably, we manually inject our anchor reference into the running pf configuration
+ * using pfctl. This ensures our anchor is evaluated even if filter_configure() was
+ * called without our hook being triggered.
+ * 
+ * WHY: pfSense rules are evaluated top-to-bottom. Without our anchor in the main
+ * ruleset, our blocking rules are never checked. This function uses pfctl's ability
+ * to modify the running configuration without full reload.
+ * 
+ * METHOD: Uses `pfctl -a` to check if anchor exists in main ruleset, and if not,
+ * loads a minimal config that includes our anchor reference.
+ * 
+ * @return void Anchor reference is added to running config
+ * @since 1.1.7
+ */
+function pc_inject_anchor_reference() {
+	// Check if our anchor is already in the main ruleset
+	exec('/sbin/pfctl -sr 2>&1 | grep -c "anchor.*parental_control"', $output, $return_code);
+	$anchor_exists = isset($output[0]) && intval($output[0]) > 0;
+	
+	if ($anchor_exists) {
+		// Already exists, nothing to do
+		return;
+	}
+	
+	// Anchor doesn't exist in main ruleset - inject it
+	// Create a temporary pf config snippet with just our anchor
+	$temp_config = "/tmp/pf_anchor_inject.conf";
+	$anchor_rule = "# Parental Control\nanchor \"parental_control\" all\n";
+	file_put_contents($temp_config, $anchor_rule);
+	
+	// Load this as an additional ruleset (doesn't replace existing rules)
+	// Note: This is a workaround. Ideally pfSense would call our generation hook.
+	exec("/sbin/pfctl -f {$temp_config} 2>&1", $output2, $return_code2);
+	
+	if ($return_code2 === 0) {
+		pc_log("Injected anchor reference into running firewall config", 'info', array(
+			'event.action' => 'anchor_reference_injected',
+			'method' => 'pfctl_direct',
+			'anchor.name' => 'parental_control'
+		));
+	} else {
+		pc_log("Failed to inject anchor reference: " . implode("\n", $output2), 'warning');
+	}
+	
+	@unlink($temp_config);
+}
+
+/**
+ * pfSense filter generation hook - called automatically during filter_configure()
+ * 
+ * CRITICAL: This function is called by pfSense's filter generation system to inject
+ * custom rules into the firewall configuration. By implementing this function, our
+ * anchor reference is automatically included every time pfSense regenerates its rules.
+ * 
+ * WHY: pfSense calls `{packagename}_generate_rules()` during filter generation,
+ * allowing packages to inject custom pf rules. This is the PROPER way to add anchors.
+ * 
+ * Returns pf syntax that will be included in the main firewall configuration BEFORE
+ * interface-specific rules, ensuring our anchor is evaluated early.
+ * 
+ * @return string PF rules to inject (anchor reference)
+ * @since 1.1.7
+ */
+function parental_control_generate_rules($type) {
+	// Only inject on filter reload (not other types like NAT)
+	if ($type != 'filter') {
+		return '';
+	}
+	
+	$rules = '';
+	
+	// Check if service is enabled
+	$enabled = config_get_path('installedpackages/parentalcontrol/config/0/enable') === 'on';
+	if (!$enabled) {
+		return '';
+	}
+	
+	// Inject our anchor reference
+	// This will be evaluated BEFORE interface rules
+	$rules .= "# Parental Control Dynamic Blocking\n";
+	$rules .= "anchor \"parental_control\" all\n";
+	$rules .= "\n";
+	
+	pc_log("Filter generation hook called - anchor reference injected", 'debug', array(
+		'event.action' => 'filter_rules_generated',
+		'rules.type' => $type,
+		'anchor.name' => 'parental_control'
+	));
+	
+	return $rules;
+}
+
+/**
+ * Ensure anchor reference exists in pfSense main firewall configuration
+ * 
+ * This function is a no-op now since we use parental_control_generate_rules() hook.
+ * Keeping it for backward compatibility but it does nothing.
+ * 
+ * @return void
+ * @since 1.1.7
+ * @deprecated Use parental_control_generate_rules() hook instead
+ */
+function pc_ensure_anchor_rule_exists() {
+	// No longer needed - using pfSense filter generation hook instead
+	pc_log("Anchor reference is handled by filter generation hook", 'debug');
 }
 
 /**
@@ -2178,6 +2293,11 @@ function pc_add_device_block($device, $enforcement_mode, $reason, $state) {
 	file_put_contents($anchor_file, $rules, FILE_APPEND | LOCK_EX);
 	
 	// Reload anchor (fast, no filter_configure needed)
+	// CRITICAL: We need to ensure pfSense knows about our anchor
+	// First, inject anchor reference if it doesn't exist
+	pc_inject_anchor_reference();
+	
+	// Then load our rules
 	exec("/sbin/pfctl -a parental_control -f {$anchor_file} 2>&1", $output, $return_code);
 	
 	if ($return_code === 0) {

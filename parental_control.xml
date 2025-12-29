@@ -2,7 +2,7 @@
 <packagegui>
 	<title>Services/Keekar's Parental Control</title>
 	<name>KACI-Parental_Control</name>
-	<version>1.1.6</version>
+	<version>1.1.7</version>
 	<include_file>/usr/local/pkg/parental_control.inc</include_file>
 	<configpath>installedpackages/parentalcontrol/config/0</configpath>
 	
@@ -274,6 +274,9 @@
 		echo '© ' . date('Y') . ' Keekar';
 		echo '&lt;/div&gt;';
 	</custom_php_after_form_command>
+	
+	<!-- Tell pfSense we generate filter rules -->
+	<filter_rules_needed>parental_control_generate_rules</filter_rules_needed>
 	
 </packagegui>
 
