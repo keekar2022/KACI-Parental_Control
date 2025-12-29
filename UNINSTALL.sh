@@ -35,10 +35,64 @@ echo "1. Removing cron jobs..."
 crontab -l 2>/dev/null | grep -v 'parental_control' | grep -v 'auto_update_parental_control' | crontab - 2>/dev/null || true
 echo "   ✓ Cron jobs removed"
 
-# Remove firewall rules
-echo "2. Removing firewall rules..."
-/usr/local/bin/php -r "require_once('/etc/inc/config.inc'); require_once('/usr/local/pkg/parental_control.inc'); pc_remove_firewall_rules(); write_config('Removed parental control rules');" 2>/dev/null || true
-echo "   ✓ Firewall rules removed"
+# Remove firewall rules, aliases, and NAT rules
+echo "2. Removing firewall rules, aliases, and NAT rules..."
+/usr/local/bin/php <<'PHPEOF'
+<?php
+require_once('/etc/inc/config.inc');
+require_once('/etc/inc/filter.inc');
+require_once('/etc/inc/util.inc');
+
+// Remove alias (parental_control_blocked)
+$aliases = config_get_path('aliases/alias', []);
+$new_aliases = [];
+foreach ($aliases as $alias) {
+    if ($alias['name'] !== 'parental_control_blocked') {
+        $new_aliases[] = $alias;
+    } else {
+        echo "   ✓ Removed alias: parental_control_blocked\n";
+    }
+}
+config_set_path('aliases/alias', $new_aliases);
+
+// Remove floating firewall rule
+$rules = config_get_path('filter/rule', []);
+$new_rules = [];
+foreach ($rules as $rule) {
+    if (isset($rule['descr']) && strpos($rule['descr'], 'Parental Control') !== false) {
+        echo "   ✓ Removed floating rule: {$rule['descr']}\n";
+    } else {
+        $new_rules[] = $rule;
+    }
+}
+config_set_path('filter/rule', $new_rules);
+
+// Remove NAT rules (redirects)
+$nat_rules = config_get_path('nat/rule', []);
+$new_nat_rules = [];
+foreach ($nat_rules as $rule) {
+    if (isset($rule['descr']) && strpos($rule['descr'], 'Parental Control') !== false) {
+        echo "   ✓ Removed NAT rule: {$rule['descr']}\n";
+    } else {
+        $new_nat_rules[] = $rule;
+    }
+}
+config_set_path('nat/rule', $new_nat_rules);
+
+// Remove pfSense table entries
+exec('/sbin/pfctl -t parental_control_blocked -T flush 2>&1', $output, $ret);
+if ($ret === 0) {
+    echo "   ✓ Flushed pfctl table: parental_control_blocked\n";
+}
+
+write_config("Removed all parental control firewall rules, aliases, and NAT rules");
+
+// Reload firewall
+filter_configure();
+echo "   ✓ Firewall reloaded\n";
+?>
+PHPEOF
+echo "   ✓ All firewall components removed"
 
 # Remove configuration from config.xml
 echo "3. Removing configuration data..."
@@ -82,12 +136,14 @@ rm -f /usr/local/pkg/parental_control_VERSION
 rm -f /usr/local/pkg/info.xml
 echo "   ✓ Package files removed"
 
-# Remove cron scripts
-echo "7. Removing cron scripts..."
+# Remove cron scripts and diagnostic tools
+echo "7. Removing cron scripts and diagnostic tools..."
 rm -f /usr/local/bin/parental_control_cron.php
 rm -f /usr/local/bin/auto_update_parental_control.sh
 rm -f /usr/local/bin/setup_auto_update.sh
-echo "   ✓ Cron scripts removed"
+rm -f /usr/local/bin/parental_control_diagnostic.php
+rm -f /usr/local/bin/parental_control_analyzer.sh
+echo "   ✓ Cron scripts and diagnostic tools removed"
 
 # Remove state and log files
 echo "8. Removing state and log files..."

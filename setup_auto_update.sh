@@ -40,17 +40,24 @@ if [ "$CRON_EXISTS" -gt 0 ]; then
     read -p "Do you want to replace it? (y/n): " REPLACE
     
     if [ "$REPLACE" = "y" ] || [ "$REPLACE" = "Y" ]; then
-        # Remove old entry
-        crontab -l 2>/dev/null | grep -v "auto_update_parental_control.sh" | crontab -
-        echo "✓ Old cron entry removed"
+        # Remove old auto-update entry (preserving all other cron jobs)
+        TEMP_CRON=$(mktemp)
+        crontab -l 2>/dev/null | grep -v "auto_update_parental_control.sh" > "$TEMP_CRON"
+        crontab "$TEMP_CRON"
+        rm -f "$TEMP_CRON"
+        echo "✓ Old auto-update cron entry removed"
     else
         echo "Keeping existing cron entry. Setup complete."
         exit 0
     fi
 fi
 
-# Add cron entry (runs every 8 hours)
-(crontab -l 2>/dev/null; echo "0 */8 * * * /usr/local/bin/auto_update_parental_control.sh") | crontab -
+# Add cron entry (runs every 8 hours) - preserving all other cron jobs
+TEMP_CRON=$(mktemp)
+crontab -l 2>/dev/null > "$TEMP_CRON"
+echo "0 */8 * * * /usr/local/bin/auto_update_parental_control.sh" >> "$TEMP_CRON"
+crontab "$TEMP_CRON"
+rm -f "$TEMP_CRON"
 
 if [ $? -eq 0 ]; then
     echo "✓ Cron job installed (checks every 8 hours)"

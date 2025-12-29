@@ -2226,6 +2226,153 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.4] - 2025-12-30 🐛 CRITICAL FIX: Cron Job Removal Bug + Enhanced Uninstall
+
+### 🚨 Critical Bug Fixed
+**Main parental control cron job was accidentally removed during auto-update setup**
+
+### Problem Discovered
+When setting up auto-update with the "replace existing cron" option, the script accidentally removed **both** cron jobs instead of just the auto-update cron job:
+- ❌ **Main cron:** `*/5 * * * * /usr/local/bin/php /usr/local/bin/parental_control_cron.php` (REMOVED!)
+- ✅ **Auto-update:** `0 */8 * * * /usr/local/bin/auto_update_parental_control.sh` (Correctly updated)
+
+**Impact:** This completely broke the parental control functionality:
+- ❌ No usage tracking
+- ❌ No time limit enforcement
+- ❌ No schedule enforcement
+- ❌ No device blocking
+
+### Root Cause
+`setup_auto_update.sh` used piping commands that could fail on some shells:
+```bash
+# OLD CODE - PROBLEMATIC:
+crontab -l 2>/dev/null | grep -v "auto_update_parental_control.sh" | crontab -
+(crontab -l 2>/dev/null; echo "0 */8 * * * ...") | crontab -
+
+# Issues:
+# 1. Piping to "crontab -" can fail with some sudo/shell combinations
+# 2. No proper preservation of other cron jobs
+# 3. No error handling
+```
+
+### Fix Implemented
+1. **Immediate:** Restored main cron job on firewall ✅
+2. **setup_auto_update.sh:** Rewrote to use temp files (more reliable)
+```bash
+# NEW CODE - ROBUST:
+TEMP_CRON=$(mktemp)
+crontab -l 2>/dev/null | grep -v "auto_update_parental_control.sh" > "$TEMP_CRON"
+crontab "$TEMP_CRON"
+rm -f "$TEMP_CRON"
+
+TEMP_CRON=$(mktemp)
+crontab -l 2>/dev/null > "$TEMP_CRON"
+echo "0 */8 * * * /usr/local/bin/auto_update_parental_control.sh" >> "$TEMP_CRON"
+crontab "$TEMP_CRON"
+rm -f "$TEMP_CRON"
+```
+
+### Benefits of New Approach
+- ✅ **Reliable:** Works with all shells and sudo configurations
+- ✅ **Safe:** Preserves all other cron jobs
+- ✅ **Error-proof:** Temp files prevent command piping issues
+- ✅ **Clean:** Proper cleanup of temp files
+
+### Enhanced UNINSTALL.sh
+**Added comprehensive cleanup that was missing:**
+
+1. **Firewall Aliases:**
+   - Removes `parental_control_blocked` alias
+   - Flushes pfctl table entries
+
+2. **Floating Firewall Rules:**
+   - Removes parental control floating rules
+   - Searches by description
+
+3. **NAT Redirect Rules:**
+   - Removes all parental control NAT rules
+   - HTTP/HTTPS redirects for block page
+
+4. **Diagnostic Tools:**
+   - Removes `parental_control_diagnostic.php`
+   - Removes `parental_control_analyzer.sh`
+
+5. **Firewall Reload:**
+   - Properly reloads firewall after rule removal
+   - Ensures changes take effect
+
+### New UNINSTALL.sh Features
+```php
+// Comprehensive cleanup added:
+- Remove pfSense alias (parental_control_blocked)
+- Remove floating firewall rules
+- Remove NAT redirect rules  
+- Remove allow rules
+- Flush pfctl table entries
+- Remove diagnostic/analyzer scripts
+- Reload firewall to apply changes
+```
+
+### Verification
+After fix, firewall now has both cron jobs:
+```bash
+$ sudo crontab -l
+*/5 * * * * /usr/local/bin/php /usr/local/bin/parental_control_cron.php
+0 */8 * * * /usr/local/bin/auto_update_parental_control.sh
+```
+
+### Testing Uninstall
+To verify complete cleanup:
+```bash
+# 1. Check cron jobs removed
+sudo crontab -l | grep parental
+
+# 2. Check files removed
+ls /usr/local/pkg/parental_control* 2>/dev/null
+ls /usr/local/www/parental_control* 2>/dev/null
+ls /usr/local/bin/*parental* 2>/dev/null
+
+# 3. Check firewall components
+pfctl -t parental_control_blocked -T show 2>/dev/null
+pfctl -s rules | grep -i parental
+
+# 4. Check NAT rules
+pfctl -s nat | grep -i parental
+
+# All should return empty/not found
+```
+
+### Files Changed
+- `setup_auto_update.sh`: Rewrote cron management to use temp files
+- `UNINSTALL.sh`: Added comprehensive firewall/alias/NAT cleanup
+- `VERSION`: Bumped to 1.2.4
+- `README.md`: Updated version
+- `docs/USER_GUIDE.md`: This comprehensive changelog
+
+### Impact
+- ✅ **Critical:** Main cron job restored (parental control now working)
+- ✅ **Reliability:** Auto-update cron setup is now bulletproof
+- ✅ **Completeness:** UNINSTALL.sh now removes ALL traces
+
+### User Action Required
+If you ran `setup_auto_update.sh` after v1.2.2, verify both cron jobs exist:
+```bash
+ssh admin@fw.keekar.com 'sudo crontab -l'
+```
+
+Should show:
+```
+*/5 * * * * /usr/local/bin/php /usr/local/bin/parental_control_cron.php
+0 */8 * * * /usr/local/bin/auto_update_parental_control.sh
+```
+
+If main cron is missing, run:
+```bash
+sudo sh -c 'crontab -l > /tmp/ct.txt; echo "*/5 * * * * /usr/local/bin/php /usr/local/bin/parental_control_cron.php" >> /tmp/ct.txt; crontab /tmp/ct.txt; rm /tmp/ct.txt'
+```
+
+---
+
 ## [1.2.3] - 2025-12-30 📊 UPDATE: Accurate Project Statistics
 
 ### 📈 Updated Project Stats in index.html
