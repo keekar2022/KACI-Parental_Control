@@ -2586,14 +2586,19 @@ function pc_calculate_blocked_devices($state) {
 			// Offline devices will be blocked automatically when they come online
 			
 			// Check if device has an IP address in the cache
-			$has_ip = isset($state['mac_to_ip_cache'][$mac]) && !empty($state['mac_to_ip_cache'][$mac]);
+			$ip_address = isset($state['mac_to_ip_cache'][$mac]) ? $state['mac_to_ip_cache'][$mac] : null;
 			
-			if ($has_ip) {
+			if ($ip_address) {
 				// Device is online - can be blocked
+				$profile_name = isset($device['profile_name']) ? $device['profile_name'] : 
+				                (isset($device['child_name']) ? $device['child_name'] : 'Unknown');
+				
 				$blocked[$mac] = [
 					'device' => $device,
 					'reason' => $reason,
-					'enforcement_mode' => $enforcement_mode
+					'enforcement_mode' => $enforcement_mode,
+					'ip' => $ip_address,
+					'profile' => $profile_name
 				];
 			} else {
 				// Device is offline - skip for now, will block when it comes online
