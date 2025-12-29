@@ -1966,6 +1966,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.4] - 2025-12-29 🚨 CRITICAL FIX: Missing cron.inc Include
+
+### 🐛 Critical Bug Fix
+**Fixed PHP Fatal Error: Failed opening required '/etc/inc/cron.inc'**
+
+### Fixed
+- **Missing Include:** Added `require_once("cron.inc");` to parental_control.inc
+- **Root Cause:** `install_cron_job()` function was being called without including its definition file
+- **Error Message:** `PHP Fatal error: Failed opening required '/etc/inc/cron.inc' in Standard input code:3`
+- **Impact:** Package could crash when setting up or removing cron jobs
+- **Solution:** Added cron.inc to the list of required includes at the top of parental_control.inc
+
+### Technical Details
+```php
+// Fixed in parental_control.inc line 19
+require_once("cron.inc");  // Added this line
+```
+
+### Affected Functions
+- `pc_setup_cron_job()` - Line 1817
+- `pc_remove_cron_job()` - Line 1900
+
+### Verification
+- ✅ Cron job installation now works without errors
+- ✅ Package initialization completes successfully
+- ✅ No more PHP fatal errors in crash reports
+
+---
+
+## [1.1.3] - 2025-12-29 🎨 UI Fix: Schedule Profile Dropdown
+
+### 🎯 Enhancement
+**Fixed schedule profile dropdown showing too many lines**
+
+### Changed
+- **Dropdown Size:** Changed from dynamic `size="<?=max(3, count($profiles))?>"`  to fixed `size="4"`
+- **File Modified:** parental_control_schedules.php
+- **Impact:** Better visual consistency, cleaner UI
+
+### Benefits
+- ✅ Consistent dropdown height regardless of profile count
+- ✅ Better aesthetics and usability
+- ✅ No more unnecessarily tall dropdowns
+
+---
+
 ## [1.1.2] - 2025-12-29 🔥 HOTFIX: Status Page Usage Display
 
 ### 🐛 Critical Bug Fix

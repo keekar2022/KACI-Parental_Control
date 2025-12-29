@@ -16,6 +16,7 @@ require_once("util.inc");
 require_once("filter.inc");
 require_once("shaper.inc");
 require_once("notices.inc");
+require_once("cron.inc");
 
 // Package version - Automatically read from VERSION file
 if (!defined('PC_VERSION')) {
