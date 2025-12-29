@@ -3,7 +3,7 @@
 A comprehensive parental control package for pfSense that helps parents manage and limit their children's internet access time.
 
 **Package ID:** KACI-Parental_Control  
-**Version:** 1.1.10 (Production Ready)  
+**Version:** 1.1.13 (Production Ready)  
 **Author:** Mukesh Kesharwani (Keekar)  
 **Status:** Production Ready  
 **License:** MIT  
@@ -56,6 +56,14 @@ A comprehensive parental control package for pfSense that helps parents manage a
 - **Strict Mode** - Block all internet traffic (recommended)
 - **Moderate Mode** - Block only web browsing (HTTP/HTTPS)
 - **DNS Mode** - DNS-based filtering (easier to bypass, not recommended)
+
+### 🚫 Captive Portal Block Page (NEW in v1.1.11!)
+- **Automatic Redirect** - Blocked devices see a beautiful block page instead of silent blocking
+- **No Authentication** - Block page works without pfSense login
+- **Modern UI** - Responsive design with gradient colors and icons
+- **Device Information** - Shows device name, IP, profile, usage, and reason for blocking
+- **Parent Override** - Password-protected temporary access feature
+- **Real-time Info** - Displays when access will be restored
 
 ### 📊 Monitoring & Logging
 - **Live Dashboard** - Real-time device status and usage

@@ -56,47 +56,56 @@ echo "   ✓ Configuration removed from config.xml\n";
 ?>
 EOF
 
+# Stop captive portal server
+echo "4. Stopping captive portal server..."
+/usr/local/etc/rc.d/parental_control_captive.sh stop 2>/dev/null || true
+echo "   ✓ Captive portal server stopped"
+
 # Remove PHP files
-echo "4. Removing PHP files..."
+echo "5. Removing PHP files..."
 rm -f /usr/local/www/parental_control_profiles.php
 rm -f /usr/local/www/parental_control_schedules.php
 rm -f /usr/local/www/parental_control_status.php
 rm -f /usr/local/www/parental_control_blocked.php
+rm -f /usr/local/www/parental_control_captive.php
+rm -f /usr/local/etc/rc.d/parental_control_captive.sh
 rm -f /usr/local/www/parental_control_api.php
 rm -f /usr/local/www/parental_control_diagnostic.php
 rm -f /usr/local/www/parental_control_health.php
 echo "   ✓ PHP files removed"
 
 # Remove package files
-echo "5. Removing package files..."
+echo "6. Removing package files..."
 rm -f /usr/local/pkg/parental_control.inc
 rm -f /usr/local/pkg/parental_control.xml
+rm -f /usr/local/pkg/parental_control_VERSION
 rm -f /usr/local/pkg/info.xml
 echo "   ✓ Package files removed"
 
 # Remove cron scripts
-echo "6. Removing cron scripts..."
+echo "7. Removing cron scripts..."
 rm -f /usr/local/bin/parental_control_cron.php
 rm -f /usr/local/bin/auto_update_parental_control.sh
 echo "   ✓ Cron scripts removed"
 
 # Remove state and log files
-echo "7. Removing state and log files..."
+echo "8. Removing state and log files..."
 rm -f /var/db/parental_control_state.json
 rm -f /var/db/parental_control_state.json.tmp
 rm -f /var/run/parental_control.pid
+rm -f /var/run/parental_control_captive.pid
 rm -f /var/log/parental_control*.log
 rm -f /var/log/parental_control*.jsonl
 echo "   ✓ State and log files removed"
 
 # Remove anchor file
-echo "8. Removing anchor files..."
+echo "9. Removing anchor files..."
 rm -f /tmp/rules.parental_control
 /sbin/pfctl -a parental_control -F all 2>/dev/null || true
 echo "   ✓ Anchor files removed"
 
 # Remove repository directory if it exists
-echo "9. Removing repository..."
+echo "10. Removing repository..."
 if [ -d "/root/KACI-Parental_Control" ]; then
     rm -rf /root/KACI-Parental_Control
     echo "   ✓ Repository removed"
@@ -105,7 +114,7 @@ else
 fi
 
 # Clear any cached PHP opcache
-echo "10. Clearing PHP cache..."
+echo "11. Clearing PHP cache..."
 rm -f /tmp/PHP_errors.log
 echo "   ✓ PHP cache cleared"
 

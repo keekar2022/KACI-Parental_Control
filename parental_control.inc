@@ -658,7 +658,11 @@ function parental_control_sync() {
 		// ORDER: These MUST come BEFORE the block-all rule (floating rules with quick)
 		pc_create_allow_rules();
 		
-		// CRITICAL: Create NAT redirect rules for HTTP/HTTPS to block page
+		// CRITICAL: Start captive portal server (standalone PHP server on port 1008)
+		// WHY: Serves block page without authentication, provides captive portal behavior
+		pc_ensure_captive_portal_running();
+		
+		// CRITICAL: Create NAT redirect rules for HTTP/HTTPS to captive portal
 		// WHY: Instead of silent blocking, show users a friendly explanation page
 		pc_create_redirect_rules();
 		
@@ -2327,6 +2331,8 @@ function pc_create_redirect_rules() {
 		$lan_ip = '192.168.1.1'; // Fallback
 	}
 	
+	$captive_port = '1008'; // Dedicated captive portal server port
+	
 	// Get NAT rules
 	if (!isset($config['nat'])) {
 		$config['nat'] = array();
@@ -2342,15 +2348,34 @@ function pc_create_redirect_rules() {
 	$http_redirect_exists = false;
 	$https_redirect_exists = false;
 	
-	foreach ($nat_rules as $rule) {
+	foreach ($nat_rules as $key => $rule) {
 		if (isset($rule['descr'])) {
 			if ($rule['descr'] === 'Parental Control - Redirect HTTP to Block Page') {
-				$http_redirect_exists = true;
+				// Check if it needs updating (old version redirected to port 80)
+				if (isset($rule['local-port']) && $rule['local-port'] !== $captive_port) {
+					// Remove old rule, will recreate with correct port
+					unset($config['nat']['rule'][$key]);
+					$needs_save = true;
+				} else {
+					$http_redirect_exists = true;
+				}
 			}
 			if ($rule['descr'] === 'Parental Control - Redirect HTTPS to Block Page') {
-				$https_redirect_exists = true;
+				// Check if it needs updating (old version redirected to port 443)
+				if (isset($rule['local-port']) && $rule['local-port'] !== $captive_port) {
+					// Remove old rule, will recreate with correct port
+					unset($config['nat']['rule'][$key]);
+					$needs_save = true;
+				} else {
+					$https_redirect_exists = true;
+				}
 			}
 		}
+	}
+	
+	// Reindex array after deletions
+	if ($needs_save) {
+		$config['nat']['rule'] = array_values($config['nat']['rule']);
 	}
 	
 	// Create HTTP redirect rule if needed
@@ -2365,7 +2390,7 @@ function pc_create_redirect_rules() {
 			),
 			'protocol' => 'tcp',
 			'target' => $lan_ip,
-			'local-port' => '80',
+			'local-port' => $captive_port,
 			'interface' => 'lan',
 			'descr' => 'Parental Control - Redirect HTTP to Block Page',
 			'associated-rule-id' => 'pass'
@@ -2374,11 +2399,11 @@ function pc_create_redirect_rules() {
 		array_unshift($config['nat']['rule'], $http_rule);
 		$needs_save = true;
 		
-		pc_log("Created HTTP redirect rule for block page", 'info', array(
+		pc_log("Created HTTP redirect rule for captive portal", 'info', array(
 			'event.action' => 'nat_rule_created',
 			'rule.type' => 'port_forward',
 			'rule.protocol' => 'HTTP',
-			'redirect.target' => $lan_ip
+			'redirect.target' => "{$lan_ip}:{$captive_port}"
 		));
 	}
 	
@@ -2394,7 +2419,7 @@ function pc_create_redirect_rules() {
 			),
 			'protocol' => 'tcp',
 			'target' => $lan_ip,
-			'local-port' => '443',
+			'local-port' => $captive_port,
 			'interface' => 'lan',
 			'descr' => 'Parental Control - Redirect HTTPS to Block Page',
 			'associated-rule-id' => 'pass'
@@ -2403,16 +2428,16 @@ function pc_create_redirect_rules() {
 		array_unshift($config['nat']['rule'], $https_rule);
 		$needs_save = true;
 		
-		pc_log("Created HTTPS redirect rule for block page", 'info', array(
+		pc_log("Created HTTPS redirect rule for captive portal", 'info', array(
 			'event.action' => 'nat_rule_created',
 			'rule.type' => 'port_forward',
 			'rule.protocol' => 'HTTPS',
-			'redirect.target' => $lan_ip
+			'redirect.target' => "{$lan_ip}:{$captive_port}"
 		));
 	}
 	
 	if ($needs_save) {
-		write_config('Parental Control: Added redirect rules for block page');
+		write_config('Parental Control: Added/updated redirect rules for captive portal');
 		mark_subsystem_dirty('nat');
 	}
 	
@@ -2490,7 +2515,7 @@ function pc_create_allow_rules() {
 		));
 	}
 	
-	// Create pfSense access allow rule if needed
+	// Create pfSense access allow rule if needed (includes captive portal port 1008)
 	if (!$pfsense_allow_exists) {
 		$pfsense_rule = array(
 			'type' => 'pass',
@@ -2502,7 +2527,7 @@ function pc_create_allow_rules() {
 			),
 			'destination' => array(
 				'address' => $lan_ip,
-				'port' => '80-443'  // HTTP and HTTPS
+				'port' => '80,443,1008'  // HTTP, HTTPS, and Captive Portal
 			),
 			'floating' => 'yes',
 			'quick' => 'yes',
@@ -2516,7 +2541,7 @@ function pc_create_allow_rules() {
 		array_unshift($rules, $pfsense_rule);
 		$needs_save = true;
 		
-		pc_log("Created pfSense access allow rule for blocked devices", 'info', array(
+		pc_log("Created pfSense access allow rule for blocked devices (including captive portal)", 'info', array(
 			'event.action' => 'filter_rule_created',
 			'rule.type' => 'pass',
 			'rule.destination' => $lan_ip
@@ -2530,6 +2555,78 @@ function pc_create_allow_rules() {
 	}
 	
 	return true;
+}
+
+/**
+ * Ensure captive portal server is running
+ * 
+ * Starts the standalone PHP web server on port 1008 to serve the block page
+ * without authentication. This creates a true captive portal experience.
+ * 
+ * Uses the RC script parental_control_captive.sh to manage the server.
+ * If the server is not running, it will be started automatically.
+ * 
+ * @return bool True if server is running or was started successfully
+ * @since 1.1.11
+ */
+function pc_ensure_captive_portal_running() {
+	$rc_script = '/usr/local/etc/rc.d/parental_control_captive.sh';
+	$pidfile = '/var/run/parental_control_captive.pid';
+	
+	// Check if RC script exists
+	if (!file_exists($rc_script)) {
+		pc_log("Captive portal RC script not found, cannot start server", 'warning', array(
+			'event.action' => 'captive_portal_missing',
+			'file.path' => $rc_script
+		));
+		return false;
+	}
+	
+	// Check if already running
+	if (file_exists($pidfile)) {
+		$pid = trim(file_get_contents($pidfile));
+		if (!empty($pid) && posix_kill($pid, 0)) {
+			// Server is running
+			pc_log("Captive portal server is already running", 'debug', array(
+				'event.action' => 'captive_portal_status',
+				'service.state' => 'running',
+				'process.pid' => $pid
+			));
+			return true;
+		} else {
+			// Stale PID file
+			pc_log("Removing stale captive portal PID file", 'info', array(
+				'event.action' => 'captive_portal_cleanup',
+				'file.path' => $pidfile
+			));
+			unlink($pidfile);
+		}
+	}
+	
+	// Start the server (using onestart to bypass rc.conf requirement)
+	pc_log("Starting captive portal server", 'info', array(
+		'event.action' => 'captive_portal_start',
+		'service.port' => 1008
+	));
+	
+	exec($rc_script . ' onestart 2>&1', $output, $return_code);
+	
+	if ($return_code === 0) {
+		pc_log("Captive portal server started successfully", 'info', array(
+			'event.action' => 'captive_portal_started',
+			'event.outcome' => 'success',
+			'service.port' => 1008
+		));
+		return true;
+	} else {
+		pc_log("Failed to start captive portal server", 'error', array(
+			'event.action' => 'captive_portal_start_failed',
+			'event.outcome' => 'failure',
+			'exit.code' => $return_code,
+			'output' => implode("\n", $output)
+		));
+		return false;
+	}
 }
 
 /**
@@ -3034,9 +3131,33 @@ function parental_control_cron_job() {
 	if (pc_should_reset_counters($last_reset, $reset_time)) {
 		pc_reset_daily_counters($state);
 		$state['last_reset'] = $current_time;
-		// After reset, unblock all devices (they have fresh limits)
-		if (isset($state['blocked_devices'])) {
-			$state['blocked_devices'] = [];
+		
+		// CRITICAL: After usage reset, only unblock TIME-LIMIT-based blocks
+		// WHY: Schedule-based blocks should remain active (e.g., bedtime 20:00-06:30)
+		// If we clear ALL blocks, devices in active schedules will be unblocked briefly
+		// Solution: Keep schedule-based blocks, remove only time-limit-based blocks
+		if (isset($state['blocked_devices']) && is_array($state['blocked_devices'])) {
+			$kept_blocks = [];
+			foreach ($state['blocked_devices'] as $mac => $block_info) {
+				$reason = $block_info['reason'] ?? '';
+				// Keep blocks with schedule-related reasons
+				if (stripos($reason, 'schedule') !== false || stripos($reason, 'bedtime') !== false) {
+					$kept_blocks[$mac] = $block_info;
+					pc_log("Keeping schedule-based block during reset", 'debug', array(
+						'device.mac' => $mac,
+						'block.reason' => $reason
+					));
+				}
+			}
+			$state['blocked_devices'] = $kept_blocks;
+			
+			if (count($kept_blocks) > 0) {
+				pc_log("Usage reset: kept " . count($kept_blocks) . " schedule-based blocks active", 'info', array(
+					'event.action' => 'usage_reset',
+					'blocks.kept' => count($kept_blocks),
+					'blocks.removed' => count($state['blocked_devices']) - count($kept_blocks)
+				));
+			}
 		}
 	}
 		
@@ -3608,7 +3729,24 @@ function pc_update_device_usage(&$state) {
 		$state['devices_by_ip'][$ip]['connections_last_check'] = $connection_count;
 		
 		if ($connection_count > 0) {
-			// Device has active connections - increment usage
+			// CRITICAL: Don't track usage during blocked schedule time!
+			// WHY: If device is in a blocked schedule (e.g., bedtime), usage should not accumulate
+			// even if the device manages to have connections (firewall might be delayed in blocking)
+			$in_blocked_schedule = pc_is_in_blocked_schedule($device);
+			
+			if ($in_blocked_schedule) {
+				pc_log("Device $device_name ($mac @ $ip) active but in blocked schedule - NOT tracking usage", 'info', array(
+					'event.action' => 'usage_skipped_schedule',
+					'device.mac' => $mac,
+					'device.name' => $device_name,
+					'client.address' => $ip,
+					'connections' => $connection_count,
+					'reason' => 'in_blocked_schedule'
+				));
+				continue; // Skip to next device
+			}
+			
+			// Device has active connections and NOT in blocked schedule - increment usage
 			$state['devices_by_ip'][$ip]['usage_today'] += $interval_minutes;
 			$state['devices_by_ip'][$ip]['usage_week'] += $interval_minutes;
 			$state['devices_by_ip'][$ip]['last_seen'] = time();

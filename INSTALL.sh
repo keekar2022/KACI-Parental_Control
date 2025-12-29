@@ -15,7 +15,7 @@
 #
 
 # Configuration
-PFSENSE_USER="admin"
+PFSENSE_USER="mkesharw"
 PACKAGE_DIR="$(dirname $0)"
 
 # Colors for output
@@ -255,6 +255,8 @@ upload_files() {
         "$PACKAGE_DIR/parental_control_profiles.php" \
         "$PACKAGE_DIR/parental_control_schedules.php" \
         "$PACKAGE_DIR/parental_control_blocked.php" \
+        "$PACKAGE_DIR/parental_control_captive.php" \
+        "$PACKAGE_DIR/parental_control_captive.sh" \
         "$PACKAGE_DIR/parental_control_health.php" \
         "$PACKAGE_DIR/parental_control_api.php" \
         "$PACKAGE_DIR/parental_control_diagnostic.php" \
@@ -289,6 +291,8 @@ upload_files() {
         sudo -n mv /tmp/parental_control_profiles.php /usr/local/www/ && \
         sudo -n mv /tmp/parental_control_schedules.php /usr/local/www/ && \
         sudo -n mv /tmp/parental_control_blocked.php /usr/local/www/ && \
+        sudo -n mv /tmp/parental_control_captive.php /usr/local/www/ && \
+        sudo -n mv /tmp/parental_control_captive.sh /usr/local/etc/rc.d/ && \
         sudo -n mv /tmp/parental_control_health.php /usr/local/www/ 2>/dev/null; true && \
         sudo -n mv /tmp/parental_control_api.php /usr/local/www/ 2>/dev/null; true && \
         sudo -n mv /tmp/parental_control_diagnostic.php /usr/local/bin/ 2>/dev/null; true && \
@@ -300,6 +304,7 @@ upload_files() {
         sudo -n chmod 644 /usr/local/pkg/parental_control.inc && \
         sudo -n chmod 644 /usr/local/pkg/parental_control_VERSION && \
         sudo -n chmod 644 /usr/local/www/parental_control*.php && \
+        sudo -n chmod 755 /usr/local/etc/rc.d/parental_control_captive.sh && \
         sudo -n chmod 755 /usr/local/bin/parental_control_diagnostic.php 2>/dev/null; true && \
         sudo -n chmod 755 /usr/local/bin/parental_control_analyzer.sh 2>/dev/null; true && \
         sudo -n chmod 644 /usr/local/share/pfSense-pkg-KACI-Parental_Control/info.xml && \
@@ -507,6 +512,8 @@ verify_installation() {
             "/usr/local/www/parental_control_profiles.php" \
             "/usr/local/www/parental_control_schedules.php" \
             "/usr/local/www/parental_control_blocked.php" \
+            "/usr/local/www/parental_control_captive.php" \
+            "/usr/local/etc/rc.d/parental_control_captive.sh" \
             "/usr/local/www/parental_control_health.php" \
             "/usr/local/www/parental_control_api.php" \
             "/usr/local/bin/parental_control_diagnostic.php" \
@@ -660,6 +667,8 @@ UNREGISTER_EOF
         sudo rm -f /usr/local/www/parental_control_profiles.php 2>/dev/null
         sudo rm -f /usr/local/www/parental_control_schedules.php 2>/dev/null
         sudo rm -f /usr/local/www/parental_control_blocked.php 2>/dev/null
+        sudo rm -f /usr/local/www/parental_control_captive.php 2>/dev/null
+        sudo rm -f /usr/local/etc/rc.d/parental_control_captive.sh 2>/dev/null
         sudo rm -f /usr/local/www/parental_control_health.php 2>/dev/null
         sudo rm -f /usr/local/www/parental_control_api.php 2>/dev/null
         sudo rm -f /usr/local/bin/parental_control_diagnostic.php 2>/dev/null
