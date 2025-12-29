@@ -1966,6 +1966,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.8] - 2025-12-29 🚀 MAJOR: Table-Based Blocking (Replaces Anchors)
+
+### 🎯 Major Architectural Change
+**Switched from pfSense anchors to pfSense tables/aliases for blocking**
+
+### Why This Change?
+**PROBLEM:** pfSense anchor-based blocking had rule ordering issues. Default LAN allow rules were evaluated BEFORE our anchor rules, making blocking ineffective.
+
+**SOLUTION:** pfSense tables (aliases) + floating rules. Floating rules are evaluated FIRST (before interface rules), ensuring our blocking happens correctly.
+
+### Changed
+- **Blocking Method:** Now uses pfSense `parental_control_blocked` alias (table) + floating rule
+- **Status Page:** Updated to show table-based blocking instead of anchor rules
+- **Rule Visibility:** Blocking rule IS NOW VISIBLE in pfSense GUI (Firewall → Rules → Floating)
+- **Alias Visibility:** Blocked IPs visible in GUI (Firewall → Aliases)
+- **`pc_init_block_table()`:** Completely rewritten to create/manage alias and floating rule
+- **`pc_add_device_block_table()`:** Uses `pfctl -t parental_control_blocked -T add <IP>`
+- **`pc_remove_device_block_table()`:** Uses `pfctl -t parental_control_blocked -T delete <IP>`
+- **Old Functions:** `pc_add_device_block()`, `pc_remove_device_block()`, `pc_inject_anchor_reference()` marked as DEPRECATED
+
+### Added
+- **`pc_generate_blocking_rule()`:** Helper function to generate floating rule configuration
+- **Automatic Cleanup:** Old anchor files are automatically removed during init
+
+### Benefits
+1. ✅ **Proper Rule Ordering:** Floating rules evaluated BEFORE interface rules
+2. ✅ **GUI Visibility:** All rules visible in pfSense GUI (no hidden rules)
+3. ✅ **Native Integration:** Uses pfSense's built-in alias/table system
+4. ✅ **Fast Updates:** Adding/removing IPs is instant (no filter reload)
+5. ✅ **Debugging:** Easy to verify via `pfctl -t parental_control_blocked -T show`
+
+### Technical Details
+```php
+// Create alias in config
+$new_alias = array(
+    'name' => 'parental_control_blocked',
+    'type' => 'host',
+    'address' => '',  // IPs managed dynamically via pfctl
+    'descr' => 'Parental Control - Blocked Devices'
+);
+
+// Create floating rule that blocks traffic FROM this alias
+$new_rule = array(
+    'type' => 'block',
+    'interface' => 'lan',
+    'floating' => 'yes',  // CRITICAL: Evaluated first
+    'quick' => 'yes',
+    'source' => array('address' => 'parental_control_blocked')
+);
+```
+
+### CLI Commands
+```bash
+# Show blocked IPs
+pfctl -t parental_control_blocked -T show
+
+# Show floating rule
+pfctl -sr | grep parental_control_blocked
+
+# Manually unblock all (emergency)
+pfctl -t parental_control_blocked -T flush
+```
+
+### Verification
+- ✅ Blocking now works correctly (verified via SSH timeout when blocked)
+- ✅ Rule visible in pfSense GUI under Firewall → Rules → Floating
+- ✅ Alias visible in pfSense GUI under Firewall → Aliases
+- ✅ Status page correctly displays table-based blocking info
+- ✅ Old anchor files automatically cleaned up
+
+### Migration
+**This update is AUTOMATIC - no user action required!**
+- On next sync, old anchor files are removed
+- New alias and floating rule are created
+- Existing blocked devices are automatically re-blocked using tables
+
+---
+
 ## [1.1.4] - 2025-12-29 🚨 CRITICAL FIX: Missing cron.inc Include
 
 ### 🐛 Critical Bug Fix

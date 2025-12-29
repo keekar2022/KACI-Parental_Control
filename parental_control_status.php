@@ -347,31 +347,62 @@ if (is_array($profiles)) {
 	</div>
 </div>
 
-<!-- Active Firewall Rules -->
+<!-- Active Firewall Rules (Table-Based) -->
 <div class="panel panel-default">
 	<div class="panel-heading">
 		<h2 class="panel-title">
-			<i class="fa-solid fa-shield-alt"></i> <?=gettext("Active Firewall Rules (pfSense Anchor)")?>
+			<i class="fa-solid fa-shield-alt"></i> <?=gettext("Active Firewall Rules (pfSense Table)")?>
 			<span class="badge" style="background: #5bc0de; margin-left: 10px;" id="rule-count">Loading...</span>
 		</h2>
 	</div>
 	<div class="panel-body">
 		<?php
-		// Execute pfctl command to get anchor rules
-		$anchor_rules = array();
-		$anchor_output = '';
-		exec('pfctl -a parental_control -sr 2>&1', $anchor_rules, $return_code);
+		// Get blocked IPs from pfSense table
+		$blocked_ips = array();
+		exec('pfctl -t parental_control_blocked -T show 2>&1', $blocked_ips, $return_code);
 		
-		// Check if anchor has rules
-		if ($return_code === 0 && !empty($anchor_rules)) {
-			// Count devices (lines starting with "# Device:")
-			$device_count = 0;
-			foreach ($anchor_rules as $line) {
-				if (strpos($line, '# Device:') === 0) {
-					$device_count++;
+		// Remove empty lines
+		$blocked_ips = array_filter($blocked_ips, 'trim');
+		
+		// Get device info from state file
+		$state = pc_load_state();
+		$blocked_devices = array();
+		
+		foreach ($blocked_ips as $ip) {
+			$ip = trim($ip);
+			if (empty($ip)) continue;
+			
+			// Find device name from state
+			$device_name = 'Unknown';
+			$device_mac = 'Unknown';
+			$reason = 'Unknown';
+			
+			if (isset($state['devices_by_ip'][$ip])) {
+				$device_name = $state['devices_by_ip'][$ip]['name'];
+				$device_mac = $state['devices_by_ip'][$ip]['mac'];
+			}
+			
+			// Find reason from blocked_devices
+			if (isset($state['blocked_devices'])) {
+				foreach ($state['blocked_devices'] as $mac => $block_info) {
+					if (isset($block_info['device']['ip_address']) && $block_info['device']['ip_address'] == $ip) {
+						$reason = isset($block_info['reason']) ? $block_info['reason'] : 'Unknown';
+						break;
+					}
 				}
 			}
-			?>
+			
+			$blocked_devices[] = array(
+				'ip' => $ip,
+				'name' => $device_name,
+				'mac' => $device_mac,
+				'reason' => $reason
+			);
+		}
+		
+		$device_count = count($blocked_devices);
+		
+		if ($device_count > 0) { ?>
 			<div class="alert alert-warning">
 				<i class="fa-solid fa-exclamation-triangle"></i>
 				<strong><?=gettext("Blocking Active")?></strong> - 
@@ -380,43 +411,40 @@ if (is_array($profiles)) {
 			
 			<p class="text-info">
 				<i class="fa-solid fa-info-circle"></i>
-				<strong>Note:</strong> These rules are managed via pfSense anchors and are NOT visible in Firewall → Rules GUI.
-				They are applied dynamically by the parental control system.
+				<strong>Method:</strong> pfSense Tables (Native) - Blocking rule IS visible in <strong>Firewall → Rules → Floating</strong>
 			</p>
 			
 			<div style="margin-top: 15px;">
-				<strong><?=gettext("Rule Details:")?></strong>
-				<pre style="background: #f5f5f5; padding: 15px; border: 1px solid #ddd; border-radius: 4px; max-height: 400px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 12px;"><?php
-					foreach ($anchor_rules as $line) {
-						// Highlight different rule types
-						$line = htmlspecialchars($line);
-						
-						if (strpos($line, '# Device:') === 0) {
-							// Device header - make it bold and colored
-							echo '<span style="color: #d9534f; font-weight: bold;">' . $line . '</span>' . "\n";
-						} elseif (strpos($line, 'block drop') !== false) {
-							// Block rules - red
-							echo '<span style="color: #c9302c; font-weight: bold;">' . $line . '</span>' . "\n";
-						} elseif (strpos($line, 'pass quick') !== false) {
-							// Pass rules - green
-							echo '<span style="color: #5cb85c;">' . $line . '</span>' . "\n";
-						} elseif (strpos($line, 'rdr pass') !== false) {
-							// Redirect rules - blue
-							echo '<span style="color: #337ab7;">' . $line . '</span>' . "\n";
-						} else {
-							// Other lines
-							echo '<span style="color: #666;">' . $line . '</span>' . "\n";
-						}
-					}
-				?></pre>
+				<strong><?=gettext("Blocked Devices:")?></strong>
+				<table class="table table-striped table-hover" style="margin-top: 10px;">
+					<thead>
+						<tr style="background: #f5f5f5;">
+							<th>IP Address</th>
+							<th>Device Name</th>
+							<th>MAC Address</th>
+							<th>Reason</th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php foreach ($blocked_devices as $device): ?>
+						<tr>
+							<td><code style="color: #d9534f; font-weight: bold;"><?php echo htmlspecialchars($device['ip']); ?></code></td>
+							<td><?php echo htmlspecialchars($device['name']); ?></td>
+							<td><span style="font-family: monospace; font-size: 11px;"><?php echo htmlspecialchars($device['mac']); ?></span></td>
+							<td><span class="label label-danger"><?php echo htmlspecialchars($device['reason']); ?></span></td>
+						</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
 			</div>
 			
 			<div class="alert alert-info" style="margin-top: 15px;">
-				<h4><i class="fa-solid fa-question-circle"></i> <?=gettext("Rule Legend:")?></h4>
+				<h4><i class="fa-solid fa-question-circle"></i> <?=gettext("How Table-Based Blocking Works:")?></h4>
 				<ul style="margin-bottom: 0;">
-					<li><span style="color: #5cb85c; font-weight: bold;">pass quick</span> - Allow specific traffic (DNS, pfSense access)</li>
-					<li><span style="color: #337ab7; font-weight: bold;">rdr pass</span> - Redirect HTTP/HTTPS to block page</li>
-					<li><span style="color: #c9302c; font-weight: bold;">block drop</span> - Block all other traffic</li>
+					<li><strong>Alias/Table:</strong> <code>parental_control_blocked</code> contains list of blocked IPs</li>
+					<li><strong>Floating Rule:</strong> Blocks traffic from IPs in the table (visible in GUI)</li>
+					<li><strong>Dynamic Updates:</strong> IPs added/removed instantly without filter reload</li>
+					<li><strong>Rule Ordering:</strong> Floating rules are evaluated BEFORE interface rules (correct order)</li>
 				</ul>
 			</div>
 			
@@ -433,12 +461,15 @@ if (is_array($profiles)) {
 			</div>
 			<p class="text-muted">
 				<i class="fa-solid fa-info-circle"></i>
-				Firewall rules will appear here automatically when devices are blocked due to:
+				Devices will be blocked automatically when:
 			</p>
 			<ul class="text-muted">
-				<li>Time limit exceeded</li>
-				<li>Blocked schedule time (e.g., bedtime)</li>
+				<li>Profile time limit exceeded</li>
+				<li>Currently in blocked schedule time (e.g., bedtime)</li>
 			</ul>
+			<p class="text-muted">
+				<strong>Note:</strong> IPs are added to the <code>parental_control_blocked</code> table dynamically.
+			</p>
 			
 			<script>
 				// Update badge
@@ -449,9 +480,9 @@ if (is_array($profiles)) {
 		
 		<hr>
 		<p class="text-muted" style="font-size: 11px; margin-bottom: 0;">
-			<strong>Location:</strong> Anchor: <code>parental_control</code> | 
-			File: <code>/tmp/rules.parental_control</code> | 
-			<strong>CLI Command:</strong> <code>pfctl -a parental_control -sr</code>
+			<strong>Alias/Table:</strong> <code>parental_control_blocked</code> (Firewall → Firewall → Aliases) | 
+			<strong>Floating Rule:</strong> <code>Parental Control - Dynamic Blocking</code> (Firewall → Rules → Floating) | 
+			<strong>CLI Command:</strong> <code>pfctl -t parental_control_blocked -T show</code>
 		</p>
 	</div>
 </div>

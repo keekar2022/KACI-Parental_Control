@@ -1926,65 +1926,143 @@ function pc_remove_cron_job() {
  * @updated 0.7.6 Removes invalid table-based rules
  */
 function pc_init_block_table() {
-	// Initialize the pfSense anchor
-	// Anchors allow us to manage rules dynamically without filter_configure()
-	$anchor_file = '/tmp/rules.parental_control';
+	// Initialize the pfSense table-based blocking system (v1.1.8+)
+	// Creates/manages the alias and floating rule for dynamic IP blocking
+	global $config;
 	
-	// Create empty anchor file if it doesn't exist
-	if (!file_exists($anchor_file)) {
-		file_put_contents($anchor_file, "# Parental Control Dynamic Rules\n");
-		chmod($anchor_file, 0644);
-		pc_log("Created anchor file for dynamic blocking", 'info', array(
-			'event.action' => 'anchor_created',
-			'anchor.file' => $anchor_file
-		));
+	$alias_name = 'parental_control_blocked';
+	$rule_descr = 'Parental Control: Dynamic Blocking Rule';
+	$needs_filter_reload = false;
+	
+	// ===== 1. Ensure the alias exists =====
+	if (!isset($config['aliases'])) {
+		$config['aliases'] = array();
+	}
+	if (!isset($config['aliases']['alias'])) {
+		$config['aliases']['alias'] = array();
 	}
 	
-	// Load the anchor into pfctl (idempotent - safe to call multiple times)
-	exec("/sbin/pfctl -a parental_control -f {$anchor_file} 2>&1", $output, $return_code);
-	
-	if ($return_code === 0) {
-		pc_log("Anchor loaded successfully", 'debug', array(
-			'event.action' => 'anchor_loaded',
-			'anchor.name' => 'parental_control'
-		));
-	}
-	
-	// Clean up any invalid rules from earlier versions
-	// Remove table-based rules that cause "Unresolvable source alias" errors
-	$rules = config_get_path('filter/rule', []);
-	$new_rules = [];
-	$removed_invalid = false;
-	
-	foreach ($rules as $rule) {
-		// Remove invalid table-based rule
-		if (isset($rule['descr']) && strpos($rule['descr'], 'Dynamic Block Table') !== false) {
-			pc_log("Removing invalid table-based rule from v0.7.0-0.7.2", 'info', array(
-				'event.action' => 'invalid_rule_removed',
-				'rule.description' => $rule['descr']
-			));
-			$removed_invalid = true;
-			continue; // Skip this rule
+	$alias_exists = false;
+	foreach ($config['aliases']['alias'] as $idx => $alias) {
+		if ($alias['name'] === $alias_name) {
+			$alias_exists = true;
+			// Ensure it's a host alias
+			if ($alias['type'] !== 'host') {
+				pc_log("Correcting alias '{$alias_name}' type to host", 'info');
+				$config['aliases']['alias'][$idx]['type'] = 'host';
+				$needs_filter_reload = true;
+			}
+			break;
 		}
-		
-		// Keep all other rules
-		$new_rules[] = $rule;
 	}
 	
-	// Update config in memory if we removed any invalid rules
-	// DON'T call write_config here - let the caller handle it
-	// This prevents conflicts when called during profile/schedule saves
-	if ($removed_invalid) {
-		config_set_path('filter/rule', $new_rules);
-		pc_log("Invalid rules removed from config (will be saved by caller)", 'info', array(
-			'event.action' => 'cleanup_in_memory',
-			'note' => 'Calling function will save via write_config'
+	if (!$alias_exists) {
+		pc_log("Creating blocking alias for dynamic IP management", 'info', array(
+			'event.action' => 'alias_created',
+			'alias.name' => $alias_name,
+			'alias.type' => 'host'
+		));
+		$new_alias = array(
+			'name' => $alias_name,
+			'type' => 'host',
+			'address' => '',  // Start empty
+			'descr' => 'Dynamically managed IPs for Parental Control blocking',
+			'detail' => 'DO NOT EDIT - Managed automatically by Parental Control package'
+		);
+		$config['aliases']['alias'][] = $new_alias;
+		$needs_filter_reload = true;
+	}
+	
+	// ===== 2. Ensure the floating rule exists =====
+	if (!isset($config['filter'])) {
+		$config['filter'] = array();
+	}
+	if (!isset($config['filter']['rule'])) {
+		$config['filter']['rule'] = array();
+	}
+	
+	$rule_exists = false;
+	foreach ($config['filter']['rule'] as $idx => $rule) {
+		if (isset($rule['descr']) && $rule['descr'] === $rule_descr) {
+			$rule_exists = true;
+			// Verify it's correctly configured
+			if (!isset($rule['floating']) || $rule['floating'] !== 'yes' ||
+			    !isset($rule['type']) || $rule['type'] !== 'block' ||
+			    !isset($rule['source']['address']) || $rule['source']['address'] !== $alias_name) {
+				
+				pc_log("Correcting existing blocking rule configuration", 'warning');
+				$config['filter']['rule'][$idx] = pc_generate_blocking_rule($alias_name, $rule_descr);
+				$needs_filter_reload = true;
+			}
+			break;
+		}
+	}
+	
+	if (!$rule_exists) {
+		pc_log("Creating floating blocking rule using alias", 'info', array(
+			'event.action' => 'rule_created',
+			'rule.type' => 'floating',
+			'rule.action' => 'block',
+			'rule.source' => $alias_name,
+			'note' => 'Rule visible in GUI - Firewall → Rules → Floating'
+		));
+		$config['filter']['rule'][] = pc_generate_blocking_rule($alias_name, $rule_descr);
+		$needs_filter_reload = true;
+	}
+	
+	// ===== 3. Clean up old anchor-based files =====
+	$anchor_file = '/tmp/rules.parental_control';
+	if (file_exists($anchor_file)) {
+		unlink($anchor_file);
+		pc_log("Removed legacy anchor file", 'info', array(
+			'event.action' => 'cleanup',
+			'file' => $anchor_file
 		));
 	}
 	
-	// Note: Anchor reference rule is added during sync, not here
-	// This function is called frequently (every cron run), so we avoid
-	// expensive operations like filter_configure()
+	// ===== 4. Save config and reload if needed =====
+	// Note: We DON'T call write_config here to avoid conflicts when called
+	// from profile/schedule saves. The caller should call write_config.
+	// We only trigger filter_configure if we made changes that need it.
+	if ($needs_filter_reload) {
+		pc_log("Blocking system configuration updated (reload needed)", 'info', array(
+			'event.action' => 'config_updated',
+			'note' => 'Caller should save config and reload filter'
+		));
+	}
+	
+	return $needs_filter_reload;
+}
+
+/**
+ * Generate a pfSense floating rule configuration for blocking IPs in the alias
+ *
+ * @param string $alias_name The name of the alias/table containing blocked IPs
+ * @param string $rule_descr Description for the rule
+ * @return array Rule configuration array suitable for config.xml
+ * @since 1.1.8
+ */
+function pc_generate_blocking_rule($alias_name, $rule_descr) {
+	return array(
+		'type' => 'block',
+		'interface' => 'LAN_Interfaces',  // Apply to all LAN interfaces
+		'ipprotocol' => 'inet',
+		'descr' => $rule_descr,
+		'source' => array(
+			'address' => $alias_name  // Reference the alias
+		),
+		'destination' => array(
+			'any' => ''
+		),
+		'floating' => 'yes',
+		'quick' => 'yes',  // Stop processing on match
+		'direction' => 'any',
+		'log' => 'yes',  // Enable logging for debugging
+		'created' => array(
+			'time' => time(),
+			'username' => 'parental_control@package'
+		)
+	);
 }
 
 /**
