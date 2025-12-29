@@ -4005,6 +4005,9 @@ scp VERSION root@firewall:/usr/local/pkg/parental_control_VERSION
 | v1.1.0  | 2025-12-29 | Feature Launch | Shared Profile Time introduced  |
 | v1.1.1  | 2025-12-29 | Display Bug    | Status page showing 0:00        |
 | v1.1.2  | 2025-12-29 | **FIXED** ✅   | Status page now shows correctly |
+| v1.1.8  | 2025-12-29 | Major Update   | Table-based blocking (pfSense aliases) |
+| v1.1.9  | 2025-12-29 | Block Page     | NAT redirects for block page visibility |
+| v1.1.10 | 2025-12-30 | **CRITICAL**🔥 | Fixed midnight reset bug + UI enhancements |
 
 ---
 
@@ -4030,6 +4033,131 @@ If you're still seeing **0:00** after upgrading to v1.1.2:
    ```bash
    sudo crontab -l | grep parental
    ```
+
+---
+
+## 🔥 v1.1.10 - Critical Fixes (2025-12-30)
+
+### **1. CRITICAL: Daily Reset Bug Fixed** 🚨
+
+**Problem:**
+- Midnight reset not running automatically
+- Usage counters accumulating indefinitely (31+ hours shown)
+- Manual resets after midnight prevented next automatic reset
+
+**Root Cause:**
+```php
+// OLD (BROKEN):
+return ($last_reset < $today_reset && $now >= $today_reset);
+// If manual reset at 04:00, then 04:00 > 00:00, returns FALSE forever!
+```
+
+**Fix:**
+```php
+// NEW (FIXED):
+if ($now >= $today_reset) {
+    return ($last_reset < $today_reset);  // Reset if last was before today's time
+} else {
+    $yesterday_reset = strtotime("yesterday " . $reset_time);
+    return ($last_reset < $yesterday_reset);  // Check against yesterday
+}
+```
+
+**Impact:**
+- ✅ Automatic midnight reset now works reliably
+- ✅ Manual resets don't interfere with automatic resets
+- ✅ Works with any configured reset time (midnight, 6am, etc.)
+
+---
+
+### **2. Enhanced Status Page Visualization** 🎨
+
+**Improvements:**
+- Added **Profile** column to blocked devices table
+- Red-themed table header with icons
+- Better device info lookup using `mac_to_ip_cache`
+- Styled IP addresses, MAC addresses, and badges
+
+**Before:**
+```
+┌──────────────┬─────────────┬──────────────────┬─────────┐
+│ IP Address   │ Device Name │ MAC Address      │ Reason  │
+└──────────────┴─────────────┴──────────────────┴─────────┘
+```
+
+**After:**
+```
+┌──────────────┬─────────────┬──────────────────┬──────────┬─────────┐
+│ 🌐 IP        │ 💻 Device   │ 🔖 MAC          │ 👤 Profile│ ⚠️ Reason│
+├──────────────┼─────────────┼──────────────────┼──────────┼─────────┤
+│ 192.168.1.96 │ HISENSETV   │ 7c:b3:7b:4e:eb:95│ John     │ Time    │
+└──────────────┴─────────────┴──────────────────┴──────────┴─────────┘
+```
+
+---
+
+### **3. UI Improvements**
+
+**Schedule Dropdown Fix:**
+- Changed from 5 empty rows to dynamic sizing
+- Shows 1 row when no profiles exist
+- Shows 4 rows when profiles available for selection
+
+**Blocking Diagnostic Enhancement:**
+- `pc_calculate_blocked_devices()` now includes IP and profile in return
+- Better visibility for debugging
+- Improves diagnostic tool output
+
+---
+
+### **Files Changed**
+- `parental_control.inc` - Reset logic fix, blocking diagnostic
+- `parental_control_status.php` - Enhanced blocked devices table
+- `parental_control_schedules.php` - Dynamic dropdown sizing
+- `VERSION` - Updated to 1.1.10
+
+---
+
+### **Upgrade Instructions**
+
+**Automatic (Recommended):**
+```bash
+cd /path/to/KACI-Parental_Control
+./INSTALL.sh update fw.keekar.com
+```
+
+**Manual:**
+```bash
+cd /path/to/KACI-Parental_Control
+git pull
+./INSTALL.sh fw.keekar.com
+```
+
+---
+
+### **Verification**
+
+**1. Check Version:**
+- Footer should show **v1.1.10**
+
+**2. Test Reset Logic:**
+```bash
+sudo php << 'EOF'
+<?php
+require_once('/etc/inc/config.inc');
+require_once('/usr/local/pkg/parental_control.inc');
+
+$state = pc_load_state();
+echo "Should reset at next midnight? ";
+echo pc_should_reset_counters($state['last_reset'], 'midnight') ? "YES" : "NO";
+?>
+EOF
+```
+
+**3. View Enhanced Status Page:**
+- Go to Services → Keekar's Parental Control → Status
+- Scroll to "Active Firewall Rules" section
+- Check for red-themed table with Profile column
 
 ---
 
