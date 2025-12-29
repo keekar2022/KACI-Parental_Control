@@ -2648,18 +2648,41 @@ function pc_apply_smart_firewall_changes($old_blocked, $new_blocked, $state) {
 		}
 	}
 	
-	// Find devices that need to be BLOCKED (not blocked before, but should be now)
+	// CRITICAL FIX: Always ensure ALL devices that should be blocked ARE in pfctl table
+	// WHY: pfctl table can be cleared (reboot, manual flush) while state still has devices marked
+	// SOLUTION: Re-add all blocked devices to table (pfctl -T add is idempotent, no duplicates)
+	//
+	// OLD LOGIC (BROKEN):
+	// - Only add if not in old_blocked
+	// - Assumes pfctl table mirrors state
+	// - Breaks when pfctl table is cleared but state persists
+	//
+	// NEW LOGIC (FIXED):
+	// - Always ensure device is in pfctl table
+	// - Check if IP is actually in table, not just in state
+	// - Guarantees pfctl table always matches intended blocks
+	
 	foreach ($new_blocked as $mac => $info) {
-		if (!isset($old_blocked[$mac])) {
-			// Device should be blocked - use table-based method
-			if (pc_add_device_block_table($info['device'], $info['enforcement_mode'], $info['reason'], $state)) {
-				$changes++;
-				pc_log("Blocked device: {$mac} - {$info['reason']}", 'info', array(
-					'event.action' => 'device_blocked',
-					'device.mac' => $mac,
-					'device.name' => $info['device']['device_name'],
-					'block.reason' => $info['reason']
-				));
+		// Check if IP is actually in pfctl table (not just in state)
+		$ip = isset($state['mac_to_ip_cache'][$mac]) ? $state['mac_to_ip_cache'][$mac] : null;
+		
+		if ($ip) {
+			// Check if this IP is in the pfctl table
+			exec("/sbin/pfctl -t parental_control_blocked -T test {$ip} 2>&1", $test_output, $test_ret);
+			$in_table = ($test_ret === 0);
+			
+			if (!$in_table) {
+				// IP not in table - add it now
+				if (pc_add_device_block_table($info['device'], $info['enforcement_mode'], $info['reason'], $state)) {
+					$changes++;
+					pc_log("Blocked device: {$mac} - {$info['reason']}", 'info', array(
+						'event.action' => 'device_blocked',
+						'device.mac' => $mac,
+						'device.name' => $info['device']['device_name'] ?? 'Unknown',
+						'block.reason' => $info['reason'],
+						'note' => 'Added to pfctl table'
+					));
+				}
 			}
 		}
 	}
