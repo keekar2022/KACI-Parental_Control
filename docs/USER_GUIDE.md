@@ -2226,6 +2226,210 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] - 2025-12-30 📊 MAJOR UX IMPROVEMENT: Individual Device Usage Tracking
+
+### 🎯 Significant User Experience Enhancement
+**Status page now shows individual device usage while maintaining shared time limit enforcement**
+
+### The Problem (Old System)
+**Lack of Transparency:** Status page only showed cumulative usage, making it impossible to see which device was consuming time:
+
+**Old Display:**
+```
+Profile: GunGun
+Devices: Phone, iPad, Laptop
+Usage Today: 6h 30m    ← Sum of all devices, no breakdown!
+Remaining: 1h 30m
+```
+
+**Issues:**
+- ❌ Parents couldn't see which device consuming most time
+- ❌ Kids couldn't see their own device usage
+- ❌ No accountability (all devices lumped together)
+- ❌ Confusing when multiple family members share a profile
+- ❌ Hard to identify usage patterns
+
+### The Solution (New System)
+**Individual Device Visibility with Shared Limit Enforcement:**
+
+**New Display:**
+```
+Profile: GunGun | Device | Usage Today (Device) | Remaining (Profile)
+─────────────────────────────────────────────────────────────────────
+GunGun         | Phone  | 2h 15m              | 1h 30m
+               |        | Profile Total: 6h 30m
+GunGun         | iPad   | 3h 45m              | 1h 30m
+               |        | Profile Total: 6h 30m
+GunGun         | Laptop | 0h 30m              | 1h 30m
+               |        | Profile Total: 6h 30m
+```
+
+### How It Works
+
+**1. Display Logic:**
+- Shows **individual device usage** in "Usage Today (Device)" column
+- Each device shows its own consumption
+- Tooltip shows "Profile Total" (sum of all devices)
+
+**2. Calculation Logic:**
+```php
+// Get individual device usage
+$device_usage_today = $state['devices_by_ip'][$device_ip]['usage_today'];
+
+// Get profile total usage (sum of all devices)
+$profile_total_usage = $state['profiles'][$profile_name]['usage_today'];
+
+// Calculate remaining (using profile total - shared limit)
+$remaining = $daily_limit - $profile_total_usage;
+```
+
+**3. Enforcement Logic:**
+- **Still uses profile total** for blocking decisions
+- Maintains shared time limit (bypass-proof)
+- When profile total >= daily limit, ALL devices blocked
+
+### Benefits
+
+**For Parents:**
+- ✅ **Visibility:** See which device consuming most time
+- ✅ **Patterns:** Identify usage trends (e.g., "Phone = 80% of usage")
+- ✅ **Fairness:** Ensure no single device dominating time
+- ✅ **Conversations:** Data-driven discussions with kids
+
+**For Kids:**
+- ✅ **Transparency:** See their own device usage
+- ✅ **Accountability:** Understand their time consumption
+- ✅ **Awareness:** Know when to switch activities
+- ✅ **Fair:** Can see if siblings using more time
+
+**For System:**
+- ✅ **Maintains Bypass-Proof:** Still uses shared limit
+- ✅ **Backward Compatible:** Existing logic unchanged
+- ✅ **No Config Changes:** Works with existing profiles
+- ✅ **Accurate Enforcement:** Same blocking logic
+
+### Example Scenario
+
+**Profile: "John-Vishesh"**  
+**Daily Limit:** 8 hours (480 minutes)  
+**Devices:** 3 (Phone, iPad, Laptop)
+
+**Before (Old Display):**
+```
+John-Vishesh | Phone  | Usage: 6h 30m | Remaining: 1h 30m
+John-Vishesh | iPad   | Usage: 6h 30m | Remaining: 1h 30m  ← Confusing!
+John-Vishesh | Laptop | Usage: 6h 30m | Remaining: 1h 30m  ← All same?
+```
+**Problem:** Can't tell which device used how much. All show 6h 30m!
+
+**After (New Display):**
+```
+John-Vishesh | Phone  | Usage: 2h 15m (Profile Total: 6h 30m) | Remaining: 1h 30m
+John-Vishesh | iPad   | Usage: 3h 45m (Profile Total: 6h 30m) | Remaining: 1h 30m
+John-Vishesh | Laptop | Usage: 0h 30m (Profile Total: 6h 30m) | Remaining: 1h 30m
+```
+**Clarity:** Immediately see iPad is consuming most time (3h 45m / 6h 30m = 58%)!
+
+### Technical Implementation
+
+**1. Data Collection (Already Tracked):**
+```php
+// Individual device tracking (already exists)
+$state['devices_by_ip'][$ip]['usage_today'] = 135;  // 2h 15m
+
+// Profile total tracking (already exists)
+$state['profiles'][$profile_name]['usage_today'] = 390;  // 6h 30m (sum)
+```
+
+**2. Display Changes:**
+```php
+// Get individual device usage
+$device_usage_today = $state['devices_by_ip'][$device_ip]['usage_today'];
+
+// Get profile total usage
+$profile_total_usage = $state['profiles'][$profile_name]['usage_today'];
+
+// Display individual usage
+echo $device_usage_formatted;  // "2h 15m"
+
+// Show profile total as tooltip
+echo "Profile Total: " . $profile_total_formatted;  // "6h 30m"
+
+// Calculate remaining using profile total (shared limit)
+$remaining = $daily_limit - $profile_total_usage;
+```
+
+**3. Enforcement (Unchanged):**
+```php
+// Still block based on profile total
+$is_time_exceeded = ($profile_total_usage >= $daily_limit);
+```
+
+### Table Headers Updated
+
+**Old:**
+- Usage Today
+- Remaining
+
+**New:**
+- Usage Today **(Device)** ← Clarifies it's individual
+- Remaining **(Profile)** ← Clarifies it's shared
+
+### Migration
+
+**No User Action Required:**
+- Existing profiles work as-is
+- No configuration changes needed
+- Status page automatically shows new format
+- All existing usage data preserved
+
+### Verification
+
+Check status page after update:
+```
+Services > Keekar's Parental Control > Status
+
+Look for:
+1. Individual device usage in "Usage Today (Device)" column
+2. "Profile Total" tooltip when hovering
+3. Consistent "Remaining (Profile)" across all devices in same profile
+```
+
+### User Feedback Implementation
+
+This improvement was directly requested by the user:
+> "Our program is calculating 'Usage Today' by adding the usage of all 
+> devices in profile. To improve it we should calculate the usage of 
+> individual devices without adding from other devices. While when we 
+> calculate the remaining hours it should calculate as 'Daily Limit - 
+> (Device 1 + Device 2 + Device 3)'. That's how the accounting would be 
+> more accurate and meaningful."
+
+**Result:** Exactly as requested - transparency with maintained enforcement!
+
+### Files Changed
+
+- `parental_control_status.php`: 
+  - Display individual device usage
+  - Show profile total as tooltip
+  - Updated table headers for clarity
+- `VERSION`: Bumped to 1.3.0 (minor release - new feature)
+- `README.md`: Updated version
+- `docs/USER_GUIDE.md`: This comprehensive changelog
+
+### Impact
+
+This is a **significant UX improvement** that makes the system:
+- ✅ More transparent
+- ✅ More accountable
+- ✅ More user-friendly
+- ✅ More insightful
+- ✅ Still bypass-proof (shared limit maintained)
+
+Perfect for families with multiple devices per person!
+
+---
+
 ## [1.2.4] - 2025-12-30 🐛 CRITICAL FIX: Cron Job Removal Bug + Enhanced Uninstall
 
 ### 🚨 Critical Bug Fixed

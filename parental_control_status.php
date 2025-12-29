@@ -130,8 +130,8 @@ if (is_array($profiles)) {
 						<th><?=gettext("IP Address")?></th>
 						<th><?=gettext("Status")?></th>
 						<th><?=gettext("Daily Limit")?></th>
-						<th><?=gettext("Usage Today")?></th>
-						<th><?=gettext("Remaining")?></th>
+						<th><?=gettext("Usage Today")?> <small style="font-weight: normal;">(Device)</small></th>
+						<th><?=gettext("Remaining")?> <small style="font-weight: normal;">(Profile)</small></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -173,31 +173,37 @@ if (is_array($profiles)) {
 							$device_name = htmlspecialchars($device['device_name']);
 							$mac_display = htmlspecialchars($device['mac_address']);
 							
-						// CRITICAL: Get usage from PROFILE (shared time accounting)
-						// WHY: All devices in a profile share the same time budget
-						// Example: 4 hour limit = 4 hours TOTAL across ALL devices in profile
-						$usage_today = 0;
-						$device_ip = null;
-						// Note: $profile_name is already set from outer loop at line 149
+						// IMPROVED ACCOUNTING: Show individual device usage
+						// While calculating remaining time from cumulative profile usage
+						// This gives better visibility and transparency
 						
-						// Get PROFILE usage (not individual device usage)
-						// Note: $profile_name is from $profile['name'], NOT $device['profile_name']
-						if (isset($state['profiles'][$profile['name']]['usage_today'])) {
-							$usage_today = intval($state['profiles'][$profile['name']]['usage_today']);
-						}
+						$device_ip = null;
+						$device_usage_today = 0;
+						$profile_total_usage = 0;
+						
+						// Get device IP for status display
+						if (isset($state['mac_to_ip_cache'][$mac])) {
+							$device_ip = $state['mac_to_ip_cache'][$mac];
 							
-							// Also get device IP for status display
-							if (isset($state['mac_to_ip_cache'][$mac])) {
-								$device_ip = $state['mac_to_ip_cache'][$mac];
+							// Get THIS DEVICE's individual usage
+							if (isset($state['devices_by_ip'][$device_ip]['usage_today'])) {
+								$device_usage_today = intval($state['devices_by_ip'][$device_ip]['usage_today']);
 							}
+						}
+						
+						// Get PROFILE's total usage (sum of ALL devices in profile)
+						// This is used for remaining time calculation and enforcement
+						if (isset($state['profiles'][$profile['name']]['usage_today'])) {
+							$profile_total_usage = intval($state['profiles'][$profile['name']]['usage_today']);
+						}
+						
+						// Calculate remaining time based on PROFILE TOTAL usage (shared limit)
+						$remaining = $daily_limit - $profile_total_usage;
+						if ($remaining < 0) $remaining = 0;
 							
-							// Calculate remaining time based on PROFILE usage
-							$remaining = $daily_limit - $usage_today;
-							if ($remaining < 0) $remaining = 0;
-							
-							// Determine device status
+							// Determine device status (based on PROFILE total, not individual device)
 							$is_online = pc_is_device_online($mac);
-							$is_time_exceeded = ($daily_limit > 0 && $usage_today >= $daily_limit);
+							$is_time_exceeded = ($daily_limit > 0 && $profile_total_usage >= $daily_limit);
 							
 							if ($is_time_exceeded) {
 								$status = '<span class="label label-danger"><i class="fa-solid fa-clock"></i> Time Exceeded</span>';
@@ -210,8 +216,8 @@ if (is_array($profiles)) {
 								$status_class = 'default';
 							}
 							
-							// Format times
-							$usage_formatted = sprintf("%d:%02d", floor($usage_today / 60), $usage_today % 60);
+							// Format times - SHOW INDIVIDUAL DEVICE USAGE
+							$device_usage_formatted = sprintf("%d:%02d", floor($device_usage_today / 60), $device_usage_today % 60);
 							$limit_formatted = $daily_limit > 0 ? sprintf("%d:%02d", floor($daily_limit / 60), $daily_limit % 60) : "Unlimited";
 							$remaining_formatted = $daily_limit > 0 ? sprintf("%d:%02d", floor($remaining / 60), $remaining % 60) : "∞";
 							
@@ -229,7 +235,14 @@ if (is_array($profiles)) {
 							?></td>
 							<td><?=$status?></td>
 							<td><?=$limit_formatted?></td>
-							<td><?=$usage_formatted?></td>
+							<td>
+								<strong><?=$device_usage_formatted?></strong>
+								<?php if ($profile_total_usage != $device_usage_today): ?>
+									<br><small style="color: #666;" title="Profile total usage (sum of all devices)">
+										<em>Profile Total: <?=sprintf("%d:%02d", floor($profile_total_usage / 60), $profile_total_usage % 60)?></em>
+									</small>
+								<?php endif; ?>
+							</td>
 							<td><strong><?=$remaining_formatted?></strong></td>
 						</tr>
 						<?php endforeach; // devices ?>
