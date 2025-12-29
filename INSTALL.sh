@@ -261,6 +261,8 @@ upload_files() {
         "$PACKAGE_DIR/parental_control_api.php" \
         "$PACKAGE_DIR/parental_control_diagnostic.php" \
         "$PACKAGE_DIR/parental_control_analyzer.sh" \
+        "$PACKAGE_DIR/auto_update_parental_control.sh" \
+        "$PACKAGE_DIR/setup_auto_update.sh" \
         $PFSENSE_USER@$PFSENSE_IP:/tmp/; then
         print_success "Core files copied to /tmp/"
     else
@@ -297,6 +299,8 @@ upload_files() {
         sudo -n mv /tmp/parental_control_api.php /usr/local/www/ 2>/dev/null; true && \
         sudo -n mv /tmp/parental_control_diagnostic.php /usr/local/bin/ 2>/dev/null; true && \
         sudo -n mv /tmp/parental_control_analyzer.sh /usr/local/bin/ 2>/dev/null; true && \
+        sudo -n mv /tmp/auto_update_parental_control.sh /usr/local/bin/ 2>/dev/null; true && \
+        sudo -n mv /tmp/setup_auto_update.sh /usr/local/bin/ 2>/dev/null; true && \
         sudo -n mv /tmp/API.md /usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/ 2>/dev/null; true && \
         sudo -n mv /tmp/CONFIGURATION.md /usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/ 2>/dev/null; true && \
         sudo -n mv /tmp/TROUBLESHOOTING.md /usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/ 2>/dev/null; true && \
@@ -307,6 +311,8 @@ upload_files() {
         sudo -n chmod 755 /usr/local/etc/rc.d/parental_control_captive.sh && \
         sudo -n chmod 755 /usr/local/bin/parental_control_diagnostic.php 2>/dev/null; true && \
         sudo -n chmod 755 /usr/local/bin/parental_control_analyzer.sh 2>/dev/null; true && \
+        sudo -n chmod 755 /usr/local/bin/auto_update_parental_control.sh 2>/dev/null; true && \
+        sudo -n chmod 755 /usr/local/bin/setup_auto_update.sh 2>/dev/null; true && \
         sudo -n chmod 644 /usr/local/share/pfSense-pkg-KACI-Parental_Control/info.xml && \
         sudo -n chmod 644 /usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/*.md 2>/dev/null; true
     " 2>/dev/null; then
@@ -491,6 +497,57 @@ PHPEOF
     fi
     
     rm -f /tmp/setup_cron_$$.php
+}
+
+#############################################
+# Setup auto-update (optional)
+#############################################
+setup_auto_update() {
+    print_info "Setting up auto-update feature..."
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "⚠️  AUTO-UPDATE FEATURE"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "The auto-update feature will:"
+    echo "  • Check GitHub for updates every 15 minutes"
+    echo "  • Download and deploy updates automatically"
+    echo "  • Log all activities"
+    echo ""
+    echo "⚠️  WARNING: NOT recommended for production firewalls!"
+    echo "   Auto-updates can introduce bugs or break existing configs."
+    echo "   Recommended ONLY for development/testing environments."
+    echo ""
+    read -p "Do you want to enable auto-updates? (y/N): " ENABLE_AUTO_UPDATE
+    echo ""
+    
+    if [ "$ENABLE_AUTO_UPDATE" = "y" ] || [ "$ENABLE_AUTO_UPDATE" = "Y" ]; then
+        print_info "Enabling auto-update feature..."
+        
+        # Run setup script on firewall
+        if ssh $PFSENSE_USER@$PFSENSE_IP "sudo /usr/local/bin/setup_auto_update.sh" 2>/dev/null; then
+            print_success "Auto-update feature enabled"
+            echo ""
+            echo "  To monitor updates:"
+            echo "    ssh $PFSENSE_USER@$PFSENSE_IP 'tail -f /var/log/parental_control_auto_update.log'"
+            echo ""
+            echo "  To disable auto-updates later:"
+            echo "    ssh $PFSENSE_USER@$PFSENSE_IP 'sudo crontab -l | grep -v auto_update_parental_control | sudo crontab -'"
+            echo ""
+        else
+            print_warning "Could not automatically enable auto-update"
+            print_info "  To enable manually:"
+            print_info "    ssh $PFSENSE_USER@$PFSENSE_IP 'sudo /usr/local/bin/setup_auto_update.sh'"
+        fi
+    else
+        print_info "Skipping auto-update setup"
+        echo ""
+        echo "  Auto-update scripts are installed but not enabled."
+        echo "  To enable later:"
+        echo "    ssh $PFSENSE_USER@$PFSENSE_IP 'sudo /usr/local/bin/setup_auto_update.sh'"
+        echo ""
+    fi
 }
 
 #############################################
@@ -801,6 +858,9 @@ do_install() {
     
     # Setup cron job for usage tracking
     setup_cron_job
+    
+    # Setup auto-update feature (optional)
+    setup_auto_update
     
     # Verify
     if [ "$MODE" = "install" ] || [ "$MODE" = "verify" ]; then

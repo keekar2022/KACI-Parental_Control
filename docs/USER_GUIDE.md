@@ -2226,6 +2226,176 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2025-12-30 🔄 NEW FEATURE: Auto-Update System
+
+### 🚀 Major Feature Addition
+**Implemented fully functional auto-update system for automatic GitHub deployments**
+
+### What's New
+The package now includes a complete auto-update system that automatically checks GitHub for updates and deploys them without manual intervention.
+
+### New Files
+1. **`auto_update_parental_control.sh`** - Main auto-update script
+   - Checks GitHub every 15 minutes for new commits
+   - Compares local vs remote version
+   - Downloads and deploys updates automatically
+   - Creates backups before updating
+   - Logs all activities
+   - Zero downtime updates
+
+2. **`setup_auto_update.sh`** - Auto-update installer
+   - Installs auto-update cron job
+   - Configures permissions
+   - Creates log files
+   - Interactive setup with warnings
+
+### How It Works
+```bash
+# Automatic flow (every 15 minutes via cron):
+1. Check GitHub for latest commit hash
+2. Compare with last processed commit
+3. If new commit found, download VERSION file
+4. Compare local vs remote version
+5. If versions differ, download all package files
+6. Create backup of current installation
+7. Deploy new files
+8. Reload package configuration
+9. Update state file with latest commit
+10. Log everything
+```
+
+### Features
+- ✅ **Automatic Updates:** Checks GitHub every 15 minutes
+- ✅ **Version Comparison:** Only updates when version changes
+- ✅ **Commit Tracking:** Prevents reprocessing same commits
+- ✅ **Automatic Backups:** Saves old version before updating
+- ✅ **Zero Downtime:** Updates without service interruption
+- ✅ **Comprehensive Logging:** All actions logged to `/var/log/parental_control_auto_update.log`
+- ✅ **Network Resilient:** Gracefully handles GitHub API failures
+- ✅ **State Management:** Tracks last processed commit
+- ✅ **INSTALL.sh Integration:** Optional setup during installation
+- ✅ **UNINSTALL.sh Integration:** Complete cleanup on uninstall
+
+### Installation Integration
+INSTALL.sh now prompts for auto-update setup:
+```
+⚠️  AUTO-UPDATE FEATURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+The auto-update feature will:
+  • Check GitHub for updates every 15 minutes
+  • Download and deploy updates automatically
+  • Log all activities
+
+⚠️  WARNING: NOT recommended for production firewalls!
+
+Do you want to enable auto-updates? (y/N):
+```
+
+### Manual Setup
+Enable auto-updates anytime:
+```bash
+ssh admin@fw.keekar.com
+sudo /usr/local/bin/setup_auto_update.sh
+```
+
+### Monitoring
+Watch updates in real-time:
+```bash
+tail -f /var/log/parental_control_auto_update.log
+```
+
+Sample log output:
+```
+[2025-12-30 10:15:00] Auto-Update Check Started
+[2025-12-30 10:15:00] Auto-Update: Local version is 1.1.16
+[2025-12-30 10:15:01] Auto-Update: New commit detected (e1f10c4a)
+[2025-12-30 10:15:01] Auto-Update: Remote version is 1.2.0
+[2025-12-30 10:15:01] Auto-Update: Update available! 1.1.16 -> 1.2.0
+[2025-12-30 10:15:01] Auto-Update: Downloading update files...
+[2025-12-30 10:15:03] Auto-Update: All files downloaded successfully
+[2025-12-30 10:15:03] Auto-Update: Deploying update...
+[2025-12-30 10:15:03] Auto-Update: Backup created at /var/backups/parental_control_20251230_101503
+[2025-12-30 10:15:03] Auto-Update: Files deployed successfully
+[2025-12-30 10:15:04] Auto-Update: Reloading package configuration...
+[2025-12-30 10:15:05] Auto-Update: Update completed successfully! 1.1.16 -> 1.2.0
+[2025-12-30 10:15:05] Auto-Update: System is now running version 1.2.0
+[2025-12-30 10:15:05] Auto-Update Check Completed
+```
+
+### Disable Auto-Updates
+To disable:
+```bash
+ssh admin@fw.keekar.com
+sudo crontab -l | grep -v auto_update_parental_control | sudo crontab -
+```
+
+### Security & Best Practices
+⚠️ **Production Warning:** Auto-updates are NOT recommended for production firewalls because:
+- Updates can introduce bugs
+- Changes happen without review
+- No rollback mechanism (must manually restore backup)
+- Network issues can cause partial updates
+
+✅ **Recommended for:**
+- Development environments
+- Testing environments
+- Home labs
+- Non-critical systems
+
+❌ **NOT recommended for:**
+- Production firewalls
+- Business-critical systems
+- Systems requiring change approval
+- Environments with strict change control
+
+### Technical Details
+**Files Deployed:**
+- `/usr/local/bin/auto_update_parental_control.sh` - Main update script
+- `/usr/local/bin/setup_auto_update.sh` - Setup installer
+- `/var/log/parental_control_auto_update.log` - Activity log
+- `/var/db/parental_control_auto_update_state` - State tracking (commit hash)
+
+**Cron Schedule:**
+```
+*/15 * * * * /usr/local/bin/auto_update_parental_control.sh
+```
+
+**GitHub API:**
+- Endpoint: `https://api.github.com/repos/keekar2022/KACI-Parental_Control/commits/main`
+- Downloads from: `https://raw.githubusercontent.com/keekar2022/KACI-Parental_Control/main/`
+
+**Backup Location:**
+```
+/var/backups/parental_control_YYYYMMDD_HHMMSS/
+```
+
+### Updated Files
+- `INSTALL.sh`: Added auto-update deployment and optional setup
+- `UNINSTALL.sh`: Added auto-update cleanup
+- `README.md`: Updated package files section
+- `docs/USER_GUIDE.md`: This changelog
+- `index.html`: Version updated
+
+### Verification
+After enabling, verify:
+```bash
+# Check cron entry
+crontab -l | grep auto_update
+
+# Check files exist
+ls -l /usr/local/bin/auto_update_parental_control.sh
+ls -l /usr/local/bin/setup_auto_update.sh
+
+# Test manually
+sudo /usr/local/bin/auto_update_parental_control.sh
+
+# Watch log
+tail -f /var/log/parental_control_auto_update.log
+```
+
+---
+
 ## [1.1.16] - 2025-12-30 📝 Documentation Update: Package Files Section
 
 ### 📚 Documentation Improvement

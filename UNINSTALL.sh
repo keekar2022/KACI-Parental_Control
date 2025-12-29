@@ -86,6 +86,7 @@ echo "   ✓ Package files removed"
 echo "7. Removing cron scripts..."
 rm -f /usr/local/bin/parental_control_cron.php
 rm -f /usr/local/bin/auto_update_parental_control.sh
+rm -f /usr/local/bin/setup_auto_update.sh
 echo "   ✓ Cron scripts removed"
 
 # Remove state and log files
@@ -96,6 +97,7 @@ rm -f /var/run/parental_control.pid
 rm -f /var/run/parental_control_captive.pid
 rm -f /var/log/parental_control*.log
 rm -f /var/log/parental_control*.jsonl
+rm -f /var/db/parental_control_auto_update_state
 echo "   ✓ State and log files removed"
 
 # Remove anchor file
