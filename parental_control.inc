@@ -1873,33 +1873,36 @@ EOD;
 	$current_crontab = array();
 	exec("crontab -l 2>/dev/null", $current_crontab, $ret);
 	
-	// Check if our entry already exists
-	$found = false;
+	// Remove any existing parental control cron entries (to update schedule if needed)
+	$filtered_crontab = array();
+	$removed_count = 0;
 	foreach ($current_crontab as $line) {
 		if (strpos($line, 'parental_control_cron.php') !== false) {
-			$found = true;
-			break;
+			$removed_count++;
+			pc_log("Removing old cron entry: $line", 'debug');
+		} else {
+			$filtered_crontab[] = $line;
 		}
 	}
 	
-	if (!$found) {
-		// Add our cron entry
-		$current_crontab[] = $cron_entry;
-		
-		// Write new crontab
-		$temp_crontab = tempnam('/tmp', 'crontab_');
-		file_put_contents($temp_crontab, implode("\n", $current_crontab) . "\n");
-		
-		exec("crontab $temp_crontab 2>&1", $output, $ret);
-		unlink($temp_crontab);
-		
-		if ($ret === 0) {
-			pc_log("Cron job installed successfully via direct crontab", 'info');
-		} else {
-			pc_log("Failed to install cron job: " . implode("\n", $output), 'error');
-		}
+	if ($removed_count > 0) {
+		pc_log("Removed $removed_count old cron entry/entries", 'info');
+	}
+	
+	// Add our cron entry with current schedule
+	$filtered_crontab[] = $cron_entry;
+	
+	// Write new crontab
+	$temp_crontab = tempnam('/tmp', 'crontab_');
+	file_put_contents($temp_crontab, implode("\n", $filtered_crontab) . "\n");
+	
+	exec("crontab $temp_crontab 2>&1", $output, $ret);
+	unlink($temp_crontab);
+	
+	if ($ret === 0) {
+		pc_log("Cron job installed/updated successfully: $cron_entry", 'info');
 	} else {
-		pc_log("Cron job already exists", 'debug');
+		pc_log("Failed to install cron job: " . implode("\n", $output), 'error');
 	}
 }
 

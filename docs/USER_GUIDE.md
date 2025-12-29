@@ -2226,6 +2226,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.15] - 2025-12-30 🔧 CRITICAL FIX: Cron Schedule Not Updating on Reinstall
+
+### 🐛 Critical Bug Fix
+**Fixed a bug where package updates/reinstalls would not update the cron schedule**
+
+### Problem Discovered
+After fixing v1.1.14's cron schedule issue (every 1 minute → every 5 minutes), some users' firewalls still had the old `*/1` schedule. Investigation revealed:
+
+1. **Original Design (before v0.2.8):** Cron ran every 1 minute (`*/1`)
+2. **Dec 26, 2025 (v0.2.8):** Changed to every 5 minutes (`*/5`) to fix "config_aqm flowset busy" errors
+3. **The Bug:** `pc_setup_cron_job()` would check if ANY cron entry existed, and if found, would skip installation without checking if the schedule was correct
+
+### Root Cause
+```php
+// OLD CODE - BUG:
+$found = false;
+foreach ($current_crontab as $line) {
+    if (strpos($line, 'parental_control_cron.php') !== false) {
+        $found = true;  // ❌ Found old entry but doesn't update it!
+        break;
+    }
+}
+
+if (!$found) {
+    // Only adds entry if NOT found
+    // ❌ Never updates existing entries with wrong schedule!
+}
+```
+
+### Fixed
+- **`pc_setup_cron_job()`:** Now REMOVES all existing parental_control_cron.php entries before adding the new one
+- **Logging:** Added detailed logging to show when old entries are removed
+- **Update Safety:** Ensures package updates always install the correct cron schedule
+
+### New Behavior
+```php
+// NEW CODE - FIXED:
+$filtered_crontab = array();
+$removed_count = 0;
+foreach ($current_crontab as $line) {
+    if (strpos($line, 'parental_control_cron.php') !== false) {
+        $removed_count++;
+        pc_log("Removing old cron entry: $line", 'debug');
+        // ✅ Remove old entry (don't copy to filtered list)
+    } else {
+        $filtered_crontab[] = $line;
+    }
+}
+
+// ✅ Always add current schedule (even if old one existed)
+$filtered_crontab[] = $cron_entry;
+```
+
+### Impact
+- ✅ **Package Updates:** Will now properly update cron schedules
+- ✅ **Reinstalls:** Always use the current schedule defined in `PC_CRON_MINUTE`
+- ✅ **No User Action Required:** Fix applies automatically on next package sync
+- ✅ **Prevents Future Issues:** Any future schedule changes will be applied correctly
+
+### Verification
+After update, verify cron schedule is correct:
+```bash
+sudo crontab -l | grep parental_control
+# Should show: */5 * * * * /usr/local/bin/php /usr/local/bin/parental_control_cron.php
+```
+
+### Technical Details
+- **File Modified:** `parental_control.inc` - `pc_setup_cron_job()` function
+- **Lines Changed:** ~1867-1903
+- **Testing:** Verified on production firewall with old `*/1` schedule
+- **Result:** Old schedule correctly removed and replaced with `*/5`
+
+---
+
 ## [1.1.8] - 2025-12-29 🚀 MAJOR: Table-Based Blocking (Replaces Anchors)
 
 ### 🎯 Major Architectural Change
