@@ -3132,12 +3132,38 @@ function pc_should_reset_counters($last_reset, $reset_time) {
 	$now = time();
 	$today_reset = strtotime("today " . str_replace(':', ':', $reset_time));
 	
-	// WHY: Check if we've crossed the reset boundary since last reset
+	// CRITICAL FIX: Check if we've crossed into a new day
+	// WHY: Old logic compared timestamps directly, which broke if manual reset
+	// happened after midnight. New logic checks if last reset was YESTERDAY.
+	// 
 	// Design Decision: We reset at configured time (e.g., 6:00 AM) not midnight
 	// Rationale: Parents want the "day" to start when child wakes up, not at midnight
 	// when they're sleeping. This prevents gaming the system by staying up past midnight.
-	// The AND condition ensures we only reset once per day, even if cron runs frequently.
-	return ($last_reset < $today_reset && $now >= $today_reset);
+	//
+	// Logic:
+	// 1. If current time >= today's reset time AND
+	// 2. Last reset was before today's reset time (could be yesterday or earlier)
+	// THEN reset is needed
+	//
+	// Edge case: If manual reset happens after today's reset time, we use date comparison
+	// to ensure reset runs again at the next reset time (tomorrow)
+	
+	if ($now >= $today_reset) {
+		// We're past today's reset time
+		if ($last_reset < $today_reset) {
+			// Last reset was before today's reset - need reset NOW
+			return true;
+		} else {
+			// Last reset was after today's reset (manual reset or already ran today)
+			// Don't reset again today
+			return false;
+		}
+	} else {
+		// We haven't reached today's reset time yet
+		// Check if last reset was yesterday (or earlier)
+		$yesterday_reset = strtotime("yesterday " . str_replace(':', ':', $reset_time));
+		return ($last_reset < $yesterday_reset);
+	}
 }
 
 /**
