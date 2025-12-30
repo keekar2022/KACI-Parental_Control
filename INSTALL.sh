@@ -262,7 +262,6 @@ upload_files() {
         "$PACKAGE_DIR/parental_control_diagnostic.php" \
         "$PACKAGE_DIR/parental_control_analyzer.sh" \
         "$PACKAGE_DIR/auto_update_parental_control.sh" \
-        "$PACKAGE_DIR/setup_auto_update.sh" \
         $PFSENSE_USER@$PFSENSE_IP:/tmp/; then
         print_success "Core files copied to /tmp/"
     else
@@ -294,13 +293,12 @@ upload_files() {
         sudo -n mv /tmp/parental_control_schedules.php /usr/local/www/ && \
         sudo -n mv /tmp/parental_control_blocked.php /usr/local/www/ && \
         sudo -n mv /tmp/parental_control_captive.php /usr/local/www/ && \
-        sudo -n mv /tmp/parental_control_captive.sh /usr/local/etc/rc.d/ && \
+        sudo -n mv /tmp/parental_control_captive.sh /usr/local/etc/rc.d/parental_control_captive && \
         sudo -n mv /tmp/parental_control_health.php /usr/local/www/ 2>/dev/null; true && \
         sudo -n mv /tmp/parental_control_api.php /usr/local/www/ 2>/dev/null; true && \
         sudo -n mv /tmp/parental_control_diagnostic.php /usr/local/bin/ 2>/dev/null; true && \
         sudo -n mv /tmp/parental_control_analyzer.sh /usr/local/bin/ 2>/dev/null; true && \
         sudo -n mv /tmp/auto_update_parental_control.sh /usr/local/bin/ 2>/dev/null; true && \
-        sudo -n mv /tmp/setup_auto_update.sh /usr/local/bin/ 2>/dev/null; true && \
         sudo -n mv /tmp/API.md /usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/ 2>/dev/null; true && \
         sudo -n mv /tmp/CONFIGURATION.md /usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/ 2>/dev/null; true && \
         sudo -n mv /tmp/TROUBLESHOOTING.md /usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/ 2>/dev/null; true && \
@@ -308,11 +306,10 @@ upload_files() {
         sudo -n chmod 644 /usr/local/pkg/parental_control.inc && \
         sudo -n chmod 644 /usr/local/pkg/parental_control_VERSION && \
         sudo -n chmod 644 /usr/local/www/parental_control*.php && \
-        sudo -n chmod 755 /usr/local/etc/rc.d/parental_control_captive.sh && \
+        sudo -n chmod 755 /usr/local/etc/rc.d/parental_control_captive && \
         sudo -n chmod 755 /usr/local/bin/parental_control_diagnostic.php 2>/dev/null; true && \
         sudo -n chmod 755 /usr/local/bin/parental_control_analyzer.sh 2>/dev/null; true && \
         sudo -n chmod 755 /usr/local/bin/auto_update_parental_control.sh 2>/dev/null; true && \
-        sudo -n chmod 755 /usr/local/bin/setup_auto_update.sh 2>/dev/null; true && \
         sudo -n chmod 644 /usr/local/share/pfSense-pkg-KACI-Parental_Control/info.xml && \
         sudo -n chmod 644 /usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/*.md 2>/dev/null; true
     " 2>/dev/null; then
@@ -525,27 +522,67 @@ setup_auto_update() {
     if [ "$ENABLE_AUTO_UPDATE" = "y" ] || [ "$ENABLE_AUTO_UPDATE" = "Y" ]; then
         print_info "Enabling auto-update feature..."
         
-        # Run setup script on firewall
-        if ssh $PFSENSE_USER@$PFSENSE_IP "sudo /usr/local/bin/setup_auto_update.sh" 2>/dev/null; then
+        # Setup auto-update directly via SSH (consolidated logic - no separate script needed)
+        if ssh $PFSENSE_USER@$PFSENSE_IP "bash -s" <<'AUTOUPDATE_SETUP'
+#!/bin/sh
+# Consolidated auto-update setup
+
+# Ensure script is executable
+chmod 755 /usr/local/bin/auto_update_parental_control.sh 2>/dev/null || exit 1
+
+# Create log file with proper permissions
+touch /var/log/parental_control_auto_update.log
+chmod 644 /var/log/parental_control_auto_update.log
+
+# Check if cron entry already exists
+CRON_EXISTS=$(crontab -l 2>/dev/null | grep -c "auto_update_parental_control.sh")
+
+if [ "$CRON_EXISTS" -gt 0 ]; then
+    # Remove old auto-update entry (preserving all other cron jobs)
+    TEMP_CRON=$(mktemp)
+    crontab -l 2>/dev/null | grep -v "auto_update_parental_control.sh" > "$TEMP_CRON"
+    crontab "$TEMP_CRON"
+    rm -f "$TEMP_CRON"
+fi
+
+# Add cron entry (runs every 8 hours) - preserving all other cron jobs
+TEMP_CRON=$(mktemp)
+crontab -l 2>/dev/null > "$TEMP_CRON"
+echo "0 */8 * * * /usr/local/bin/auto_update_parental_control.sh" >> "$TEMP_CRON"
+crontab "$TEMP_CRON"
+RESULT=$?
+rm -f "$TEMP_CRON"
+
+exit $RESULT
+AUTOUPDATE_SETUP
+        then
             print_success "Auto-update feature enabled"
+            echo ""
+            echo "  Schedule: Checks every 8 hours"
+            echo "  Log file: /var/log/parental_control_auto_update.log"
             echo ""
             echo "  To monitor updates:"
             echo "    ssh $PFSENSE_USER@$PFSENSE_IP 'tail -f /var/log/parental_control_auto_update.log'"
             echo ""
+            echo "  To manually check for updates:"
+            echo "    ssh $PFSENSE_USER@$PFSENSE_IP '/usr/local/bin/auto_update_parental_control.sh'"
+            echo ""
             echo "  To disable auto-updates later:"
-            echo "    ssh $PFSENSE_USER@$PFSENSE_IP 'sudo crontab -l | grep -v auto_update_parental_control | sudo crontab -'"
+            echo "    ssh $PFSENSE_USER@$PFSENSE_IP 'crontab -l | grep -v auto_update_parental_control | crontab -'"
             echo ""
         else
             print_warning "Could not automatically enable auto-update"
-            print_info "  To enable manually:"
-            print_info "    ssh $PFSENSE_USER@$PFSENSE_IP 'sudo /usr/local/bin/setup_auto_update.sh'"
+            print_info "  The auto-update script is installed but not scheduled."
+            print_info "  To manually trigger updates: /usr/local/bin/auto_update_parental_control.sh"
         fi
     else
         print_info "Skipping auto-update setup"
         echo ""
-        echo "  Auto-update scripts are installed but not enabled."
-        echo "  To enable later:"
-        echo "    ssh $PFSENSE_USER@$PFSENSE_IP 'sudo /usr/local/bin/setup_auto_update.sh'"
+        echo "  Auto-update script is installed at:"
+        echo "    /usr/local/bin/auto_update_parental_control.sh"
+        echo ""
+        echo "  To manually check for updates anytime:"
+        echo "    ssh $PFSENSE_USER@$PFSENSE_IP '/usr/local/bin/auto_update_parental_control.sh'"
         echo ""
     fi
 }
@@ -570,7 +607,7 @@ verify_installation() {
             "/usr/local/www/parental_control_schedules.php" \
             "/usr/local/www/parental_control_blocked.php" \
             "/usr/local/www/parental_control_captive.php" \
-            "/usr/local/etc/rc.d/parental_control_captive.sh" \
+            "/usr/local/etc/rc.d/parental_control_captive" \
             "/usr/local/www/parental_control_health.php" \
             "/usr/local/www/parental_control_api.php" \
             "/usr/local/bin/parental_control_diagnostic.php" \
@@ -725,7 +762,7 @@ UNREGISTER_EOF
         sudo rm -f /usr/local/www/parental_control_schedules.php 2>/dev/null
         sudo rm -f /usr/local/www/parental_control_blocked.php 2>/dev/null
         sudo rm -f /usr/local/www/parental_control_captive.php 2>/dev/null
-        sudo rm -f /usr/local/etc/rc.d/parental_control_captive.sh 2>/dev/null
+        sudo rm -f /usr/local/etc/rc.d/parental_control_captive 2>/dev/null
         sudo rm -f /usr/local/www/parental_control_health.php 2>/dev/null
         sudo rm -f /usr/local/www/parental_control_api.php 2>/dev/null
         sudo rm -f /usr/local/bin/parental_control_diagnostic.php 2>/dev/null

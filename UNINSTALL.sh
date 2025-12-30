@@ -112,7 +112,7 @@ EOF
 
 # Stop captive portal server
 echo "4. Stopping captive portal server..."
-/usr/local/etc/rc.d/parental_control_captive.sh stop 2>/dev/null || true
+/usr/local/etc/rc.d/parental_control_captive stop 2>/dev/null || true
 echo "   ✓ Captive portal server stopped"
 
 # Remove PHP files
@@ -122,7 +122,7 @@ rm -f /usr/local/www/parental_control_schedules.php
 rm -f /usr/local/www/parental_control_status.php
 rm -f /usr/local/www/parental_control_blocked.php
 rm -f /usr/local/www/parental_control_captive.php
-rm -f /usr/local/etc/rc.d/parental_control_captive.sh
+rm -f /usr/local/etc/rc.d/parental_control_captive
 rm -f /usr/local/www/parental_control_api.php
 rm -f /usr/local/www/parental_control_diagnostic.php
 rm -f /usr/local/www/parental_control_health.php

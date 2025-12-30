@@ -2566,14 +2566,14 @@ function pc_create_allow_rules() {
  * Starts the standalone PHP web server on port 1008 to serve the block page
  * without authentication. This creates a true captive portal experience.
  * 
- * Uses the RC script parental_control_captive.sh to manage the server.
+ * Uses the RC script parental_control_captive (FreeBSD RC script) to manage the server.
  * If the server is not running, it will be started automatically.
  * 
  * @return bool True if server is running or was started successfully
  * @since 1.1.11
  */
 function pc_ensure_captive_portal_running() {
-	$rc_script = '/usr/local/etc/rc.d/parental_control_captive.sh';
+	$rc_script = '/usr/local/etc/rc.d/parental_control_captive';
 	$pidfile = '/var/run/parental_control_captive.pid';
 	
 	// Check if RC script exists

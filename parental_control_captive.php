@@ -5,9 +5,90 @@
  * Standalone captive portal block page (NO AUTHENTICATION REQUIRED)
  * Served by dedicated PHP server on port 1008
  * 
+ * ROUTER SCRIPT: Serves multiple files without authentication
+ * - /index.html - Project landing page
+ * - / or /block - Parental control block page
+ * 
  * Part of KACI-Parental_Control for pfSense
  * Copyright (c) 2025 Mukesh Kesharwani
  */
+
+// ============================================================================
+// ROUTER LOGIC - Handle different URI requests
+// ============================================================================
+
+$request_uri = $_SERVER['REQUEST_URI'];
+$request_path = parse_url($request_uri, PHP_URL_PATH);
+
+// Serve index.html for project landing page
+if ($request_path === '/index.html' || $request_path === '/index') {
+    $index_file = '/usr/local/www/index.html';
+    
+    if (file_exists($index_file)) {
+        header('Content-Type: text/html; charset=utf-8');
+        readfile($index_file);
+        exit;
+    } else {
+        // Fallback: serve a simple landing page
+        header('Content-Type: text/html; charset=utf-8');
+        echo '<!DOCTYPE html>
+<html>
+<head>
+    <title>KACI Parental Control</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        h1 { color: #2c3e50; }
+        a { color: #3498db; }
+    </style>
+</head>
+<body>
+    <h1>KACI Parental Control for pfSense</h1>
+    <p>A comprehensive parental control solution for pfSense firewalls.</p>
+    <p><a href="https://github.com/keekar2022/KACI-Parental_Control">View on GitHub</a></p>
+    <hr>
+    <p><small>Captive Portal Server - Port 1008 - No Authentication Required</small></p>
+</body>
+</html>';
+        exit;
+    }
+}
+
+// Serve static files from document root (CSS, JS, images, etc.)
+if (preg_match('/\.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/i', $request_path)) {
+    $file_path = '/usr/local/www' . $request_path;
+    
+    if (file_exists($file_path) && is_file($file_path)) {
+        // Determine content type
+        $extension = strtolower(pathinfo($file_path, PATHINFO_EXTENSION));
+        $mime_types = [
+            'css' => 'text/css',
+            'js' => 'application/javascript',
+            'png' => 'image/png',
+            'jpg' => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'gif' => 'image/gif',
+            'ico' => 'image/x-icon',
+            'svg' => 'image/svg+xml',
+            'woff' => 'font/woff',
+            'woff2' => 'font/woff2',
+            'ttf' => 'font/ttf',
+            'eot' => 'application/vnd.ms-fontobject'
+        ];
+        
+        $content_type = isset($mime_types[$extension]) ? $mime_types[$extension] : 'application/octet-stream';
+        header("Content-Type: $content_type");
+        readfile($file_path);
+        exit;
+    } else {
+        http_response_code(404);
+        echo "File not found: " . htmlspecialchars($request_path);
+        exit;
+    }
+}
+
+// ============================================================================
+// DEFAULT: SERVE BLOCK PAGE
+// ============================================================================
 
 // No pfSense authentication - this is standalone!
 // We only need config and state access
@@ -162,25 +243,57 @@ $version = defined('PC_VERSION') ? PC_VERSION : '1.1.10';
 			box-sizing: border-box;
 		}
 		
-		body {
-			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-			font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-			min-height: 100vh;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			padding: 20px;
-		}
+	body {
+		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+		font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+		min-height: 100vh;
+		margin: 0;
+		padding: 0;
+	}
+	
+	.content-wrapper {
+		min-height: 100vh;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 20px 20px 20px 20px;
+	}
 		
-		.block-container {
-			max-width: 600px;
-			width: 100%;
-			background: white;
-			border-radius: 20px;
-			box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-			overflow: hidden;
-			animation: slideIn 0.5s ease-out;
-		}
+	.info-banner {
+		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+		color: white;
+		padding: 12px 20px;
+		text-align: center;
+		font-size: 0.95em;
+		box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+		width: 100%;
+		position: fixed;
+		top: 0;
+		left: 0;
+		z-index: 1000;
+	}
+	
+	.info-banner a {
+		color: #fff;
+		text-decoration: underline;
+		font-weight: bold;
+	}
+	
+	.info-banner a:hover {
+		color: #ffd700;
+	}
+	
+	.block-container {
+		max-width: 600px;
+		width: 100%;
+		background: white;
+		border-radius: 20px;
+		box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+		overflow: hidden;
+		animation: slideIn 0.5s ease-out;
+		margin-top: 60px; /* Space for fixed banner */
+	}
 		
 		@keyframes slideIn {
 			from {
@@ -472,7 +585,16 @@ $version = defined('PC_VERSION') ? PC_VERSION : '1.1.10';
 	</style>
 </head>
 <body>
-	<div class="block-container">
+	<!-- Info Banner - Full Width at Top -->
+	<div class="info-banner">
+		<i class="fa-solid fa-circle-info"></i> 
+		<strong>New to KACI Parental Control?</strong> 
+		Learn more about this project: <a href="/index.html">View Project Info</a>
+	</div>
+	
+	<!-- Content Wrapper for Centering -->
+	<div class="content-wrapper">
+		<div class="block-container">
 		<?php if ($override_success): ?>
 			<!-- Override Success -->
 			<div class="block-header success">
@@ -594,7 +716,8 @@ $version = defined('PC_VERSION') ? PC_VERSION : '1.1.10';
 		
 		<div class="footer-info">
 			<strong>Keekar's Parental Control</strong> v<?= htmlspecialchars($version) ?><br>
-			Built with Passion by <strong>Mukesh Kesharwani</strong> | © <?= date('Y') ?> Keekar
+			Built with Passion by <strong>Mukesh Kesharwani</strong> | © <?= date('Y') ?> Keekar<br>
+			<a href="/index.html" style="color: #667eea; text-decoration: none; font-size: 0.9em;">📖 About This Project</a>
 		</div>
 	</div>
 
@@ -617,11 +740,12 @@ $version = defined('PC_VERSION') ? PC_VERSION : '1.1.10';
 		setTimeout(function() {
 			window.close();
 			if (!window.closed) {
-				location.href = 'about:blank';
-			}
-		}, 5000);
-	</script>
-	<?php endif; ?>
+			location.href = 'about:blank';
+		}
+	}, 5000);
+</script>
+<?php endif; ?>
+	</div><!-- /content-wrapper -->
 </body>
 </html>
 
