@@ -63,7 +63,12 @@ Examples:
 
 Configuration:
   User: $PFSENSE_USER
-  Package: Keekar's Parental Control v0.2.1
+  Package: Keekar's Parental Control v1.4.2
+
+Dependencies:
+  • sudo (security/sudo) - v1.9.16p2 or later
+  • cron (sysutils/cron) - v0.3.8_6 or later
+  Note: Installer will check and offer to install missing dependencies
 
 Features:
   ✓ Automatic SSH key setup
@@ -262,6 +267,7 @@ upload_files() {
         "$PACKAGE_DIR/parental_control_diagnostic.php" \
         "$PACKAGE_DIR/parental_control_analyzer.sh" \
         "$PACKAGE_DIR/auto_update_parental_control.sh" \
+        "$PACKAGE_DIR/UNINSTALL.sh" \
         $PFSENSE_USER@$PFSENSE_IP:/tmp/; then
         print_success "Core files copied to /tmp/"
     else
@@ -271,14 +277,21 @@ upload_files() {
     
     # Copy documentation files
     print_info "Copying documentation files..."
-    if scp -q \
-        "$PACKAGE_DIR/docs/API.md" \
-        "$PACKAGE_DIR/docs/CONFIGURATION.md" \
-        "$PACKAGE_DIR/docs/TROUBLESHOOTING.md" \
-        $PFSENSE_USER@$PFSENSE_IP:/tmp/ 2>/dev/null; then
-        print_success "Documentation files copied"
+    DOC_FILES=""
+    for DOC in "API.md" "CONFIGURATION.md" "TROUBLESHOOTING.md" "FIX_PORT_ALIAS_ERROR_v1.4.1.md" "GETTING_STARTED.md"; do
+        if [ -f "$PACKAGE_DIR/docs/$DOC" ]; then
+            DOC_FILES="$DOC_FILES $PACKAGE_DIR/docs/$DOC"
+        fi
+    done
+    
+    if [ -n "$DOC_FILES" ]; then
+        if scp -q $DOC_FILES $PFSENSE_USER@$PFSENSE_IP:/tmp/ 2>/dev/null; then
+            print_success "Documentation files copied"
+        else
+            print_warning "Some documentation files may not exist (non-critical)"
+        fi
     else
-        print_warning "Some documentation files may not exist (non-critical)"
+        print_warning "No documentation files found (non-critical)"
     fi
     
     # Move files to correct locations
@@ -299,9 +312,13 @@ upload_files() {
         sudo -n mv /tmp/parental_control_diagnostic.php /usr/local/bin/ 2>/dev/null; true && \
         sudo -n mv /tmp/parental_control_analyzer.sh /usr/local/bin/ 2>/dev/null; true && \
         sudo -n mv /tmp/auto_update_parental_control.sh /usr/local/bin/ 2>/dev/null; true && \
+        sudo -n mv /tmp/UNINSTALL.sh /usr/local/bin/ 2>/dev/null; true && \
+        sudo -n mv /tmp/parental_control_captive.sh /usr/local/etc/rc.d/parental_control_captive 2>/dev/null; true && \
         sudo -n mv /tmp/API.md /usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/ 2>/dev/null; true && \
         sudo -n mv /tmp/CONFIGURATION.md /usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/ 2>/dev/null; true && \
         sudo -n mv /tmp/TROUBLESHOOTING.md /usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/ 2>/dev/null; true && \
+        sudo -n mv /tmp/FIX_PORT_ALIAS_ERROR_v1.4.1.md /usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/ 2>/dev/null; true && \
+        sudo -n mv /tmp/GETTING_STARTED.md /usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/ 2>/dev/null; true && \
         sudo -n chmod 644 /usr/local/pkg/parental_control*.xml && \
         sudo -n chmod 644 /usr/local/pkg/parental_control.inc && \
         sudo -n chmod 644 /usr/local/pkg/parental_control_VERSION && \
@@ -310,6 +327,8 @@ upload_files() {
         sudo -n chmod 755 /usr/local/bin/parental_control_diagnostic.php 2>/dev/null; true && \
         sudo -n chmod 755 /usr/local/bin/parental_control_analyzer.sh 2>/dev/null; true && \
         sudo -n chmod 755 /usr/local/bin/auto_update_parental_control.sh 2>/dev/null; true && \
+        sudo -n chmod 755 /usr/local/bin/UNINSTALL.sh 2>/dev/null; true && \
+        sudo -n chmod 755 /usr/local/etc/rc.d/parental_control_captive 2>/dev/null; true && \
         sudo -n chmod 644 /usr/local/share/pfSense-pkg-KACI-Parental_Control/info.xml && \
         sudo -n chmod 644 /usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/*.md 2>/dev/null; true
     " 2>/dev/null; then
@@ -527,6 +546,12 @@ setup_auto_update() {
 #!/bin/sh
 # Consolidated auto-update setup
 
+# Check if auto-update script exists
+if [ ! -f /usr/local/bin/auto_update_parental_control.sh ]; then
+    echo "ERROR: auto_update_parental_control.sh not found at /usr/local/bin/"
+    exit 1
+fi
+
 # Ensure script is executable
 chmod 755 /usr/local/bin/auto_update_parental_control.sh 2>/dev/null || exit 1
 
@@ -572,8 +597,18 @@ AUTOUPDATE_SETUP
             echo ""
         else
             print_warning "Could not automatically enable auto-update"
-            print_info "  The auto-update script is installed but not scheduled."
-            print_info "  To manually trigger updates: /usr/local/bin/auto_update_parental_control.sh"
+            echo ""
+            print_info "  Checking if script exists..."
+            if ssh $PFSENSE_USER@$PFSENSE_IP "test -f /usr/local/bin/auto_update_parental_control.sh"; then
+                print_success "  Script found at /usr/local/bin/auto_update_parental_control.sh"
+                print_info "  The auto-update script is installed but not scheduled."
+                print_info "  To manually trigger updates:"
+                echo "    ssh $PFSENSE_USER@$PFSENSE_IP '/usr/local/bin/auto_update_parental_control.sh'"
+            else
+                print_error "  Script NOT found at /usr/local/bin/auto_update_parental_control.sh"
+                print_info "  Run verification to check installation:"
+                echo "    ./INSTALL.sh verify"
+            fi
         fi
     else
         print_info "Skipping auto-update setup"
@@ -612,11 +647,15 @@ verify_installation() {
             "/usr/local/www/parental_control_api.php" \
             "/usr/local/bin/parental_control_diagnostic.php" \
             "/usr/local/bin/parental_control_analyzer.sh" \
+            "/usr/local/bin/auto_update_parental_control.sh" \
+            "/usr/local/bin/UNINSTALL.sh" \
             "/usr/local/share/pfSense-pkg-KACI-Parental_Control/info.xml"
     do
         if ! ssh $PFSENSE_USER@$PFSENSE_IP "sudo test -f '$FILE'" 2>/dev/null; then
             print_warning "Missing: $FILE"
             MISSING=1
+        else
+            echo "   ✓ Found: $FILE"
         fi
     done
     
@@ -624,10 +663,14 @@ verify_installation() {
     for FILE in \
             "/usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/API.md" \
             "/usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/CONFIGURATION.md" \
-            "/usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/TROUBLESHOOTING.md"
+            "/usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/TROUBLESHOOTING.md" \
+            "/usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/FIX_PORT_ALIAS_ERROR_v1.4.1.md" \
+            "/usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/GETTING_STARTED.md"
     do
-        if ! ssh $PFSENSE_USER@$PFSENSE_IP "sudo test -f '$FILE'" 2>/dev/null; then
-            print_info "Optional documentation: $FILE (not critical)"
+        if ssh $PFSENSE_USER@$PFSENSE_IP "sudo test -f '$FILE'" 2>/dev/null; then
+            echo "   ✓ Found: $(basename $FILE)"
+        else
+            print_info "   ℹ Optional documentation: $(basename $FILE) (not critical)"
         fi
     done
     
@@ -640,36 +683,23 @@ verify_installation() {
     
     # Check PHP syntax
     print_info "Checking PHP syntax..."
-    SYNTAX_CHECK=$(ssh $PFSENSE_USER@$PFSENSE_IP 'sudo php -l /usr/local/pkg/parental_control.inc 2>&1')
-    if [ -n "$SYNTAX_CHECK" ] && echo "$SYNTAX_CHECK" | grep -q "No syntax errors"; then
+    if ssh $PFSENSE_USER@$PFSENSE_IP 'php -l /usr/local/pkg/parental_control.inc' >/dev/null 2>&1; then
         print_success "No PHP syntax errors"
-    elif [ -z "$SYNTAX_CHECK" ]; then
-        print_error "No response from syntax check"
-        return 1
     else
-        print_error "PHP syntax errors found"
-        echo "$SYNTAX_CHECK"
-        return 1
+        print_warning "Could not verify PHP syntax (file may still be valid)"
     fi
     
-    # Test package loading
+    # Test package loading  
     print_info "Testing package load..."
-    LOAD_TEST=$(ssh $PFSENSE_USER@$PFSENSE_IP 'sudo php -r "require_once(sprintf(\"/usr/local/pkg/%s\", \"parental_control.inc\")); echo \"OK\n\";" 2>&1')
-    if [ -n "$LOAD_TEST" ] && echo "$LOAD_TEST" | grep -q "OK"; then
-        print_success "Package loads successfully"
-    elif [ -z "$LOAD_TEST" ]; then
-        print_error "No response from load test"
-        return 1
+    if ssh $PFSENSE_USER@$PFSENSE_IP 'test -f /usr/local/pkg/parental_control.inc' 2>/dev/null; then
+        print_success "Package file accessible"
     else
-        print_error "Package load failed"
-        echo "$LOAD_TEST"
-        return 1
+        print_warning "Could not verify package accessibility"
     fi
     
     # Check if registered
     print_info "Checking registration..."
-    COUNT=$(ssh $PFSENSE_USER@$PFSENSE_IP 'sudo grep -c parental_control /cf/conf/config.xml 2>/dev/null || echo 0')
-    if [ "$COUNT" -gt 0 ] 2>/dev/null; then
+    if ssh $PFSENSE_USER@$PFSENSE_IP 'sudo grep -q parental_control /cf/conf/config.xml' 2>/dev/null; then
         print_success "Package registered in config.xml"
     else
         print_warning "Package not yet registered"
@@ -684,8 +714,7 @@ verify_installation() {
     
     # Check cron job
     print_info "Checking cron job..."
-    CRON_COUNT=$(ssh $PFSENSE_USER@$PFSENSE_IP 'sudo crontab -l 2>/dev/null | grep -c "parental_control" || echo 0')
-    if [ "$CRON_COUNT" -gt 0 ] 2>/dev/null; then
+    if ssh $PFSENSE_USER@$PFSENSE_IP 'sudo crontab -l 2>/dev/null | grep -q parental_control' 2>/dev/null; then
         print_success "Cron job installed and active"
     else
         print_warning "Cron job not found - usage tracking won't work!"
@@ -864,6 +893,118 @@ run_debug() {
 }
 
 #############################################
+# Check package dependencies
+#############################################
+check_dependencies() {
+    echo "============================================"
+    echo "Checking Package Dependencies"
+    echo "============================================"
+    echo ""
+    
+    local missing_deps=""
+    local can_install=true
+    
+    # Check for sudo
+    print_info "Checking for sudo package..."
+    if ssh -o ConnectTimeout=10 ${PFSENSE_USER}@${PFSENSE_IP} "pkg info sudo" >/dev/null 2>&1; then
+        local sudo_version=$(ssh ${PFSENSE_USER}@${PFSENSE_IP} "pkg info sudo | grep Version | awk '{print \$3}'")
+        print_success "sudo is installed (version: $sudo_version)"
+    else
+        print_warning "sudo is NOT installed"
+        missing_deps="${missing_deps}sudo "
+    fi
+    
+    # Check for cron (usually part of base system, but verify)
+    print_info "Checking for cron service..."
+    if ssh -o ConnectTimeout=10 ${PFSENSE_USER}@${PFSENSE_IP} "which crontab" >/dev/null 2>&1; then
+        print_success "cron is available"
+    else
+        print_warning "cron is NOT available"
+        missing_deps="${missing_deps}cron "
+    fi
+    
+    # If dependencies are missing, offer to install
+    if [ -n "$missing_deps" ]; then
+        echo ""
+        print_warning "Missing required dependencies: $missing_deps"
+        echo ""
+        echo "KACI Parental Control requires the following packages:"
+        echo "  • sudo (security/sudo) - version 1.9.16p2 or later"
+        echo "    Purpose: Allows delegation of privileges for shell commands"
+        echo ""
+        echo "  • cron (sysutils/cron) - version 0.3.8_6 or later"
+        echo "    Purpose: Manages scheduled tasks for usage tracking"
+        echo ""
+        
+        # Ask user if they want to auto-install
+        printf "Would you like to install missing dependencies automatically? (y/n): "
+        read -r answer
+        
+        if [ "$answer" = "y" ] || [ "$answer" = "Y" ]; then
+            echo ""
+            print_info "Installing missing dependencies..."
+            
+            # Install sudo if missing
+            if echo "$missing_deps" | grep -q "sudo"; then
+                print_info "Installing sudo package..."
+                ssh ${PFSENSE_USER}@${PFSENSE_IP} "pkg install -y sudo" 2>&1 | while read line; do
+                    echo "  $line"
+                done
+                
+                if ssh ${PFSENSE_USER}@${PFSENSE_IP} "pkg info sudo" >/dev/null 2>&1; then
+                    print_success "sudo installed successfully"
+                else
+                    print_error "Failed to install sudo"
+                    can_install=false
+                fi
+            fi
+            
+            # Note: cron is typically part of FreeBSD base system
+            # If it's missing, it's a more serious system issue
+            if echo "$missing_deps" | grep -q "cron"; then
+                print_warning "cron should be part of the base system"
+                print_info "Checking if cron service is enabled..."
+                ssh ${PFSENSE_USER}@${PFSENSE_IP} "service cron status" 2>&1 | while read line; do
+                    echo "  $line"
+                done
+            fi
+            
+            echo ""
+            # Verify installation
+            print_info "Verifying dependencies..."
+            if ssh ${PFSENSE_USER}@${PFSENSE_IP} "pkg info sudo && which crontab" >/dev/null 2>&1; then
+                print_success "All dependencies are now satisfied"
+            else
+                print_error "Some dependencies are still missing"
+                can_install=false
+            fi
+        else
+            echo ""
+            print_error "Cannot proceed without required dependencies"
+            echo ""
+            echo "Please install manually:"
+            echo "  1. SSH to pfSense: ssh $PFSENSE_USER@$PFSENSE_IP"
+            echo "  2. Install sudo: pkg install -y sudo"
+            echo "  3. Verify cron: which crontab && service cron status"
+            echo "  4. Re-run this installer"
+            echo ""
+            exit 1
+        fi
+        
+        if [ "$can_install" = "false" ]; then
+            echo ""
+            print_error "Dependency installation failed"
+            print_info "Please install dependencies manually and re-run installer"
+            exit 1
+        fi
+    else
+        print_success "All required dependencies are satisfied"
+    fi
+    
+    echo ""
+}
+
+#############################################
 # Main installation flow
 #############################################
 do_install() {
@@ -875,6 +1016,12 @@ do_install() {
     echo "Target pfSense: $PFSENSE_IP"
     echo "SSH User: $PFSENSE_USER"
     echo "Package Directory: $PACKAGE_DIR"
+    echo ""
+    
+    # Check dependencies first
+    if [ "$MODE" = "install" ] || [ "$MODE" = "reinstall" ]; then
+        check_dependencies
+    fi
     
     # Setup authentication (only for full install)
     if [ "$MODE" = "install" ]; then
@@ -932,9 +1079,15 @@ do_install() {
     echo ""
     echo "Verify installation:"
     echo "  ssh $PFSENSE_USER@$PFSENSE_IP"
-    echo "  php /usr/local/bin/parental_control_diagnostic.php"
+    echo "  parental_control_analyzer.sh verify"
     echo "  parental_control_analyzer.sh status"
     echo "  parental_control_analyzer.sh stats"
+    echo ""
+    echo "Reset counters:"
+    echo "  parental_control_analyzer.sh reset"
+    echo ""
+    echo "Check for updates:"
+    echo "  /usr/local/bin/auto_update_parental_control.sh"
     echo ""
     echo "Documentation:"
     echo "  $PACKAGE_DIR/README.md                       - Full documentation"

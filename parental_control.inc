@@ -1657,6 +1657,9 @@ function pc_is_time_limit_exceeded($device, $state) {
 function pc_create_block_rule($device, $enforcement_mode, $reason) {
 	global $config;
 	
+	// Ensure port aliases exist (needed for moderate enforcement mode)
+	pc_create_port_aliases();
+	
 	$mac = $device['mac_address'];
 	$child_name = $device['child_name'];
 	$device_name = $device['device_name'];
@@ -1718,7 +1721,7 @@ function pc_create_block_rule($device, $enforcement_mode, $reason) {
 			// WHY: Block HTTP/HTTPS (ports 80, 443) but allow other protocols
 			// Use case: Block web surfing but allow Zoom, email, Minecraft, etc.
 			$rule['protocol'] = 'tcp';
-			$rule['destination']['port'] = '80,443';
+			$rule['destination']['port'] = 'KACI_PC_Web';  // Use port alias for HTTP (80) and HTTPS (443)
 			break;
 			
 		case 'soft':
@@ -2239,6 +2242,110 @@ function pc_create_blocking_alias() {
 }
 
 /**
+ * Create port aliases for parental control rules
+ * 
+ * Creates port aliases required by pfSense firewall rules. pfSense cannot use 
+ * comma-separated ports directly in rules - they must reference a port alias.
+ * 
+ * Creates two aliases:
+ * 1. KACI_PC_Ports: 80, 443, 1008 (HTTP, HTTPS, Captive Portal)
+ * 2. KACI_PC_Web: 80, 443 (HTTP, HTTPS for moderate enforcement mode)
+ * 
+ * @return bool True if aliases exist or were created successfully
+ * @since 1.1.12
+ */
+function pc_create_port_aliases() {
+	global $config;
+	
+	// Ensure aliases structure exists
+	if (!isset($config['aliases'])) {
+		$config['aliases'] = array();
+	}
+	if (!isset($config['aliases']['alias'])) {
+		$config['aliases']['alias'] = array();
+	}
+	
+	$aliases_to_create = array(
+		array(
+			'name' => 'KACI_PC_Ports',
+			'ports' => '80 443 1008',
+			'descr' => 'Parental Control - pfSense Access Ports (HTTP, HTTPS, Captive Portal)',
+			'detail' => 'HTTP||HTTPS||Captive Portal||'
+		),
+		array(
+			'name' => 'KACI_PC_Web',
+			'ports' => '80 443',
+			'descr' => 'Parental Control - Web Ports (HTTP, HTTPS)',
+			'detail' => 'HTTP||HTTPS||'
+		)
+	);
+	
+	$needs_write = false;
+	
+	foreach ($aliases_to_create as $alias_def) {
+		$alias_name = $alias_def['name'];
+		$ports = $alias_def['ports'];
+		
+		// Check if alias already exists
+		$alias_exists = false;
+		$alias_index = -1;
+		
+		foreach ($config['aliases']['alias'] as $index => $alias) {
+			if (isset($alias['name']) && $alias['name'] === $alias_name) {
+				$alias_exists = true;
+				$alias_index = $index;
+				break;
+			}
+		}
+		
+		if ($alias_exists) {
+			// Verify the alias has correct ports and type
+			$current_ports = isset($config['aliases']['alias'][$alias_index]['address']) ? 
+				$config['aliases']['alias'][$alias_index]['address'] : '';
+			$current_type = isset($config['aliases']['alias'][$alias_index]['type']) ? 
+				$config['aliases']['alias'][$alias_index]['type'] : '';
+			
+			if ($current_ports !== $ports || $current_type !== 'port') {
+				pc_log("Updating port alias '{$alias_name}' with correct configuration", 'info');
+				$config['aliases']['alias'][$alias_index]['type'] = 'port';
+				$config['aliases']['alias'][$alias_index]['address'] = $ports;
+				$config['aliases']['alias'][$alias_index]['descr'] = $alias_def['descr'];
+				$config['aliases']['alias'][$alias_index]['detail'] = $alias_def['detail'];
+				$needs_write = true;
+			} else {
+				pc_log("Port alias '{$alias_name}' already exists with correct configuration", 'debug');
+			}
+		} else {
+			// Create new port alias
+			$new_alias = array(
+				'name' => $alias_name,
+				'type' => 'port',
+				'address' => $ports,
+				'descr' => $alias_def['descr'],
+				'detail' => $alias_def['detail']
+			);
+			
+			$config['aliases']['alias'][] = $new_alias;
+			$needs_write = true;
+			
+			pc_log("Created port alias '{$alias_name}'", 'info', array(
+				'event.action' => 'alias_created',
+				'alias.name' => $alias_name,
+				'alias.type' => 'port',
+				'alias.ports' => $ports
+			));
+		}
+	}
+	
+	if ($needs_write) {
+		write_config('Parental Control: Created/updated port aliases');
+		mark_subsystem_dirty('aliases');
+	}
+	
+	return true;
+}
+
+/**
  * Create floating firewall rule that blocks traffic from parental control alias
  * 
  * CRITICAL: This rule will be in pfSense's main configuration and properly ordered
@@ -2462,6 +2569,9 @@ function pc_create_redirect_rules() {
 function pc_create_allow_rules() {
 	global $config;
 	
+	// First, ensure the port aliases exist for pfSense access ports
+	pc_create_port_aliases();
+	
 	$lan_ip = get_interface_ip('lan');
 	if (empty($lan_ip)) {
 		$lan_ip = '192.168.1.1';
@@ -2530,7 +2640,7 @@ function pc_create_allow_rules() {
 			),
 			'destination' => array(
 				'address' => $lan_ip,
-				'port' => '80,443,1008'  // HTTP, HTTPS, and Captive Portal
+				'port' => 'KACI_PC_Ports'  // Use port alias for HTTP (80), HTTPS (443), and Captive Portal (1008)
 			),
 			'floating' => 'yes',
 			'quick' => 'yes',
@@ -2544,10 +2654,11 @@ function pc_create_allow_rules() {
 		array_unshift($rules, $pfsense_rule);
 		$needs_save = true;
 		
-		pc_log("Created pfSense access allow rule for blocked devices (including captive portal)", 'info', array(
+		pc_log("Created pfSense access allow rule for blocked devices (using port alias)", 'info', array(
 			'event.action' => 'filter_rule_created',
 			'rule.type' => 'pass',
-			'rule.destination' => $lan_ip
+			'rule.destination' => $lan_ip,
+			'rule.port_alias' => 'KACI_PC_Ports'
 		));
 	}
 	

@@ -1,8 +1,8 @@
 {
   "build_info": {
-    "version": "0.3.3",
-    "build_date": "2025-12-27T07:00:00Z",
-    "git_commit": "7d67f1b",
+    "version": "0.3.5",
+    "build_date": "2026-01-01T06:00:00Z",
+    "git_commit": "pending",
     "git_branch": "main",
     "built_by": "development",
     "build_environment": "local"
@@ -11,6 +11,25 @@
     "php_version_required": "8.1+",
     "pfsense_version_required": "2.7.0+",
     "freebsd_version_required": "13.0+"
+  },
+  "dependencies": {
+    "required": [
+      {
+        "name": "sudo",
+        "package": "security/sudo",
+        "version": "1.9.16p2+",
+        "description": "Allows delegation of privileges for shell commands",
+        "auto_install": true
+      },
+      {
+        "name": "cron",
+        "package": "sysutils/cron",
+        "version": "0.3.8_6+",
+        "description": "Manages scheduled tasks for usage tracking",
+        "auto_install": false,
+        "note": "Usually part of FreeBSD base system"
+      }
+    ]
   },
   "package_info": {
     "name": "KACI-Parental_Control",
@@ -69,6 +88,79 @@
     }
   },
   "changelog": [
+    {
+      "version": "0.3.7",
+      "date": "2026-01-01",
+      "type": "enhancement",
+      "changes": [
+        "Documentation: Removed redundant ROUTER_IMPLEMENTATION.md",
+        "Documentation: Consolidated router logic into TECHNICAL_REFERENCE.md",
+        "Documentation: Added Multi-File Router Capability section",
+        "Documentation: Final cleanup - 6 core docs remaining"
+      ]
+    },
+    {
+      "version": "0.3.6",
+      "date": "2026-01-01",
+      "type": "enhancement",
+      "changes": [
+        "INSTALL.sh: Added automatic dependency checking for sudo and cron",
+        "INSTALL.sh: Offers to auto-install missing dependencies",
+        "INSTALL.sh: Prevents installation if dependencies cannot be satisfied",
+        "Documentation: Added dependency information to README.md and GETTING_STARTED.md",
+        "BUILD_INFO.json: Added dependencies section with package requirements"
+      ]
+    },
+    {
+      "version": "0.3.5",
+      "date": "2026-01-01",
+      "type": "enhancement",
+      "changes": [
+        "CONSOLIDATION: Reduced shell scripts from 8 to 6 (5 core + 1 dev tool)",
+        "parental_control_analyzer.sh: Added 'reset' command (consolidated from diagnose_reset.sh)",
+        "parental_control_analyzer.sh: Added 'verify' command (consolidated from verify_files.sh)",
+        "Removed diagnose_reset.sh - functionality now in analyzer",
+        "Removed verify_files.sh - functionality now in analyzer",
+        "bump_version.sh: Enhanced with built-in INSTALL/UNINSTALL sync validation function",
+        "bump_version.sh: Validates synchronization before every release automatically",
+        "Removed validate_cleanup.sh - functionality integrated into bump_version.sh",
+        "parental_control_captive.sh: Now properly deployed by INSTALL.sh as RC script",
+        "INSTALL.sh: Updated to deploy captive.sh to /usr/local/etc/rc.d/",
+        "UNINSTALL.sh: Updated cleanup to match new structure",
+        "Documentation: Consolidated all docs into existing files (TECHNICAL_REFERENCE, USER_GUIDE)",
+        "Documentation: Removed historical docs (SOLUTION_PLAN_v1.1.8, REVERT_TO_v1.1.9, CRITICAL_FIX_v1.1.4)",
+        "Documentation: Only 7 essential .md files remain in docs/ folder",
+        "Documentation: All historical notes preserved in TECHNICAL_REFERENCE.md",
+        "Automated validation ensures no leftover files after uninstall"
+      ]
+    },
+    {
+      "version": "0.3.4",
+      "date": "2026-01-01",
+      "type": "bugfix",
+      "changes": [
+        "CRITICAL FIX: Resolved 'Unresolvable destination port alias' error in firewall rules",
+        "Created automatic port alias creation system for pfSense firewall rules",
+        "Added KACI_PC_Ports alias (80, 443, 1008) for pfSense access rule",
+        "Added KACI_PC_Web alias (80, 443) for moderate enforcement mode",
+        "Implemented pc_create_port_aliases() function to auto-create port aliases",
+        "Updated 'Allow pfSense Access for Blocked Devices' rule to use port alias",
+        "Updated moderate enforcement mode block rule to use port alias",
+        "Fixes 'Rule skipped' errors that prevented blocked devices from accessing block page",
+        "Port aliases are now created automatically during package sync/install",
+        "No manual configuration required - aliases created transparently",
+        "INSTALL.sh: Added auto_update_parental_control.sh to verification checks",
+        "INSTALL.sh: Enhanced file upload verification with detailed status output",
+        "INSTALL.sh: Added check for auto-update script existence before enabling cron",
+        "INSTALL.sh: Added new documentation files to deployment (FIX_PORT_ALIAS_ERROR_v1.4.1.md, GETTING_STARTED.md)",
+        "INSTALL.sh: Improved error messages for auto-update setup failures",
+        "UNINSTALL.sh: Now removes port aliases KACI_PC_Ports and KACI_PC_Web",
+        "UNINSTALL.sh: Complete cleanup of all parental control traces",
+        "Created verify_files.sh: Standalone verification script for troubleshooting installations",
+        "verify_files.sh: Checks all files, permissions, configs, aliases, rules, and cron jobs",
+        "verify_files.sh: Color-coded output for easy visual verification"
+      ]
+    },
     {
       "version": "0.3.3",
       "date": "2025-12-27",

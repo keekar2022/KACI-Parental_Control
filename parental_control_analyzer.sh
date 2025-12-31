@@ -11,6 +11,8 @@ LOG_FILE="/var/log/parental_control.jsonl"
 LOG_DIR="/var/log"
 STATE_FILE="/var/db/parental_control_state.json"
 PID_FILE="/var/run/parental_control.pid"
+VERSION_FILE="/usr/local/pkg/parental_control_VERSION"
+BUILD_INFO_FILE="/usr/local/share/pfSense-pkg-KACI-Parental_Control/BUILD_INFO.json"
 
 # Detect if we're in a terminal that supports colors
 if [ -t 1 ] && [ -z "$NO_COLOR" ] && [ "$TERM" != "dumb" ]; then
@@ -398,6 +400,8 @@ show_help() {
     printf "  ${GREEN}%-20s${NC} %s\n" "watch" "Watch logs in real-time"
     printf "  ${GREEN}%-20s${NC} %s\n" "state" "Show current state file"
     printf "  ${GREEN}%-20s${NC} %s\n" "status" "Show system status"
+    printf "  ${GREEN}%-20s${NC} %s\n" "reset" "Diagnose and force reset counters"
+    printf "  ${GREEN}%-20s${NC} %s\n" "verify" "Verify all package files are present"
     printf "  ${GREEN}%-20s${NC} %s\n" "help" "Show this help message"
     echo ""
     echo "Examples:"
@@ -406,6 +410,8 @@ show_help() {
     echo "  $0 recent 50                  # Show last 50 entries"
     echo "  $0 device aa:bb:cc:dd:ee:ff  # Show activity for device"
     echo "  $0 watch                      # Watch logs in real-time"
+    echo "  $0 reset                      # Run reset diagnostic and force reset"
+    echo "  $0 verify                     # Verify installation"
     echo ""
     echo "Files:"
     echo "  Current Log: $LOG_FILE"
@@ -413,6 +419,277 @@ show_help() {
     echo "  State File: $STATE_FILE"
     echo "  PID File: $PID_FILE"
     echo ""
+}
+
+# Run reset diagnostic and force reset
+run_reset_diagnostic() {
+    print_header
+    printf "${GREEN}=== PARENTAL CONTROL RESET DIAGNOSTIC ===${NC}\n"
+    echo ""
+    
+    print_color "$BLUE" "=== 1. Current System Time ==="
+    date
+    echo ""
+    
+    print_color "$BLUE" "=== 2. State File: Last Reset Time ==="
+    grep -E '"last_reset"|"last_check"' "$STATE_FILE" 2>/dev/null | head -5 || echo "State file not found"
+    echo ""
+    
+    print_color "$BLUE" "=== 3. Profile Usage (Current Values) ==="
+    grep -A5 '"profiles"' "$STATE_FILE" 2>/dev/null | head -50 || echo "No profiles found"
+    echo ""
+    
+    print_color "$BLUE" "=== 4. Recent Reset Log Entries ==="
+    grep -i "reset" /var/log/system.log 2>/dev/null | grep -i "parental" | tail -10 || echo "No reset entries found"
+    echo ""
+    
+    print_color "$BLUE" "=== 5. Cron Job Execution History ==="
+    grep "parental_control_cron" /var/log/system.log 2>/dev/null | tail -10 || echo "No cron execution logs"
+    echo ""
+    
+    print_color "$BLUE" "=== 6. Check Reset Logic ==="
+    php -r "
+    require_once('/etc/inc/config.inc');
+    require_once('/usr/local/pkg/parental_control.inc');
+    
+    \$state = pc_load_state();
+    \$reset_time_config = config_get_path('installedpackages/parentalcontrol/reset_time', 'midnight');
+    \$last_reset = isset(\$state['last_reset']) ? \$state['last_reset'] : 0;
+    
+    echo \"Reset Time Config: \$reset_time_config\n\";
+    echo \"Last Reset Timestamp: \$last_reset (\" . date('Y-m-d H:i:s', \$last_reset) . \")\n\";
+    echo \"Current Time: \" . time() . \" (\" . date('Y-m-d H:i:s') . \")\n\";
+    echo \"Hours Since Reset: \" . round((time() - \$last_reset) / 3600, 2) . \" hours\n\";
+    echo \"\n\";
+    
+    echo \"Should Reset? \";
+    if (pc_should_reset_counters(\$last_reset, \$reset_time_config)) {
+        echo \"YES - Reset is DUE!\n\";
+    } else {
+        echo \"NO - Reset not needed yet\n\";
+    }
+    
+    echo \"\n=== Profile Counters ===\n\";
+    if (isset(\$state['profiles'])) {
+        foreach (\$state['profiles'] as \$name => \$data) {
+            \$usage = isset(\$data['usage_today']) ? \$data['usage_today'] : 0;
+            echo \"Profile: \$name\n\";
+            echo \"  Usage Today: \$usage minutes (\" . floor(\$usage/60) . \"h \" . (\$usage%60) . \"m)\n\";
+            echo \"  Usage Week: \" . (isset(\$data['usage_week']) ? \$data['usage_week'] : 0) . \" minutes\n\";
+        }
+    }
+    " 2>/dev/null || print_color "$RED" "Error checking reset logic"
+    echo ""
+    
+    print_color "$BLUE" "=== 7. Force Manual Reset NOW ==="
+    read -p "Do you want to force reset counters now? (y/N) " -r
+    echo
+    if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
+        php -r "
+        require_once('/etc/inc/config.inc');
+        require_once('/usr/local/pkg/parental_control.inc');
+        
+        echo \"Loading state...\n\";
+        \$state = pc_load_state();
+        
+        echo \"\n--- BEFORE RESET ---\n\";
+        if (isset(\$state['profiles'])) {
+            foreach (\$state['profiles'] as \$name => \$data) {
+                \$usage = isset(\$data['usage_today']) ? \$data['usage_today'] : 0;
+                echo \"\$name: \$usage minutes\n\";
+            }
+        }
+        
+        echo \"\nExecuting reset...\n\";
+        pc_reset_daily_counters(\$state);
+        \$state['last_reset'] = time();
+        pc_save_state(\$state);
+        
+        echo \"Reloading state...\n\";
+        \$state = pc_load_state();
+        
+        echo \"\n--- AFTER RESET ---\n\";
+        if (isset(\$state['profiles'])) {
+            foreach (\$state['profiles'] as \$name => \$data) {
+                \$usage = isset(\$data['usage_today']) ? \$data['usage_today'] : 0;
+                echo \"\$name: \$usage minutes\n\";
+            }
+        }
+        
+        echo \"\n✓ Reset completed at \" . date('Y-m-d H:i:s') . \"\n\";
+        " 2>/dev/null || print_color "$RED" "Error performing reset"
+    else
+        print_color "$YELLOW" "Reset cancelled"
+    fi
+    echo ""
+    
+    print_color "$GREEN" "=== 8. Final Verification ==="
+    grep -A5 '"profiles"' "$STATE_FILE" 2>/dev/null | head -30
+    echo ""
+    
+    print_color "$GREEN" "DIAGNOSTIC COMPLETE"
+}
+
+# Verify installation files
+verify_installation() {
+    print_header
+    printf "${GREEN}=== PARENTAL CONTROL FILE VERIFICATION ===${NC}\n"
+    echo ""
+    
+    MISSING=0
+    TOTAL=0
+    
+    check_file() {
+        FILE=$1
+        TOTAL=$((TOTAL + 1))
+        
+        if [ -f "$FILE" ]; then
+            printf "${GREEN}✓${NC} Found: $FILE\n"
+        else
+            printf "${RED}✗${NC} Missing: $FILE\n"
+            MISSING=$((MISSING + 1))
+        fi
+    }
+    
+    check_executable() {
+        FILE=$1
+        TOTAL=$((TOTAL + 1))
+        
+        if [ -f "$FILE" ]; then
+            if [ -x "$FILE" ]; then
+                printf "${GREEN}✓${NC} Executable: $FILE\n"
+            else
+                printf "${YELLOW}⚠${NC} Not executable: $FILE\n"
+                MISSING=$((MISSING + 1))
+            fi
+        else
+            printf "${RED}✗${NC} Missing: $FILE\n"
+            MISSING=$((MISSING + 1))
+        fi
+    }
+    
+    print_color "$BLUE" "1. Checking core package files..."
+    check_file "/usr/local/pkg/parental_control.xml"
+    check_file "/usr/local/pkg/parental_control.inc"
+    check_file "/usr/local/pkg/parental_control_VERSION"
+    check_file "/usr/local/share/pfSense-pkg-KACI-Parental_Control/info.xml"
+    
+    echo ""
+    print_color "$BLUE" "2. Checking web interface files..."
+    check_file "/usr/local/www/parental_control_status.php"
+    check_file "/usr/local/www/parental_control_profiles.php"
+    check_file "/usr/local/www/parental_control_schedules.php"
+    check_file "/usr/local/www/parental_control_blocked.php"
+    check_file "/usr/local/www/parental_control_captive.php"
+    check_file "/usr/local/www/parental_control_health.php"
+    check_file "/usr/local/www/parental_control_api.php"
+    
+    echo ""
+    print_color "$BLUE" "3. Checking executable scripts..."
+    check_executable "/usr/local/etc/rc.d/parental_control_captive"
+    check_executable "/usr/local/bin/parental_control_diagnostic.php"
+    check_executable "/usr/local/bin/parental_control_analyzer.sh"
+    check_executable "/usr/local/bin/auto_update_parental_control.sh"
+    
+    echo ""
+    print_color "$BLUE" "4. Checking cron job..."
+    CRON_ENTRIES=$(crontab -l 2>/dev/null | grep -c "parental_control")
+    if [ "$CRON_ENTRIES" -gt 0 ]; then
+        printf "${GREEN}✓${NC} Found $CRON_ENTRIES parental control cron job(s)\n"
+        crontab -l 2>/dev/null | grep "parental_control" | sed 's/^/  /'
+    else
+        printf "${YELLOW}⚠${NC} No cron jobs found (may not be enabled)\n"
+    fi
+    
+    echo ""
+    print_color "$BLUE" "5. Checking package version..."
+    if [ -f "$VERSION_FILE" ]; then
+        VERSION=$(cat "$VERSION_FILE")
+        printf "${GREEN}✓${NC} Installed version: $VERSION\n"
+    else
+        printf "${RED}✗${NC} Version file not found\n"
+    fi
+    
+    echo ""
+    print_color "$BLUE" "6. Checking configuration..."
+    CONFIG_CHECK=$(php -r "
+    require_once('/etc/inc/config.inc');
+    \$pc_config = config_get_path('installedpackages/parentalcontrol');
+    if (is_array(\$pc_config)) {
+        echo 'FOUND';
+    } else {
+        echo 'MISSING';
+    }
+    " 2>/dev/null)
+    
+    if [ "$CONFIG_CHECK" = "FOUND" ]; then
+        printf "${GREEN}✓${NC} Configuration exists in config.xml\n"
+    else
+        printf "${YELLOW}⚠${NC} No configuration found (package may not be initialized)\n"
+    fi
+    
+    echo ""
+    print_color "$BLUE" "7. Checking firewall aliases..."
+    ALIAS_CHECK=$(php -r "
+    require_once('/etc/inc/config.inc');
+    \$aliases = config_get_path('aliases/alias', []);
+    \$found = [];
+    foreach (\$aliases as \$alias) {
+        if (in_array(\$alias['name'], ['parental_control_blocked', 'KACI_PC_Ports', 'KACI_PC_Web'])) {
+            \$found[] = \$alias['name'];
+        }
+    }
+    echo implode(',', \$found);
+    " 2>/dev/null)
+    
+    if [ -n "$ALIAS_CHECK" ]; then
+        printf "${GREEN}✓${NC} Found aliases: $ALIAS_CHECK\n"
+    else
+        printf "${YELLOW}⚠${NC} No parental control aliases found (created on first sync)\n"
+    fi
+    
+    echo ""
+    print_color "$BLUE" "8. Checking firewall rules..."
+    RULE_CHECK=$(php -r "
+    require_once('/etc/inc/config.inc');
+    \$rules = config_get_path('filter/rule', []);
+    \$count = 0;
+    foreach (\$rules as \$rule) {
+        if (isset(\$rule['descr']) && strpos(\$rule['descr'], 'Parental Control') !== false) {
+            \$count++;
+        }
+    }
+    echo \$count;
+    " 2>/dev/null)
+    
+    if [ "$RULE_CHECK" -gt 0 ]; then
+        printf "${GREEN}✓${NC} Found $RULE_CHECK parental control firewall rule(s)\n"
+    else
+        printf "${YELLOW}⚠${NC} No firewall rules found (created on first sync)\n"
+    fi
+    
+    echo ""
+    print_color "$GREEN" "======================================"
+    print_color "$GREEN" "Summary"
+    print_color "$GREEN" "======================================"
+    echo "Total files checked: $TOTAL"
+    
+    if [ $MISSING -eq 0 ]; then
+        printf "${GREEN}✓ All required files present!${NC}\n"
+        echo ""
+        echo "Installation verified successfully."
+        echo ""
+        echo "Next steps:"
+        echo "  1. Enable package: Services → Keekar's Parental Control"
+        echo "  2. Configure profiles: Click 'Profiles' tab"
+        echo "  3. Check status: Click 'Status' tab"
+        return 0
+    else
+        printf "${RED}✗ $MISSING file(s) missing or not executable${NC}\n"
+        echo ""
+        echo "Some files are missing. Reinstall may be required."
+        return 1
+    fi
 }
 
 # Main command dispatcher
@@ -443,6 +720,12 @@ case "${1:-help}" in
         ;;
     status)
         show_status
+        ;;
+    reset)
+        run_reset_diagnostic
+        ;;
+    verify)
+        verify_installation
         ;;
     help|--help|-h)
         show_help

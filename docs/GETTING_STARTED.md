@@ -18,7 +18,7 @@
 
 ## Professional-Grade Internet Time Management for Families
 
-**Version 0.9.1** | December 2025 | Open Source | Free
+**Version 1.4.2** | January 2026 | Open Source | Free
 
 ---
 
@@ -188,6 +188,19 @@ For advanced users and home automation:
 - SSH access to your pfSense firewall
 - Basic Linux command-line knowledge (for installation only)
 
+**Package Dependencies:**
+The following packages are required and will be automatically checked during installation:
+
+- **sudo** (security/sudo v1.9.16p2 or later)
+  - Purpose: Allows delegation of privileges for shell commands
+  - Auto-install: Yes, installer will offer to install if missing
+
+- **cron** (sysutils/cron v0.3.8_6 or later)
+  - Purpose: Manages scheduled tasks for usage tracking
+  - Note: Usually part of FreeBSD base system
+
+*The installer automatically detects missing dependencies and offers to install them.*
+
 ### Quick Install (5 minutes)
 
 1. **SSH into your pfSense firewall:**
@@ -353,7 +366,7 @@ See **[LICENSE](LICENSE)** for full terms.
 
 ## 📊 Project Stats
 
-- **Version:** 0.9.1
+- **Version:** 1.4.2
 - **Release Date:** December 2025
 - **Lines of Code:** 4,000+
 - **Documentation Pages:** 10+
@@ -401,7 +414,7 @@ See **[LICENSE](LICENSE)** for full terms.
 **A:** Yes, via the API. See **[docs/API.md](docs/API.md)** for details.
 
 ### Q: Is it stable for production use?
-**A:** Yes. Version 0.9.1 is production-ready. Extensively tested and actively maintained.
+**A:** Yes. Version 1.4.2 is production-ready. Extensively tested and actively maintained.
 
 ---
 
@@ -455,7 +468,7 @@ sudo ./INSTALL.sh install your-firewall-ip
 The KACI Parental Control package has been completely removed and freshly reinstalled on your pfSense firewall.
 
 **Date:** December 28, 2025  
-**Version:** v0.9.0  
+**Version:** 1.4.2  
 **Firewall:** fw.keekar.com
 
 ---
@@ -773,7 +786,7 @@ You now have a clean slate to test all the features and verify that everything w
 # Quick Start Guide - KACI Parental Control
 ## Get Running in 5 Minutes ⚡
 
-**Version:** 0.1.3  
+**Version:** 1.4.2  
 **Author:** Mukesh Kesharwani  
 **Last Updated:** December 25, 2025
 
@@ -790,6 +803,10 @@ Before you begin, make sure you have:
 - [ ] **SSH key authentication** set up (optional but recommended)
 - [ ] **Child devices' MAC addresses** identified (see tips below)
 - [ ] **Network access** to pfSense from your computer
+
+**Package Dependencies** (auto-checked during installation):
+- [ ] **sudo** (v1.9.16p2+) - Installer will offer to install if missing
+- [ ] **cron** (v0.3.8_6+) - Usually pre-installed with FreeBSD base system
 
 ### 💡 How to Find MAC Addresses
 
@@ -1186,5 +1203,5 @@ After completing this guide, you should have:
 
 **Built with Passion by Mukesh Kesharwani**  
 **© 2025 Keekar**  
-**Version 0.1.3**
+**Version 1.4.2**
 

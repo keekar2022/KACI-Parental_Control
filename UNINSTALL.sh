@@ -43,14 +43,15 @@ require_once('/etc/inc/config.inc');
 require_once('/etc/inc/filter.inc');
 require_once('/etc/inc/util.inc');
 
-// Remove alias (parental_control_blocked)
+// Remove aliases (parental_control_blocked, KACI_PC_Ports, KACI_PC_Web)
 $aliases = config_get_path('aliases/alias', []);
 $new_aliases = [];
+$pc_aliases = ['parental_control_blocked', 'KACI_PC_Ports', 'KACI_PC_Web'];
 foreach ($aliases as $alias) {
-    if ($alias['name'] !== 'parental_control_blocked') {
+    if (!in_array($alias['name'], $pc_aliases)) {
         $new_aliases[] = $alias;
     } else {
-        echo "   ✓ Removed alias: parental_control_blocked\n";
+        echo "   ✓ Removed alias: {$alias['name']}\n";
     }
 }
 config_set_path('aliases/alias', $new_aliases);
