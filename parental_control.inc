@@ -37,7 +37,8 @@ define('PC_AUTHOR', 'Mukesh Kesharwani');
 // This allows customization without editing code, useful for testing and containers
 define('PC_LOG_FILE', getenv('PC_LOG_FILE') ?: '/var/log/parental_control.jsonl');
 define('PC_STATE_FILE', getenv('PC_STATE_FILE') ?: '/var/db/parental_control_state.json');
-define('PC_PID_FILE', getenv('PC_PID_FILE') ?: '/var/run/parental_control.pid');
+// Use /tmp instead of /var/run for PID file - /tmp is world-writable and cleaned on reboot
+define('PC_PID_FILE', getenv('PC_PID_FILE') ?: '/tmp/parental_control.pid');
 // WHY: Default to 5-minute cron interval to prevent AQM flowset errors
 // Design Decision: Check every 5 minutes instead of every minute
 // Rationale: Every-minute checks caused "config_aqm flowset busy" kernel errors
@@ -3536,10 +3537,14 @@ function pc_acquire_pid_lock() {
 	
 	// Write current PID
 	$current_pid = getmypid();
-	if (file_put_contents($pid_file, $current_pid) === false) {
+	$result = @file_put_contents($pid_file, $current_pid);
+	if ($result === false) {
+		// Try to provide helpful error message
+		$error_msg = error_get_last();
 		pc_log("Failed to write PID file", 'error', array(
 			'event.action' => 'lock_write_failed',
 			'file.path' => $pid_file,
+			'error.message' => $error_msg ? $error_msg['message'] : 'Unknown error',
 			'event.outcome' => 'failure'
 		));
 		return false;
