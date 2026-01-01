@@ -659,26 +659,31 @@ function parental_control_sync() {
 		// ORDER: These MUST come BEFORE the block-all rule (floating rules with quick)
 		pc_create_allow_rules();
 		
-		// CRITICAL: Start captive portal server (standalone PHP server on port 1008)
-		// WHY: Serves block page without authentication, provides captive portal behavior
-		pc_ensure_captive_portal_running();
+	// NOTE: Captive portal start moved to async call below to avoid blocking boot
+	// Previous sync call caused boot hangs - see pc_ensure_captive_portal_running_async()
 		
 		// CRITICAL: Create NAT redirect rules for HTTP/HTTPS to captive portal
 		// WHY: Instead of silent blocking, show users a friendly explanation page
 		pc_create_redirect_rules();
 		
-		// CRITICAL: Create floating rule that blocks traffic from the alias
-		// WHY: Floating rules are evaluated BEFORE interface rules (fixes rule ordering)
-		// ORDER: This comes LAST so allow rules are checked first
-		pc_create_blocking_rule();
-		
-		// Reload filter/NAT if needed (only if alias or rules were created)
-		if (is_subsystem_dirty('aliases') || is_subsystem_dirty('filter') || is_subsystem_dirty('nat')) {
-			filter_configure();
-			clear_subsystem_dirty('aliases');
-			clear_subsystem_dirty('filter');
-			clear_subsystem_dirty('nat');
-		}
+	// CRITICAL: Create floating rule that blocks traffic from the alias
+	// WHY: Floating rules are evaluated BEFORE interface rules (fixes rule ordering)
+	// ORDER: This comes LAST so allow rules are checked first
+	pc_create_blocking_rule();
+	
+	// CRITICAL: Start captive portal server in background (non-blocking)
+	// WHY: Starting during boot sync can block boot process if server startup hangs
+	// SOLUTION: Use background execution to avoid blocking boot
+	// NOTE: Server will start automatically, cron job will verify/restart if needed
+	pc_ensure_captive_portal_running_async();
+	
+	// Reload filter/NAT if needed (only if alias or rules were created)
+	if (is_subsystem_dirty('aliases') || is_subsystem_dirty('filter') || is_subsystem_dirty('nat')) {
+		filter_configure();
+		clear_subsystem_dirty('aliases');
+		clear_subsystem_dirty('filter');
+		clear_subsystem_dirty('nat');
+	}
 		
 		pc_log("Configuration sync completed (table-based blocking)", 'info', array(
 			'event.action' => 'config_sync_complete',
@@ -2673,7 +2678,7 @@ function pc_create_allow_rules() {
 }
 
 /**
- * Ensure captive portal server is running
+ * Ensure captive portal server is running (BLOCKING - use for manual starts only)
  * 
  * Starts the standalone PHP web server on port 1008 to serve the block page
  * without authentication. This creates a true captive portal experience.
@@ -2681,8 +2686,12 @@ function pc_create_allow_rules() {
  * Uses the RC script parental_control_captive (FreeBSD RC script) to manage the server.
  * If the server is not running, it will be started automatically.
  * 
+ * WARNING: This function BLOCKS until server starts (2+ seconds). DO NOT call during boot/sync!
+ * Use pc_ensure_captive_portal_running_async() for non-blocking startup during boot.
+ * 
  * @return bool True if server is running or was started successfully
  * @since 1.1.11
+ * @updated 1.4.3 Added warning about blocking behavior
  */
 function pc_ensure_captive_portal_running() {
 	$rc_script = '/usr/local/etc/rc.d/parental_control_captive';
@@ -2742,6 +2751,75 @@ function pc_ensure_captive_portal_running() {
 		));
 		return false;
 	}
+}
+
+/**
+ * Ensure captive portal server is running (NON-BLOCKING - safe for boot/sync)
+ * 
+ * Starts the captive portal server in the background without blocking.
+ * Safe to call during boot/sync operations. Server startup happens asynchronously
+ * and will complete in the background.
+ * 
+ * WHY: Blocking startup during boot sync causes firewall to hang at boot with
+ *      "Loading KACI Parental Control" message and never returns to prompt.
+ * ROOT CAUSE: exec() call in pc_ensure_captive_portal_running() blocks for 2+ seconds
+ *             while RC script does sleep + verification. During boot, this blocks
+ *             the entire pfSense configuration resync process.
+ * SOLUTION: Use background execution (nohup + &) to start server without waiting.
+ *           Cron job will verify/restart if needed. Boot completes normally.
+ * 
+ * @return void Does not return status (fire and forget)
+ * @since 1.4.3
+ */
+function pc_ensure_captive_portal_running_async() {
+	$rc_script = '/usr/local/etc/rc.d/parental_control_captive';
+	$pidfile = '/var/run/parental_control_captive.pid';
+	
+	// Check if RC script exists
+	if (!file_exists($rc_script)) {
+		pc_log("Captive portal RC script not found, cannot start server", 'warning', array(
+			'event.action' => 'captive_portal_missing',
+			'file.path' => $rc_script,
+			'startup_mode' => 'async'
+		));
+		return;
+	}
+	
+	// Quick check if already running (don't wait for verification)
+	if (file_exists($pidfile)) {
+		$pid = trim(@file_get_contents($pidfile));
+		if (!empty($pid) && @posix_kill($pid, 0)) {
+			// Server is already running, no need to start
+			pc_log("Captive portal server already running, skipping async start", 'debug', array(
+				'event.action' => 'captive_portal_status',
+				'service.state' => 'running',
+				'process.pid' => $pid,
+				'startup_mode' => 'async'
+			));
+			return;
+		}
+	}
+	
+	// Start the server in background (fire and forget)
+	// Use nohup and redirect to /dev/null for true background execution
+	// The & operator makes it truly non-blocking
+	pc_log("Starting captive portal server (async/non-blocking)", 'info', array(
+		'event.action' => 'captive_portal_start_async',
+		'service.port' => 1008,
+		'startup_mode' => 'background',
+		'note' => 'Non-blocking startup for boot safety'
+	));
+	
+	// Background execution: nohup + & + redirect stderr/stdout
+	// This returns immediately without waiting for server to start
+	exec("nohup {$rc_script} onestart > /dev/null 2>&1 &");
+	
+	// Don't wait for completion - let it start in background
+	// Cron job will verify status and restart if needed
+	pc_log("Captive portal start command issued (background)", 'debug', array(
+		'event.action' => 'captive_portal_start_issued',
+		'note' => 'Server starting in background, not blocking boot'
+	));
 }
 
 /**

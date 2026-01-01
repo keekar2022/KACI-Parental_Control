@@ -15,7 +15,7 @@
 #
 
 # Configuration
-PFSENSE_USER="mkesharw"
+PFSENSE_USER="admin"
 PACKAGE_DIR="$(dirname $0)"
 
 # Colors for output

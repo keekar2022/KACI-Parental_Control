@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "0.3.5",
-    "build_date": "2026-01-01T06:00:00Z",
+    "version": "0.3.8",
+    "build_date": "2026-01-02T12:00:00Z",
     "git_commit": "pending",
     "git_branch": "main",
     "built_by": "development",
@@ -88,6 +88,26 @@
     }
   },
   "changelog": [
+    {
+      "version": "0.3.8",
+      "date": "2026-01-02",
+      "type": "critical_bugfix",
+      "changes": [
+        "CRITICAL FIX: Resolved firewall boot hang issue ('Loading KACI Parental Control' freeze)",
+        "ROOT CAUSE: parental_control_sync() called pc_ensure_captive_portal_running() during boot",
+        "ROOT CAUSE: Blocking exec() call waited for RC script (2+ seconds with sleep + verification)",
+        "ROOT CAUSE: Boot process hung waiting for captive portal server startup to complete",
+        "SOLUTION: Created pc_ensure_captive_portal_running_async() for non-blocking startup",
+        "SOLUTION: Changed boot sync to use async version (nohup + background execution)",
+        "SOLUTION: Captive portal now starts in background without blocking boot process",
+        "RESULT: Firewall boots normally and quickly returns to 'Enter an Option:' prompt",
+        "RESULT: No more boot hangs or freezes during startup",
+        "RESULT: Cron job verifies/restarts captive portal if needed after boot completes",
+        "Updated parental_control.inc: Added async captive portal startup function",
+        "Updated parental_control.inc: Boot sync now uses non-blocking call",
+        "Updated VERSION to 1.4.3 for this critical fix"
+      ]
+    },
     {
       "version": "0.3.7",
       "date": "2026-01-01",
