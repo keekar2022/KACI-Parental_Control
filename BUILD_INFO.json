@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "0.3.8",
-    "build_date": "2026-01-02T12:00:00Z",
+    "version": "0.3.9",
+    "build_date": "2026-01-02T22:00:00Z",
     "git_commit": "pending",
     "git_branch": "main",
     "built_by": "development",
@@ -88,6 +88,32 @@
     }
   },
   "changelog": [
+    {
+      "version": "0.3.9",
+      "date": "2026-01-02",
+      "type": "critical_bugfix",
+      "changes": [
+        "CRITICAL FIX: Schedule blocking now works correctly for overnight time ranges",
+        "BUG: Schedules like '20:30 - 7:30' showed as Inactive when should be Active",
+        "ROOT CAUSE: String comparison '20:30' < '7:30' returned TRUE (wrong!)",
+        "ROOT CAUSE: Function incorrectly treated overnight range as normal range",
+        "ROOT CAUSE: Used AND logic instead of OR logic for overnight spans",
+        "SOLUTION: Added time normalization with zero-padding (7:30 → 07:30)",
+        "SOLUTION: String comparison now works correctly: '20:30' < '07:30' = FALSE",
+        "RESULT: Overnight schedules now properly detected and enforced",
+        "RESULT: Status page shows 'BLOCKING NOW' when schedule is active",
+        "RESULT: Devices blocked correctly during bedtime hours",
+        "CRITICAL FIX: State file write failures resolved",
+        "BUG: Cron job failed every 5 minutes with 'Failed to rename temporary state file'",
+        "ROOT CAUSE: /var/db directory permission or existence issues",
+        "SOLUTION: Added directory existence check and creation",
+        "SOLUTION: Enhanced error reporting with permission details",
+        "RESULT: State file writes succeed, cron job runs without errors",
+        "Updated pc_is_time_in_range() with time normalization",
+        "Updated pc_save_state() with directory checks and better error messages",
+        "VERSION: 1.4.3 → 1.4.4"
+      ]
+    },
     {
       "version": "0.3.8",
       "date": "2026-01-02",

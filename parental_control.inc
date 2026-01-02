@@ -1172,22 +1172,54 @@ function pc_save_state($state) {
 			throw new Exception("Failed to encode state to JSON: " . json_last_error_msg());
 		}
 		
-		// WHY: Write to file atomically (write to temp file, then rename)
-		// Design Decision: Use atomic write pattern to prevent corruption
-		// Rationale: If process crashes mid-write, we don't want partial/corrupt state file.
-		// Rename is atomic on Unix systems - either fully succeeds or fully fails.
-		// This ensures we never have a partially-written state file that could break the system.
-		$temp_file = PC_STATE_FILE . '.tmp';
-		$bytes_written = file_put_contents($temp_file, $json);
-		if ($bytes_written === false) {
-			throw new Exception("Failed to write state to temporary file");
+	// WHY: Ensure state directory exists and is writable
+	// CRITICAL FIX: Create /var/db if it doesn't exist (rare but possible)
+	// FreeBSD systems should have /var/db, but check anyway for safety
+	$state_dir = dirname(PC_STATE_FILE);
+	if (!is_dir($state_dir)) {
+		if (!mkdir($state_dir, 0755, true)) {
+			throw new Exception("Failed to create state directory: {$state_dir}");
 		}
-		
-		// WHY: Atomic rename ensures crash-resistance
-		// Even if power fails during rename, filesystem will either have old or new file, never partial
-		if (!rename($temp_file, PC_STATE_FILE)) {
-			throw new Exception("Failed to rename temporary state file");
+	}
+	
+	// WHY: Write to file atomically (write to temp file, then rename)
+	// Design Decision: Use atomic write pattern to prevent corruption
+	// Rationale: If process crashes mid-write, we don't want partial/corrupt state file.
+	// Rename is atomic on Unix systems - either fully succeeds or fully fails.
+	// This ensures we never have a partially-written state file that could break the system.
+	$temp_file = PC_STATE_FILE . '.tmp';
+	$bytes_written = file_put_contents($temp_file, $json);
+	if ($bytes_written === false) {
+		// Enhanced error reporting - include permission details
+		$error_details = error_get_last();
+		$error_msg = "Failed to write state to temporary file: {$temp_file}";
+		if ($error_details) {
+			$error_msg .= " - " . $error_details['message'];
 		}
+		// Check directory permissions
+		if (is_dir($state_dir)) {
+			$perms = substr(sprintf('%o', fileperms($state_dir)), -4);
+			$error_msg .= " (dir perms: {$perms})";
+		}
+		throw new Exception($error_msg);
+	}
+	
+	// WHY: Atomic rename ensures crash-resistance
+	// Even if power fails during rename, filesystem will either have old or new file, never partial
+	// CRITICAL FIX: Enhanced error reporting for rename failures
+	if (!rename($temp_file, PC_STATE_FILE)) {
+		$error_details = error_get_last();
+		$error_msg = "Failed to rename temporary state file: {$temp_file} -> " . PC_STATE_FILE;
+		if ($error_details) {
+			$error_msg .= " - " . $error_details['message'];
+		}
+		// Check if target file is locked or has permission issues
+		if (file_exists(PC_STATE_FILE)) {
+			$perms = substr(sprintf('%o', fileperms(PC_STATE_FILE)), -4);
+			$error_msg .= " (existing file perms: {$perms})";
+		}
+		throw new Exception($error_msg);
+	}
 		
 		// PERFORMANCE: Invalidate state cache after save
 		// WHY: Ensure next pc_load_state() gets fresh data from disk
@@ -1494,6 +1526,16 @@ function pc_is_time_in_range($current, $start, $end) {
 	// instead of AND. If we used AND for overnight ranges, no time would ever match
 	// because no time can be simultaneously >= 21:00 AND <= 07:00.
 	// The OR logic matches either "late night" (>= 21:00) OR "early morning" (<= 07:00).
+	
+	// CRITICAL FIX: Normalize times to HH:MM format for proper comparison
+	// BUG: String comparison "20:30" < "7:30" returns TRUE (wrong!)
+	// FIX: Pad single-digit hours with leading zero: "7:30" → "07:30"
+	// WHY: String comparison works correctly only with zero-padded hours
+	// Example: "20:30" < "07:30" → FALSE (correct!), "20:30" < "7:30" → TRUE (wrong!)
+	$current = str_pad($current, 5, '0', STR_PAD_LEFT);
+	$start = str_pad($start, 5, '0', STR_PAD_LEFT);
+	$end = str_pad($end, 5, '0', STR_PAD_LEFT);
+	
 	if ($start < $end) {
 		// Normal range (e.g., 09:00-17:00)
 		// WHY: AND logic works here because time progresses naturally through the range
