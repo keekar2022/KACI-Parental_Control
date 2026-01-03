@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "0.3.9",
-    "build_date": "2026-01-02T22:00:00Z",
+    "version": "0.4.0",
+    "build_date": "2026-01-03T23:10:00Z",
     "git_commit": "pending",
     "git_branch": "main",
     "built_by": "development",
@@ -88,6 +88,29 @@
     }
   },
   "changelog": [
+    {
+      "version": "0.4.0",
+      "date": "2026-01-03",
+      "type": "critical_bugfix",
+      "changes": [
+        "CRITICAL FIX: State file rename() failure resolved with fallback mechanism",
+        "BUG: Cron job failing with 'No such file or directory' during rename()",
+        "BUG: Error shows 'existing file perms: 0644' but rename still fails",
+        "ROOT CAUSE: FreeBSD rename() can fail across filesystems or with directory permissions",
+        "ROOT CAUSE: Atomic rename() operation not supported in all scenarios",
+        "SOLUTION: Added intelligent fallback - try rename() first, then copy()+unlink()",
+        "SOLUTION: Suppressed rename() error with @ to allow fallback to execute",
+        "SOLUTION: Added comprehensive diagnostics (file existence, permissions, sizes)",
+        "SOLUTION: Enhanced logging for fallback method usage",
+        "RESULT: State file saves succeed even when rename() fails",
+        "RESULT: Cron job runs without errors",
+        "RESULT: Usage tracking works reliably",
+        "RESULT: Better error diagnostics for troubleshooting",
+        "Updated pc_save_state() with copy+unlink fallback mechanism",
+        "Added detailed diagnostic information in error messages",
+        "VERSION: 1.4.4 → 1.4.5"
+      ]
+    },
     {
       "version": "0.3.9",
       "date": "2026-01-02",

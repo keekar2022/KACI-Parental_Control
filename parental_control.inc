@@ -1207,18 +1207,59 @@ function pc_save_state($state) {
 	// WHY: Atomic rename ensures crash-resistance
 	// Even if power fails during rename, filesystem will either have old or new file, never partial
 	// CRITICAL FIX: Enhanced error reporting for rename failures
-	if (!rename($temp_file, PC_STATE_FILE)) {
-		$error_details = error_get_last();
-		$error_msg = "Failed to rename temporary state file: {$temp_file} -> " . PC_STATE_FILE;
-		if ($error_details) {
-			$error_msg .= " - " . $error_details['message'];
+	// CRITICAL FIX v1.4.5: Add fallback to copy+unlink if rename fails
+	// BUG: rename() can fail on FreeBSD with "No such file or directory" even when file exists
+	// ROOT CAUSE: Cross-filesystem rename, directory permissions, or file locking issues
+	// SOLUTION: Try rename() first (atomic), fallback to copy()+unlink() if it fails
+	if (!@rename($temp_file, PC_STATE_FILE)) {
+		// Rename failed - try fallback method
+		pc_log("Rename failed, attempting copy+unlink fallback", 'debug', array(
+			'event.action' => 'state_save_fallback',
+			'temp_file' => $temp_file,
+			'target_file' => PC_STATE_FILE
+		));
+		
+		// Fallback: copy then unlink (not atomic but works across filesystems)
+		if (@copy($temp_file, PC_STATE_FILE)) {
+			// Copy succeeded, remove temp file
+			@unlink($temp_file);
+			pc_log("State file saved using copy+unlink fallback", 'info', array(
+				'event.action' => 'state_save_fallback_success',
+				'method' => 'copy+unlink'
+			));
+		} else {
+			// Both methods failed - report detailed error
+			$error_details = error_get_last();
+			$error_msg = "Failed to save state file (both rename and copy failed): {$temp_file} -> " . PC_STATE_FILE;
+			if ($error_details) {
+				$error_msg .= " - " . $error_details['message'];
+			}
+			
+			// Diagnostic information
+			$diagnostics = array();
+			$diagnostics['temp_file_exists'] = file_exists($temp_file);
+			$diagnostics['target_file_exists'] = file_exists(PC_STATE_FILE);
+			$diagnostics['dir_exists'] = is_dir($state_dir);
+			$diagnostics['dir_writable'] = is_writable($state_dir);
+			
+			if (file_exists($temp_file)) {
+				$diagnostics['temp_file_perms'] = substr(sprintf('%o', fileperms($temp_file)), -4);
+				$diagnostics['temp_file_size'] = filesize($temp_file);
+			}
+			if (file_exists(PC_STATE_FILE)) {
+				$diagnostics['target_file_perms'] = substr(sprintf('%o', fileperms(PC_STATE_FILE)), -4);
+			}
+			if (is_dir($state_dir)) {
+				$diagnostics['dir_perms'] = substr(sprintf('%o', fileperms($state_dir)), -4);
+			}
+			
+			$error_msg .= " | Diagnostics: " . json_encode($diagnostics);
+			
+			// Clean up temp file
+			@unlink($temp_file);
+			
+			throw new Exception($error_msg);
 		}
-		// Check if target file is locked or has permission issues
-		if (file_exists(PC_STATE_FILE)) {
-			$perms = substr(sprintf('%o', fileperms(PC_STATE_FILE)), -4);
-			$error_msg .= " (existing file perms: {$perms})";
-		}
-		throw new Exception($error_msg);
 	}
 		
 		// PERFORMANCE: Invalidate state cache after save
