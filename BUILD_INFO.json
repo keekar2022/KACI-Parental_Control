@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "1.4.8",
-    "build_date": "2026-01-05T09:00:00Z",
+    "version": "1.4.9",
+    "build_date": "2026-01-05T10:00:00Z",
     "git_commit": "pending",
     "git_branch": "main",
     "built_by": "development",
@@ -88,6 +88,26 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.4.9",
+      "date": "2026-01-05",
+      "type": "hotfix",
+      "changes": [
+        "HOTFIX: Fixed auto-update script directory mismatch",
+        "BUG: Auto-update failing with 'directory does not exist' error",
+        "BUG: cp: directory /usr/local/share/pfSense-pkg-parental_control does not exist",
+        "ROOT CAUSE: Directory name mismatch between INSTALL.sh and auto-update script",
+        "ROOT CAUSE: INSTALL.sh creates 'pfSense-pkg-KACI-Parental_Control' directory",
+        "ROOT CAUSE: auto_update script tried to copy to 'pfSense-pkg-parental_control' (wrong name)",
+        "SOLUTION: Fixed auto-update script to use correct directory name",
+        "SOLUTION: Added mkdir -p to ensure directory exists before copying",
+        "SOLUTION: Directory name now matches INSTALL.sh: pfSense-pkg-KACI-Parental_Control",
+        "RESULT: Auto-update now works correctly",
+        "RESULT: No more 'directory does not exist' errors",
+        "UPDATED: auto_update_parental_control.sh - corrected directory name",
+        "VERSION: 1.4.8 → 1.4.9"
+      ]
+    },
     {
       "version": "1.4.8",
       "date": "2026-01-05",

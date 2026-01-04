@@ -133,9 +133,12 @@ cp /usr/local/pkg/parental_control_VERSION "$BACKUP_DIR/" 2>/dev/null
 log "Auto-Update: Backup created at $BACKUP_DIR"
 
 # Deploy files
+# Create directories if they don't exist (match INSTALL.sh directory structure)
+mkdir -p /usr/local/share/pfSense-pkg-KACI-Parental_Control
+
 cp parental_control.inc /usr/local/pkg/
 cp parental_control.xml /usr/local/pkg/
-cp info.xml /usr/local/share/pfSense-pkg-parental_control/
+cp info.xml /usr/local/share/pfSense-pkg-KACI-Parental_Control/
 cp VERSION /usr/local/pkg/parental_control_VERSION
 
 cp parental_control_profiles.php /usr/local/www/
