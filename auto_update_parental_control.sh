@@ -12,9 +12,10 @@ LOG_FILE="/var/log/parental_control_auto_update.log"
 STATE_FILE="/var/db/parental_control_auto_update_state"
 TMP_DIR="/tmp/parental_control_update_$$"
 
-# Logging function
+# Logging function - logs to both file and syslog
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+    logger -t "parental_control_auto_update" "$1"
 }
 
 # Check if package is installed
@@ -77,7 +78,7 @@ log "Auto-Update: Remote version is $REMOTE_VERSION"
 
 # Compare versions
 if [ "$LOCAL_VERSION" = "$REMOTE_VERSION" ]; then
-    log "Auto-Update: Versions match, no update needed"
+    log "Auto-Update: Already up-to-date at version $LOCAL_VERSION (commit: $COMMIT_SHORT) - No update needed"
     # Update state to prevent rechecking same commit
     echo "$LATEST_COMMIT" > "$STATE_FILE"
     rm -rf "$TMP_DIR"

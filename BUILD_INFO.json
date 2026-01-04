@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "0.4.0",
-    "build_date": "2026-01-03T23:10:00Z",
+    "version": "0.4.1",
+    "build_date": "2026-01-05T03:00:00Z",
     "git_commit": "pending",
     "git_branch": "main",
     "built_by": "development",
@@ -88,6 +88,32 @@
     }
   },
   "changelog": [
+    {
+      "version": "0.4.1",
+      "date": "2026-01-05",
+      "type": "critical_bugfix",
+      "changes": [
+        "CRITICAL FIX: Temp file creation verification added",
+        "BUG: file_put_contents() returns success but file doesn't exist on disk",
+        "BUG: Diagnostics showed temp_file_exists:false despite successful write",
+        "ROOT CAUSE: Disk full, quota exceeded, or write cache not flushed",
+        "ROOT CAUSE: file_put_contents() doesn't verify file actually created",
+        "SOLUTION: Added disk space check before write (2x file size required)",
+        "SOLUTION: Added clearstatcache() to get fresh file info",
+        "SOLUTION: Verify temp file exists after write with file_exists()",
+        "SOLUTION: Verify file size matches bytes written",
+        "SOLUTION: Clean up partial files if size mismatch detected",
+        "RESULT: Temp file creation failures now caught immediately",
+        "RESULT: Clear error messages about disk space or filesystem issues",
+        "RESULT: No more 'temp_file_exists:false' errors",
+        "ENHANCEMENT: Auto-update script now logs to syslog",
+        "ENHANCEMENT: Better 'no update needed' message in syslog",
+        "ENHANCEMENT: Auto-update shows version numbers in log messages",
+        "Updated pc_save_state() with disk space and file verification",
+        "Updated auto_update_parental_control.sh with syslog logging",
+        "VERSION: 1.4.5 → 1.4.6"
+      ]
+    },
     {
       "version": "0.4.0",
       "date": "2026-01-03",

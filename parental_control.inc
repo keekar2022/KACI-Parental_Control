@@ -1188,6 +1188,16 @@ function pc_save_state($state) {
 	// Rename is atomic on Unix systems - either fully succeeds or fully fails.
 	// This ensures we never have a partially-written state file that could break the system.
 	$temp_file = PC_STATE_FILE . '.tmp';
+	
+	// CRITICAL FIX v1.4.6: Check disk space before writing
+	// BUG: file_put_contents() can return byte count but file doesn't exist
+	// ROOT CAUSE: Disk full, quota exceeded, or filesystem issues
+	$disk_free = @disk_free_space($state_dir);
+	$json_size = strlen($json);
+	if ($disk_free !== false && $disk_free < ($json_size * 2)) {
+		throw new Exception("Insufficient disk space: need " . ($json_size * 2) . " bytes, have {$disk_free} bytes");
+	}
+	
 	$bytes_written = file_put_contents($temp_file, $json);
 	if ($bytes_written === false) {
 		// Enhanced error reporting - include permission details
@@ -1201,6 +1211,27 @@ function pc_save_state($state) {
 			$perms = substr(sprintf('%o', fileperms($state_dir)), -4);
 			$error_msg .= " (dir perms: {$perms})";
 		}
+		throw new Exception($error_msg);
+	}
+	
+	// CRITICAL FIX v1.4.6: Verify temp file actually exists after write
+	// BUG: file_put_contents() can succeed but file doesn't exist on disk
+	// ROOT CAUSE: Disk full, write cache not flushed, filesystem corruption
+	// SOLUTION: Explicitly check file exists and has correct size
+	clearstatcache(true, $temp_file); // Clear stat cache to get fresh info
+	if (!file_exists($temp_file)) {
+		$error_msg = "Temp file not created despite successful write (disk full or filesystem issue?)";
+		$error_msg .= " | Wrote {$bytes_written} bytes but file doesn't exist";
+		$error_msg .= " | Disk free: " . ($disk_free !== false ? $disk_free . " bytes" : "unknown");
+		throw new Exception($error_msg);
+	}
+	
+	// Verify file size matches what we wrote
+	$actual_size = filesize($temp_file);
+	if ($actual_size != $bytes_written) {
+		$error_msg = "Temp file size mismatch: wrote {$bytes_written} bytes, file is {$actual_size} bytes";
+		$error_msg .= " (possible disk full or filesystem corruption)";
+		@unlink($temp_file); // Clean up partial file
 		throw new Exception($error_msg);
 	}
 	
