@@ -3860,6 +3860,78 @@ function pc_get_ip_from_mac($mac) {
  * 
  * @see pc_update_device_usage() Which uses this function
  */
+/**
+ * Check if an IP address is private/local (RFC 1918, RFC 4193, etc.)
+ * 
+ * Returns true if the IP is in any of these ranges:
+ * - 10.0.0.0/8 (RFC 1918 - Private)
+ * - 172.16.0.0/12 (RFC 1918 - Private)
+ * - 192.168.0.0/16 (RFC 1918 - Private)
+ * - 127.0.0.0/8 (Loopback)
+ * - 169.254.0.0/16 (Link-local)
+ * - 224.0.0.0/4 (Multicast)
+ * - 255.255.255.255 (Broadcast)
+ * - fc00::/7 (IPv6 Unique Local)
+ * - fe80::/10 (IPv6 Link-local)
+ * 
+ * @param string $ip IP address to check
+ * @return bool True if private/local, false if public
+ * @since 1.4.7
+ */
+function pc_is_private_ip($ip) {
+	if (empty($ip)) {
+		return true;
+	}
+	
+	// IPv6 check
+	if (strpos($ip, ':') !== false) {
+		// IPv6 Unique Local (fc00::/7)
+		if (preg_match('/^f[cd][0-9a-f]{2}:/i', $ip)) {
+			return true;
+		}
+		// IPv6 Link-local (fe80::/10)
+		if (preg_match('/^fe[89ab][0-9a-f]:/i', $ip)) {
+			return true;
+		}
+		// IPv6 Loopback (::1)
+		if ($ip === '::1') {
+			return true;
+		}
+		return false; // Other IPv6 addresses are considered public
+	}
+	
+	// IPv4 checks
+	$long_ip = ip2long($ip);
+	if ($long_ip === false) {
+		return true; // Invalid IP, treat as private
+	}
+	
+	// Check private ranges
+	$private_ranges = array(
+		array('10.0.0.0', '10.255.255.255'),       // 10.0.0.0/8
+		array('172.16.0.0', '172.31.255.255'),     // 172.16.0.0/12
+		array('192.168.0.0', '192.168.255.255'),   // 192.168.0.0/16
+		array('127.0.0.0', '127.255.255.255'),     // 127.0.0.0/8 (Loopback)
+		array('169.254.0.0', '169.254.255.255'),   // 169.254.0.0/16 (Link-local)
+		array('224.0.0.0', '239.255.255.255'),     // 224.0.0.0/4 (Multicast)
+	);
+	
+	foreach ($private_ranges as $range) {
+		$start = ip2long($range[0]);
+		$end = ip2long($range[1]);
+		if ($long_ip >= $start && $long_ip <= $end) {
+			return true;
+		}
+	}
+	
+	// Check broadcast
+	if ($ip === '255.255.255.255') {
+		return true;
+	}
+	
+	return false; // Public IP
+}
+
 function pc_has_active_connections($ip) {
 	if (empty($ip)) {
 		return 0;
@@ -3869,7 +3941,7 @@ function pc_has_active_connections($ip) {
 	// Timeout after 2 seconds to prevent hanging
 	// Only count ESTABLISHED connections (not SYN, FIN, etc.)
 	$escaped_ip = escapeshellarg($ip);
-	exec("/usr/bin/timeout 2 /sbin/pfctl -s state 2>/dev/null | /usr/bin/grep ESTABLISHED | /usr/bin/grep -c $escaped_ip", $output, $return_code);
+	exec("/usr/bin/timeout 2 /sbin/pfctl -s state 2>/dev/null | /usr/bin/grep ESTABLISHED | /usr/bin/grep $escaped_ip", $output, $return_code);
 	
 	if ($return_code !== 0 && $return_code !== 1) {
 		// Command failed (timeout = 124, or other error)
@@ -3881,8 +3953,34 @@ function pc_has_active_connections($ip) {
 		return 0;
 	}
 	
-	$connection_count = isset($output[0]) ? intval($output[0]) : 0;
-	return $connection_count;
+	// CRITICAL FIX v1.4.7: Only count connections to PUBLIC IPs (external internet)
+	// WHY: Local LAN traffic (192.168.x.x -> 192.168.x.x) shouldn't count as "internet usage"
+	// Examples of what NOT to count:
+	// - Device talking to local NAS/printer (192.168.1.100 -> 192.168.1.50)
+	// - DHCP broadcasts (-> 255.255.255.255)
+	// - mDNS/SSDP discovery (-> 224.0.0.251)
+	// - Link-local traffic (-> 169.254.x.x)
+	//
+	// State table format: "all tcp 192.168.1.100:54321 -> 8.8.8.8:443 ESTABLISHED:ESTABLISHED"
+	$internet_connections = 0;
+	
+	if (is_array($output)) {
+		foreach ($output as $line) {
+			// Parse state line to extract source and destination IPs
+			// Format: "all tcp 192.168.1.100:54321 -> 8.8.8.8:443 ESTABLISHED:ESTABLISHED"
+			if (preg_match('/(\d+\.\d+\.\d+\.\d+):\d+\s+->\s+(\d+\.\d+\.\d+\.\d+):\d+/', $line, $matches)) {
+				$src_ip = $matches[1];
+				$dst_ip = $matches[2];
+				
+				// Only count if source is our device AND destination is a PUBLIC IP
+				if ($src_ip === $ip && !pc_is_private_ip($dst_ip)) {
+					$internet_connections++;
+				}
+			}
+		}
+	}
+	
+	return $internet_connections;
 }
 
 /**
@@ -4033,25 +4131,28 @@ function pc_update_device_usage(&$state) {
 			}
 		}
 		
-		// CRITICAL: Check for REAL active connections BY IP (Layer 3)
-		$connection_count = pc_has_active_connections($ip);
+		// CRITICAL: Check for REAL active INTERNET connections BY IP (Layer 3)
+		// v1.4.7: Now only counts connections to PUBLIC IPs (external internet)
+		// Local LAN traffic (e.g., to NAS, printer) is NOT counted
+		$internet_connection_count = pc_has_active_connections($ip);
 		
 		// Store connection count for diagnostics
-		$state['devices_by_ip'][$ip]['connections_last_check'] = $connection_count;
+		$state['devices_by_ip'][$ip]['connections_last_check'] = $internet_connection_count;
+		$state['devices_by_ip'][$ip]['internet_connections'] = $internet_connection_count;
 		
-		if ($connection_count > 0) {
+		if ($internet_connection_count > 0) {
 			// CRITICAL: Don't track usage during blocked schedule time!
 			// WHY: If device is in a blocked schedule (e.g., bedtime), usage should not accumulate
 			// even if the device manages to have connections (firewall might be delayed in blocking)
 			$in_blocked_schedule = pc_is_in_blocked_schedule($device);
 			
 			if ($in_blocked_schedule) {
-				pc_log("Device $device_name ($mac @ $ip) active but in blocked schedule - NOT tracking usage", 'info', array(
+				pc_log("Device $device_name ($mac @ $ip) has internet traffic but in blocked schedule - NOT tracking usage", 'info', array(
 					'event.action' => 'usage_skipped_schedule',
 					'device.mac' => $mac,
 					'device.name' => $device_name,
 					'client.address' => $ip,
-					'connections' => $connection_count,
+					'internet_connections' => $internet_connection_count,
 					'reason' => 'in_blocked_schedule'
 				));
 				continue; // Skip to next device
@@ -4091,7 +4192,7 @@ function pc_update_device_usage(&$state) {
 				$profile_usage_today = 0;
 			}
 			
-			pc_log("Device $device_name ($mac @ $ip) active: added $interval_minutes minutes", 'info', array(
+			pc_log("Device $device_name ($mac @ $ip) using internet: added $interval_minutes minutes", 'info', array(
 				'event.action' => 'usage_tracked',
 				'device.mac' => $mac,
 				'device.name' => $device_name,
@@ -4100,7 +4201,7 @@ function pc_update_device_usage(&$state) {
 				'usage.minutes' => $interval_minutes,
 				'usage.device_today' => $state['devices_by_ip'][$ip]['usage_today'],
 				'usage.profile_today' => $profile_usage_today,
-				'connections' => $connection_count,
+				'internet_connections' => $internet_connection_count,
 				'event.outcome' => 'success'
 			));
 			
@@ -4119,12 +4220,12 @@ function pc_update_device_usage(&$state) {
 				}
 			}
 		} else {
-			pc_log("Device $device_name ($mac @ $ip) idle: no active connections", 'debug', array(
+			pc_log("Device $device_name ($mac @ $ip) idle: no internet connections (may have local LAN traffic only)", 'debug', array(
 				'event.action' => 'device_idle',
 				'device.mac' => $mac,
 				'device.name' => $device_name,
 				'client.address' => $ip,
-				'connections' => 0
+				'internet_connections' => 0
 			));
 		}
 	}

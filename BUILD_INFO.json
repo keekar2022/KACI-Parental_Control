@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "0.4.1",
-    "build_date": "2026-01-05T03:00:00Z",
+    "version": "1.4.7",
+    "build_date": "2026-01-05T08:00:00Z",
     "git_commit": "pending",
     "git_branch": "main",
     "built_by": "development",
@@ -89,7 +89,42 @@
   },
   "changelog": [
     {
-      "version": "0.4.1",
+      "version": "1.4.7",
+      "date": "2026-01-05",
+      "type": "critical_fix",
+      "changes": [
+        "CRITICAL FIX: Usage tracking now only counts EXTERNAL INTERNET traffic",
+        "BUG: Devices counted as 'online' even when only doing local LAN traffic",
+        "BUG: Basement TV showing 40 mins usage despite no internet communication",
+        "BUG: Device at 192.168.1.30 showing 35 mins usage with zero internet activity",
+        "ROOT CAUSE: pc_has_active_connections() counted ALL ESTABLISHED connections",
+        "ROOT CAUSE: Local traffic (192.168.x.x → 192.168.x.x) counted as 'internet usage'",
+        "ROOT CAUSE: Broadcast/multicast (255.255.255.255, 224.x.x.x) counted as usage",
+        "ROOT CAUSE: Link-local traffic (169.254.x.x) counted as usage",
+        "EXAMPLES OF INCORRECTLY COUNTED TRAFFIC:",
+        "  - Device talking to local NAS/printer (192.168.1.100 → 192.168.1.50)",
+        "  - DHCP broadcasts (→ 255.255.255.255)",
+        "  - mDNS/SSDP discovery (→ 224.0.0.251)",
+        "  - Local Plex streaming (→ 192.168.1.100)",
+        "SOLUTION: Added pc_is_private_ip() function to detect RFC 1918 private IPs",
+        "SOLUTION: Parse state table lines to extract source and destination IPs",
+        "SOLUTION: Only count connections where destination is a PUBLIC IP",
+        "SOLUTION: Support IPv4 private ranges (10.x, 172.16-31.x, 192.168.x)",
+        "SOLUTION: Support IPv6 private ranges (fc00::/7, fe80::/10)",
+        "SOLUTION: Filter out loopback (127.x), link-local (169.254.x), multicast (224-239.x)",
+        "RESULT: Usage tracking now accurately reflects REAL internet usage",
+        "RESULT: Local LAN traffic no longer increments usage counters",
+        "RESULT: Devices idle on internet but active on LAN show 0 usage",
+        "RESULT: More accurate time limit enforcement",
+        "NEW FUNCTION: pc_is_private_ip() - Detects private/local IP addresses",
+        "UPDATED: pc_has_active_connections() - Parses state table and filters by destination",
+        "UPDATED: Logging messages now say 'internet connections' instead of 'connections'",
+        "UPDATED: State file now stores 'internet_connections' count separately",
+        "VERSION: 1.4.6 → 1.4.7"
+      ]
+    },
+    {
+      "version": "1.4.6",
       "date": "2026-01-05",
       "type": "critical_bugfix",
       "changes": [
