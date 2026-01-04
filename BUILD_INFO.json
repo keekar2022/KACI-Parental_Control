@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "1.4.9",
-    "build_date": "2026-01-05T10:00:00Z",
+    "version": "1.4.10",
+    "build_date": "2026-01-05T11:00:00Z",
     "git_commit": "pending",
     "git_branch": "main",
     "built_by": "development",
@@ -88,6 +88,28 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.4.10",
+      "date": "2026-01-05",
+      "type": "hotfix",
+      "changes": [
+        "CRITICAL HOTFIX: Fixed usage tracking completely broken (returning 0 connections)",
+        "BUG: pc_has_active_connections() returning 0 despite active internet connections",
+        "BUG: Usage counter not incrementing even with heavy internet usage",
+        "ROOT CAUSE: Regex failed to parse NAT state table entries",
+        "ROOT CAUSE: pfSense state table shows each connection TWICE (with and without NAT)",
+        "ROOT CAUSE: NAT format: '203.191.182.168:12345 (192.168.1.96:54321) -> 8.8.8.8:443'",
+        "ROOT CAUSE: Old regex extracted WAN IP (203.191.182.168) instead of device IP (192.168.1.96)",
+        "ROOT CAUSE: IP comparison failed: WAN IP !== device IP → connection not counted",
+        "SOLUTION: Updated regex to extract IP from inside parentheses for NAT entries",
+        "SOLUTION: Added deduplication using unique connection keys (src:port->dst:port)",
+        "SOLUTION: Each connection now counted only once despite appearing twice in state table",
+        "RESULT: Usage tracking now works correctly",
+        "RESULT: HISENSE TV with 100+ active connections now properly tracked",
+        "UPDATED: parental_control.inc - Fixed pc_has_active_connections() parsing",
+        "VERSION: 1.4.9 → 1.4.10"
+      ]
+    },
     {
       "version": "1.4.9",
       "date": "2026-01-05",

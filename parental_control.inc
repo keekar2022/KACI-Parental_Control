@@ -3962,25 +3962,48 @@ function pc_has_active_connections($ip) {
 	// - Link-local traffic (-> 169.254.x.x)
 	//
 	// State table format: "all tcp 192.168.1.100:54321 -> 8.8.8.8:443 ESTABLISHED:ESTABLISHED"
-	$internet_connections = 0;
+	// NOTE: Each connection appears TWICE in pfSense state table (with and without NAT view)
+	$unique_connections = array();
 	
 	if (is_array($output)) {
 		foreach ($output as $line) {
-			// Parse state line to extract source and destination IPs
-			// Format: "all tcp 192.168.1.100:54321 -> 8.8.8.8:443 ESTABLISHED:ESTABLISHED"
-			if (preg_match('/(\d+\.\d+\.\d+\.\d+):\d+\s+->\s+(\d+\.\d+\.\d+\.\d+):\d+/', $line, $matches)) {
+			// Parse state line to extract source and destination IPs + ports
+			// Format examples:
+			// 1. "all tcp 192.168.1.100:54321 -> 8.8.8.8:443 ESTABLISHED:ESTABLISHED"
+			// 2. "all tcp 203.191.182.168:12345 (192.168.1.100:54321) -> 8.8.8.8:443 ESTABLISHED:ESTABLISHED" (NAT)
+			
+			$src_ip = null;
+			$src_port = null;
+			$dst_ip = null;
+			$dst_port = null;
+			
+			// First try to match NAT format (with parentheses)
+			if (preg_match('/\((\d+\.\d+\.\d+\.\d+):(\d+)\)\s+->\s+(\d+\.\d+\.\d+\.\d+):(\d+)/', $line, $matches)) {
+				// NAT format: extract IP from inside parentheses
 				$src_ip = $matches[1];
-				$dst_ip = $matches[2];
-				
-				// Only count if source is our device AND destination is a PUBLIC IP
-				if ($src_ip === $ip && !pc_is_private_ip($dst_ip)) {
-					$internet_connections++;
-				}
+				$src_port = $matches[2];
+				$dst_ip = $matches[3];
+				$dst_port = $matches[4];
+			}
+			// Otherwise try standard format (no NAT)
+			elseif (preg_match('/(\d+\.\d+\.\d+\.\d+):(\d+)\s+->\s+(\d+\.\d+\.\d+\.\d+):(\d+)/', $line, $matches)) {
+				// Standard format
+				$src_ip = $matches[1];
+				$src_port = $matches[2];
+				$dst_ip = $matches[3];
+				$dst_port = $matches[4];
+			}
+			
+			// Only count if source is our device AND destination is a PUBLIC IP
+			if ($src_ip === $ip && !pc_is_private_ip($dst_ip)) {
+				// Use unique key to avoid counting duplicate NAT entries
+				$connection_key = "{$src_ip}:{$src_port}->{$dst_ip}:{$dst_port}";
+				$unique_connections[$connection_key] = true;
 			}
 		}
 	}
 	
-	return $internet_connections;
+	return count($unique_connections);
 }
 
 /**
