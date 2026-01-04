@@ -4266,32 +4266,16 @@ function pc_is_device_online($mac) {
 	// Trim removes accidental whitespace from config/form submissions.
 	$mac = pc_normalize_mac($mac);
 	
-	// PRIORITY 1: Check state file first (most accurate - has real connection tracking)
-	// WHY: State file contains connection count from pfctl, which is the most reliable indicator
-	$state = pc_load_state();
-	if (isset($state['mac_to_ip_cache'][$mac])) {
-		$ip = $state['mac_to_ip_cache'][$mac];
-		if (isset($state['devices_by_ip'][$ip])) {
-			$connection_count = isset($state['devices_by_ip'][$ip]['connection_count']) ? 
-				$state['devices_by_ip'][$ip]['connection_count'] : 0;
-			
-			// If device has active connections, it's definitely online
-			if ($connection_count > 0) {
-				return true;
-			}
-			
-			// Check if last seen was recent (within last 2 minutes)
-			$last_seen = isset($state['devices_by_ip'][$ip]['last_seen']) ? 
-				$state['devices_by_ip'][$ip]['last_seen'] : 0;
-			if ($last_seen > 0 && (time() - $last_seen) < 120) {
-				return true;
-			}
-		}
-	}
-	
-	// PRIORITY 2: Check ARP table (fast, real-time network presence)
-	// WHY: system_get_arp_table() can fail on some systems or during heavy load
-	// Fallback ensures we still track devices even if ARP temporarily unavailable
+	// PRIORITY 1: Check ARP table (fast, real-time network presence)
+	// v1.4.7 FIX: Changed from state file to ARP table as primary check
+	// WHY: Online status should be based on network presence, not internet connections
+	// A device can be online (on network) but not using internet (only local traffic)
+	// 
+	// REMOVED: State file connection count check (was using 'internet_connections' which is 0 for local-only traffic)
+	// NOW: ARP table is source of truth for "Is device on the network?"
+	// 
+	// system_get_arp_table() can fail on some systems or during heavy load
+	// If ARP fails, we fallback to DHCP leases
 	try {
 		$arp_table = system_get_arp_table();
 		

@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "1.4.7",
-    "build_date": "2026-01-05T08:00:00Z",
+    "version": "1.4.8",
+    "build_date": "2026-01-05T09:00:00Z",
     "git_commit": "pending",
     "git_branch": "main",
     "built_by": "development",
@@ -88,6 +88,33 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.4.8",
+      "date": "2026-01-05",
+      "type": "hotfix",
+      "changes": [
+        "HOTFIX: Fixed 'Offline' status for all devices after v1.4.7 update",
+        "BUG: All devices showing as 'Offline' despite being on network",
+        "BUG: Status page showed all devices with gray 'Offline' badge",
+        "ROOT CAUSE: pc_is_device_online() was checking 'connection_count' from state file",
+        "ROOT CAUSE: v1.4.7 changed to 'internet_connections' (only public IPs)",
+        "ROOT CAUSE: Devices with only local traffic had 0 internet_connections",
+        "ROOT CAUSE: Function incorrectly returned false for devices on network but not using internet",
+        "CONFUSION: Online status vs Internet usage are TWO DIFFERENT THINGS",
+        "  - Online status = Device is on the network (ARP table)",
+        "  - Internet usage = Device is actively using external internet (state table + public IPs)",
+        "SOLUTION: Changed pc_is_device_online() to use ARP table as PRIMARY check",
+        "SOLUTION: Removed state file connection count check (was causing false negatives)",
+        "SOLUTION: ARP table is now source of truth for 'Is device on network?'",
+        "SOLUTION: internet_connections is ONLY used for usage tracking, not status",
+        "RESULT: Devices on network now correctly show as 'Online'",
+        "RESULT: Usage tracking still only counts external internet (v1.4.7 fix preserved)",
+        "RESULT: Status badge works correctly: Online (green) / Offline (gray)",
+        "ARCHITECTURE: Separated concerns - network presence vs internet usage",
+        "UPDATED: pc_is_device_online() - ARP table is now primary check",
+        "VERSION: 1.4.7 → 1.4.8"
+      ]
+    },
     {
       "version": "1.4.7",
       "date": "2026-01-05",
