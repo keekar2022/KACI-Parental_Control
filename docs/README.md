@@ -84,7 +84,7 @@ Includes:
 ## 📂 Additional Files
 
 - **[../README.md](../README.md)** - Project overview (stays in root for GitHub)
-- **[../LICENSE](../LICENSE)** - MIT License
+- **[../LICENSE](../LICENSE)** - GPL 3.0 or later
 
 ---
 
@@ -162,7 +162,7 @@ Found an issue? Want to improve the docs?
 
 ## 📄 License
 
-All documentation is licensed under the [MIT License](../LICENSE).
+All documentation is licensed under the [GNU General Public License v3.0 or later](../LICENSE).
 
 ---
 

@@ -723,7 +723,7 @@ For issues, feature requests, or contributions:
 ---
 
 **Last Updated:** 2026-01-01
-**Package Version:** 1.4.2
+**Package Version:** 1.4.10+ (Development)
 
 
 ---
@@ -2619,7 +2619,7 @@ parental control package for pfSense that actually works!
    • Auto-updates
 
 🚀 Installation: 5 minutes via SSH
-💰 Cost: FREE forever (MIT License)
+💰 Cost: FREE forever (GPL 3.0 or later)
 🔒 Privacy: 100% local, no cloud
 
 📖 Learn more & install:
@@ -4738,7 +4738,7 @@ All functionality is preserved, just moved:
 
 ## Version Information
 
-**Version**: 1.4.2  
+**Version**: 1.4.10+  
 **Date**: 2026-01-01  
 **Type**: Enhancement (Script Consolidation)  
 **Status**: Production Ready  
@@ -4992,7 +4992,7 @@ ssh root@pfsense 'find /usr/local -name "*parental*"'
 
 ## Version Information
 
-**Version**: 1.4.2  
+**Version**: 1.4.10+  
 **Build**: 0.3.5  
 **Release Date**: 2026-01-01  
 **Type**: Enhancement  
@@ -5185,7 +5185,7 @@ ssh root@pfsense 'test -x /usr/local/etc/rc.d/parental_control_captive && echo "
 ---
 
 **Consolidation Date**: 2026-01-01  
-**Version**: 1.4.2  
+**Version**: 1.4.10+  
 **Status**: ✅ Complete and Production Ready
 
 

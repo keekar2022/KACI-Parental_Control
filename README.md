@@ -3,10 +3,10 @@
 A comprehensive parental control package for pfSense that helps parents manage and limit their children's internet access time.
 
 **Package ID:** KACI-Parental_Control  
-**Version:** 1.4.2 (Production Ready)  
+**Version:** 1.4.10+ (Development)  
 **Author:** Mukesh Kesharwani (Keekar)  
-**Status:** Production Ready  
-**License:** MIT  
+**Status:** Development with Experimental Features  
+**License:** GPL 3.0 or later  
 **© 2025 Keekar**
 
 ---
@@ -493,10 +493,10 @@ The package uses OpenTelemetry-compliant JSONL format for logs:
 ## 📝 License & Credits
 
 **Package:** KACI Parental Control for pfSense  
-**Version:** 1.4.2 (Production Ready)  
+**Version:** 1.4.10+ (Development with Experimental Features)  
 **Status:** Production Ready  
 **Compatibility:** pfSense 2.6.0+  
-**License:** MIT
+**License:** GPL 3.0 or later
 
 ---
 

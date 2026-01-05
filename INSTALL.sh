@@ -259,6 +259,7 @@ upload_files() {
         "$PACKAGE_DIR/parental_control_status.php" \
         "$PACKAGE_DIR/parental_control_profiles.php" \
         "$PACKAGE_DIR/parental_control_schedules.php" \
+        "$PACKAGE_DIR/parental_control_services.php" \
         "$PACKAGE_DIR/parental_control_blocked.php" \
         "$PACKAGE_DIR/parental_control_captive.php" \
         "$PACKAGE_DIR/parental_control_captive.sh" \
@@ -304,6 +305,7 @@ upload_files() {
         sudo -n mv /tmp/parental_control_status.php /usr/local/www/ && \
         sudo -n mv /tmp/parental_control_profiles.php /usr/local/www/ && \
         sudo -n mv /tmp/parental_control_schedules.php /usr/local/www/ && \
+        sudo -n mv /tmp/parental_control_services.php /usr/local/www/ && \
         sudo -n mv /tmp/parental_control_blocked.php /usr/local/www/ && \
         sudo -n mv /tmp/parental_control_captive.php /usr/local/www/ && \
         sudo -n mv /tmp/parental_control_captive.sh /usr/local/etc/rc.d/parental_control_captive && \
@@ -341,6 +343,7 @@ upload_files() {
             sudo mv /tmp/parental_control_status.php /usr/local/www/ && \
             sudo mv /tmp/parental_control_profiles.php /usr/local/www/ && \
             sudo mv /tmp/parental_control_schedules.php /usr/local/www/ && \
+            sudo mv /tmp/parental_control_services.php /usr/local/www/ && \
             sudo mv /tmp/parental_control_blocked.php /usr/local/www/ && \
             sudo mv /tmp/parental_control_health.php /usr/local/www/ 2>/dev/null; true && \
             sudo mv /tmp/parental_control_api.php /usr/local/www/ 2>/dev/null; true && \
@@ -640,6 +643,7 @@ verify_installation() {
             "/usr/local/www/parental_control_status.php" \
             "/usr/local/www/parental_control_profiles.php" \
             "/usr/local/www/parental_control_schedules.php" \
+            "/usr/local/www/parental_control_services.php" \
             "/usr/local/www/parental_control_blocked.php" \
             "/usr/local/www/parental_control_captive.php" \
             "/usr/local/etc/rc.d/parental_control_captive" \
@@ -789,6 +793,7 @@ UNREGISTER_EOF
         sudo rm -f /usr/local/www/parental_control_status.php 2>/dev/null
         sudo rm -f /usr/local/www/parental_control_profiles.php 2>/dev/null
         sudo rm -f /usr/local/www/parental_control_schedules.php 2>/dev/null
+        sudo rm -f /usr/local/www/parental_control_services.php 2>/dev/null
         sudo rm -f /usr/local/www/parental_control_blocked.php 2>/dev/null
         sudo rm -f /usr/local/www/parental_control_captive.php 2>/dev/null
         sudo rm -f /usr/local/etc/rc.d/parental_control_captive 2>/dev/null

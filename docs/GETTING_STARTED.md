@@ -18,7 +18,7 @@
 
 ## Professional-Grade Internet Time Management for Families
 
-**Version 1.4.2** | January 2026 | Open Source | Free
+**Version 1.4.10+** | January 2026 | Open Source | Free
 
 ---
 
@@ -171,7 +171,7 @@ For advanced users and home automation:
 |---------|---------|------------------|------------------------|
 | **Bypass-proof** | ✅ Network-level | ❌ App-based | ⚠️ Varies |
 | **Shared time limits** | ✅ Across all devices | ❌ Per-device | ❌ Not available |
-| **Free & Open Source** | ✅ MIT License | ❌ Subscription | ⚠️ Varies |
+| **Free & Open Source** | ✅ GPL 3.0 or later | ❌ Subscription | ⚠️ Varies |
 | **Easy to use** | ✅ Web GUI | ✅ Mobile app | ❌ Command-line |
 | **Privacy-respecting** | ✅ Local only | ❌ Cloud-based | ✅ Local only |
 | **Professional support** | ✅ Active development | ⚠️ Vendor-dependent | ❌ Often abandoned |
@@ -350,7 +350,7 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for guidelines.
 
 ## 📜 License
 
-**MIT License** - Free to use, modify, and distribute.
+**GPL 3.0 or later** - Free to use, modify, and distribute under the terms of the GNU General Public License.
 
 See **[LICENSE](LICENSE)** for full terms.
 
@@ -366,7 +366,7 @@ See **[LICENSE](LICENSE)** for full terms.
 
 ## 📊 Project Stats
 
-- **Version:** 1.4.2
+- **Version:** 1.4.10+ (Development)
 - **Release Date:** December 2025
 - **Lines of Code:** 4,000+
 - **Documentation Pages:** 10+
@@ -414,7 +414,7 @@ See **[LICENSE](LICENSE)** for full terms.
 **A:** Yes, via the API. See **[docs/API.md](docs/API.md)** for details.
 
 ### Q: Is it stable for production use?
-**A:** Yes. Version 1.4.2 is production-ready. Extensively tested and actively maintained.
+**A:** Yes. Version 1.4.10+ includes stable base (v1.4.10) plus experimental features. Actively developed and tested.
 
 ---
 
@@ -468,7 +468,7 @@ sudo ./INSTALL.sh install your-firewall-ip
 The KACI Parental Control package has been completely removed and freshly reinstalled on your pfSense firewall.
 
 **Date:** December 28, 2025  
-**Version:** 1.4.2  
+**Version:** 1.4.10+  
 **Firewall:** fw.keekar.com
 
 ---
@@ -786,7 +786,7 @@ You now have a clean slate to test all the features and verify that everything w
 # Quick Start Guide - KACI Parental Control
 ## Get Running in 5 Minutes ⚡
 
-**Version:** 1.4.2  
+**Version:** 1.4.10+  
 **Author:** Mukesh Kesharwani  
 **Last Updated:** December 25, 2025
 

@@ -16,7 +16,7 @@ require_once("util.inc");
 require_once("filter.inc");
 require_once("shaper.inc");
 require_once("notices.inc");
-require_once("cron.inc");
+@include_once("cron.inc"); // Optional - may not exist in all pfSense versions
 
 // Package version - Automatically read from VERSION file
 if (!defined('PC_VERSION')) {
@@ -650,9 +650,12 @@ function parental_control_sync() {
 		// Initialize state file if needed
 		pc_init_state();
 		
-		// CRITICAL: Create pfSense alias (table) for dynamic blocking
+		// CRITICAL: Create pfSense aliases (tables) for dynamic blocking and monitoring
 		// WHY: Tables integrate properly with pfSense's rule system (unlike anchors)
+		// 1. parental_control_blocked - Devices that exceeded limits (for blocking)
+		// 2. parental_control_monitor - ALL profile devices (for usage tracking)
 		pc_create_blocking_alias();
+		pc_create_monitoring_alias();
 		
 		// CRITICAL: Create allow rules for DNS and pfSense access
 		// WHY: Blocked devices need DNS to resolve names and access to pfSense for block page
@@ -669,6 +672,11 @@ function parental_control_sync() {
 	// CRITICAL: Create floating rule that blocks traffic from the alias
 	// WHY: Floating rules are evaluated BEFORE interface rules (fixes rule ordering)
 	// ORDER: This comes LAST so allow rules are checked first
+	
+	// Create service monitoring rules (must come BEFORE blocking rule)
+	pc_create_service_monitoring_rules();
+	
+	// Create the blocking rule (comes after monitoring rules)
 	pc_create_blocking_rule();
 	
 	// CRITICAL: Start captive portal server in background (non-blocking)
@@ -1187,7 +1195,12 @@ function pc_save_state($state) {
 	// Rationale: If process crashes mid-write, we don't want partial/corrupt state file.
 	// Rename is atomic on Unix systems - either fully succeeds or fully fails.
 	// This ensures we never have a partially-written state file that could break the system.
-	$temp_file = PC_STATE_FILE . '.tmp';
+	
+	// CRITICAL FIX v1.4.10+: Use unique temp file name with PID to avoid conflicts
+	// BUG: Multiple processes using same temp file name cause race conditions
+	// ROOT CAUSE: Fixed temp file name (state.json.tmp) used by all processes
+	// SOLUTION: Include PID in temp file name for uniqueness
+	$temp_file = PC_STATE_FILE . '.tmp.' . getmypid();
 	
 	// CRITICAL FIX v1.4.6: Check disk space before writing
 	// BUG: file_put_contents() can return byte count but file doesn't exist
@@ -1198,7 +1211,9 @@ function pc_save_state($state) {
 		throw new Exception("Insufficient disk space: need " . ($json_size * 2) . " bytes, have {$disk_free} bytes");
 	}
 	
-	$bytes_written = file_put_contents($temp_file, $json);
+	// CRITICAL FIX v1.4.10+: Use file_put_contents with LOCK_EX for atomic write
+	// Ensures the write is atomic and prevents other processes from interfering
+	$bytes_written = file_put_contents($temp_file, $json, LOCK_EX);
 	if ($bytes_written === false) {
 		// Enhanced error reporting - include permission details
 		$error_details = error_get_last();
@@ -1214,22 +1229,40 @@ function pc_save_state($state) {
 		throw new Exception($error_msg);
 	}
 	
-	// CRITICAL FIX v1.4.6: Verify temp file actually exists after write
-	// BUG: file_put_contents() can succeed but file doesn't exist on disk
-	// ROOT CAUSE: Disk full, write cache not flushed, filesystem corruption
-	// SOLUTION: Explicitly check file exists and has correct size
+	// CRITICAL FIX v1.4.10+: Add retry mechanism for filesize check
+	// BUG: filesize() can return 0 immediately after write (buffer not flushed)
+	// ROOT CAUSE: OS write buffer hasn't been flushed to disk yet
+	// SOLUTION: Retry with small delays to allow buffer flush
 	clearstatcache(true, $temp_file); // Clear stat cache to get fresh info
+	
+	$retries = 3;
+	$actual_size = 0;
+	for ($i = 0; $i < $retries; $i++) {
+		if (file_exists($temp_file)) {
+			$actual_size = filesize($temp_file);
+			if ($actual_size == $bytes_written) {
+				// Size matches, good to go!
+				break;
+			}
+			// Size mismatch, wait a bit for buffer flush
+			usleep(10000); // 10ms delay
+			clearstatcache(true, $temp_file);
+		} else {
+			// File doesn't exist, wait a bit
+			usleep(10000);
+			clearstatcache(true, $temp_file);
+		}
+	}
+	
+	// After retries, verify file exists and has correct size
 	if (!file_exists($temp_file)) {
-		$error_msg = "Temp file not created despite successful write (disk full or filesystem issue?)";
-		$error_msg .= " | Wrote {$bytes_written} bytes but file doesn't exist";
-		$error_msg .= " | Disk free: " . ($disk_free !== false ? $disk_free . " bytes" : "unknown");
+		$error_msg = "Temp file disappeared after write (tried $retries times)";
+		$error_msg .= " - wrote {$bytes_written} bytes but file doesn't exist";
 		throw new Exception($error_msg);
 	}
 	
-	// Verify file size matches what we wrote
-	$actual_size = filesize($temp_file);
 	if ($actual_size != $bytes_written) {
-		$error_msg = "Temp file size mismatch: wrote {$bytes_written} bytes, file is {$actual_size} bytes";
+		$error_msg = "Temp file size mismatch after $retries retries: wrote {$bytes_written} bytes, file is {$actual_size} bytes";
 		$error_msg .= " (possible disk full or filesystem corruption)";
 		@unlink($temp_file); // Clean up partial file
 		throw new Exception($error_msg);
@@ -1306,8 +1339,9 @@ function pc_save_state($state) {
 			'state.file' => PC_STATE_FILE
 		));
 		
-		// Clean up temp file if it exists
-		@unlink(PC_STATE_FILE . '.tmp');
+		// Clean up temp files (both old format and new PID-based format)
+		@unlink(PC_STATE_FILE . '.tmp'); // Old format
+		@unlink(PC_STATE_FILE . '.tmp.' . getmypid()); // New format with PID
 		
 		// Re-throw to notify caller of failure
 		throw $e;
@@ -1796,7 +1830,7 @@ function pc_create_block_rule($device, $enforcement_mode, $reason) {
 	$block_page_rule = array(
 		'type' => 'pass',
 		'interface' => 'lan',
-		'ipprotocol' => 'inet',
+		'ipprotocol' => 'inet',  // IPv4 + IPv6
 		'protocol' => 'tcp',
 		'descr' => "Parental Control: Allow Block Page Access - {$child_name} - {$device_name}",
 		'source' => array('address' => $mac),
@@ -1804,6 +1838,7 @@ function pc_create_block_rule($device, $enforcement_mode, $reason) {
 			'address' => 'LAN address', // pfSense firewall itself
 			'port' => '443' // HTTPS access to block page
 		),
+		'log' => 'yes',  // Enable logging
 		'created' => array(
 			'time' => time(),
 			'username' => 'parental_control'
@@ -1819,10 +1854,11 @@ function pc_create_block_rule($device, $enforcement_mode, $reason) {
 	$rule = array(
 		'type' => 'reject', // Use 'reject' instead of 'block' to send TCP RST
 		'interface' => 'lan',
-		'ipprotocol' => 'inet',
+		'ipprotocol' => 'inet',  // IPv4 + IPv6
 		'descr' => "Parental Control: {$child_name} - {$device_name} ({$reason})",
 		'source' => array('address' => $mac),
 		'destination' => array('any' => ''),
+		'log' => 'yes',  // Enable logging
 		'created' => array(
 			'time' => time(),
 			'username' => 'parental_control'
@@ -1911,7 +1947,10 @@ function pc_remove_firewall_rules() {
 	$removed_count = 0;
 	
 	foreach ($rules as $rule) {
-		if (isset($rule['descr']) && strpos($rule['descr'], 'Parental Control:') === 0) {
+		// Match both "Parental Control:" (colon) and "Parental Control -" (dash) patterns
+		if (isset($rule['descr']) && 
+		    (strpos($rule['descr'], 'Parental Control:') === 0 || 
+		     strpos($rule['descr'], 'Parental Control -') === 0)) {
 			$removed_count++;
 			continue;
 		}
@@ -2187,7 +2226,7 @@ function pc_generate_blocking_rule($alias_name, $rule_descr) {
 	return array(
 		'type' => 'block',
 		'interface' => 'LAN_Interfaces',  // Apply to all LAN interfaces
-		'ipprotocol' => 'inet',
+		'ipprotocol' => 'inet',  // IPv4 + IPv6
 		'descr' => $rule_descr,
 		'source' => array(
 			'address' => $alias_name  // Reference the alias
@@ -2362,6 +2401,139 @@ function pc_create_blocking_alias() {
 }
 
 /**
+ * Create monitoring alias for parental control
+ * 
+ * Creates a host alias containing ALL profile device IPs for monitoring purposes.
+ * This alias is used to track usage of all monitored devices across all services.
+ * 
+ * @return bool True if alias exists or was created successfully
+ * @since 1.4.8
+ */
+function pc_create_monitoring_alias() {
+	// Check if alias already exists
+	$aliases = config_get_path('aliases/alias', []);
+	$alias_exists = false;
+	$alias_index = -1;
+	
+	foreach ($aliases as $index => $alias) {
+		if (isset($alias['name']) && $alias['name'] === 'parental_control_monitor') {
+			$alias_exists = true;
+			$alias_index = $index;
+			break;
+		}
+	}
+	
+	if ($alias_exists) {
+		pc_log("Monitoring alias already exists", 'debug');
+		return true;
+	}
+	
+	// Create new alias
+	$new_alias = array(
+		'name' => 'parental_control_monitor',
+		'type' => 'host',
+		'address' => '',  // Initially empty, populated by cron
+		'descr' => 'Parental Control - All Monitored Devices (Auto-managed - DO NOT EDIT)',
+		'detail' => 'This alias is automatically managed by Parental Control package||'
+	);
+	
+	$aliases[] = $new_alias;
+	config_set_path('aliases/alias', $aliases);
+	
+	write_config('Parental Control: Created monitoring alias');
+	
+	pc_log("Created monitoring alias for usage tracking", 'info', array(
+		'event.action' => 'alias_created',
+		'alias.name' => 'parental_control_monitor',
+		'alias.type' => 'host'
+	));
+	
+	// Mark that filter needs reload
+	mark_subsystem_dirty('aliases');
+	
+	return true;
+}
+
+/**
+ * Update monitoring alias with all profile device IPs
+ * 
+ * Populates the parental_control_monitor alias with IPs of ALL devices
+ * configured in any profile. This enables usage tracking for all monitored devices.
+ * 
+ * @param array $state Current state with MAC-to-IP mapping
+ * @return bool True if alias was updated successfully
+ * @since 1.4.8
+ */
+function pc_update_monitor_table($state) {
+	// Get all profile device MACs
+	$all_devices = pc_get_all_profile_devices();
+	
+	if (empty($all_devices)) {
+		pc_log("No profile devices configured for monitoring", 'debug');
+		return false;
+	}
+	
+	// Get IPs for online devices
+	$monitor_ips = array();
+	foreach ($all_devices as $mac) {
+		if (isset($state['mac_to_ip_cache'][$mac])) {
+			$ip = $state['mac_to_ip_cache'][$mac];
+			$monitor_ips[] = $ip;
+		}
+	}
+	
+	if (empty($monitor_ips)) {
+		pc_log("No profile devices currently online for monitoring", 'debug');
+		return false;
+	}
+	
+	// Get current IPs in the monitoring table
+	exec("/sbin/pfctl -t parental_control_monitor -T show 2>&1", $current_ips, $ret);
+	if ($ret !== 0) {
+		// Table doesn't exist yet, that's okay
+		$current_ips = array();
+	}
+	
+	$current_ips = array_map('trim', $current_ips);
+	$current_ips = array_filter($current_ips);
+	
+	// Calculate changes needed
+	$to_add = array_diff($monitor_ips, $current_ips);
+	$to_remove = array_diff($current_ips, $monitor_ips);
+	
+	$changes = 0;
+	
+	// Add new IPs
+	foreach ($to_add as $ip) {
+		exec("/sbin/pfctl -t parental_control_monitor -T add {$ip} 2>&1", $output, $ret);
+		if ($ret === 0) {
+			$changes++;
+			pc_log("Added {$ip} to monitoring table", 'debug');
+		}
+	}
+	
+	// Remove stale IPs
+	foreach ($to_remove as $ip) {
+		exec("/sbin/pfctl -t parental_control_monitor -T delete {$ip} 2>&1", $output, $ret);
+		if ($ret === 0) {
+			$changes++;
+			pc_log("Removed {$ip} from monitoring table", 'debug');
+		}
+	}
+	
+	if ($changes > 0) {
+		pc_log("Updated monitoring table: +" . count($to_add) . " -" . count($to_remove) . " devices", 'info', array(
+			'event.action' => 'monitor_table_updated',
+			'devices.added' => count($to_add),
+			'devices.removed' => count($to_remove),
+			'devices.total' => count($monitor_ips)
+		));
+	}
+	
+	return true;
+}
+
+/**
  * Create port aliases for parental control rules
  * 
  * Creates port aliases required by pfSense firewall rules. pfSense cannot use 
@@ -2503,8 +2675,8 @@ function pc_create_blocking_rule() {
 	$new_rule = array(
 		'type' => 'block',
 		'interface' => 'lan',  // Apply to LAN interface
-		'ipprotocol' => 'inet',
-		'direction' => 'in',
+		'ipprotocol' => 'inet',  // IPv4 + IPv6
+		'direction' => 'any',  // Both directions - simpler and more reliable
 		'floating' => 'yes',
 		'quick' => 'yes',  // Apply immediately on match
 		'source' => array(
@@ -2514,6 +2686,7 @@ function pc_create_blocking_rule() {
 			'any' => ''
 		),
 		'descr' => 'Parental Control - Dynamic Blocking',
+		'log' => 'yes',  // Enable logging
 		'created' => array(
 			'time' => time(),
 			'username' => 'system@parentalcontrol'
@@ -2538,6 +2711,237 @@ function pc_create_blocking_rule() {
 	mark_subsystem_dirty('filter');
 	
 	return true;
+}
+
+/**
+ * Create service monitoring rules for online services
+ * 
+ * Creates pass rules for each PC_Service_ alias to allow traffic from
+ * profile devices to monitored services. These rules are positioned
+ * just before the dynamic blocking rule to enable per-service tracking.
+ * 
+ * @return bool True if rules were created successfully
+ * @since 1.4.7
+ */
+function pc_create_service_monitoring_rules() {
+	global $config;
+	
+	// Get all PC_Service_ aliases
+	$service_aliases = array();
+	$aliases = config_get_path('aliases/alias', array());
+	
+	if (is_array($aliases)) {
+		foreach ($aliases as $alias) {
+			if (isset($alias['name']) && strpos($alias['name'], 'PC_Service_') === 0) {
+				$service_aliases[] = $alias['name'];
+			}
+		}
+	}
+	
+	if (empty($service_aliases)) {
+		pc_log("No service aliases found for monitoring", 'debug');
+		return true;
+	}
+	
+	// NOTE: We create rules even if no devices are configured yet
+	// The rules use the parental_control_blocked alias which will be empty until devices are added
+	// This allows the rules to be in place and ready when devices are added later
+	
+	// Get current rules
+	$rules = config_get_path('filter/rule', []);
+	$needs_update = false;
+	
+	// Find the position of the dynamic blocking rule
+	$blocking_rule_index = null;
+	foreach ($rules as $idx => $rule) {
+		if (isset($rule['descr']) && $rule['descr'] === 'Parental Control - Dynamic Blocking') {
+			$blocking_rule_index = $idx;
+			break;
+		}
+	}
+	
+	if ($blocking_rule_index === null) {
+		pc_log("Dynamic blocking rule not found, cannot position service monitoring rules", 'warning');
+		return false;
+	}
+	
+	// Remove any existing service-specific rules
+	$rules = array_filter($rules, function($rule) {
+		// Keep rule if it's NOT a service monitoring or blocking rule
+		return !(isset($rule['descr']) && 
+			(strpos($rule['descr'], 'Parental Control - Service Monitor:') === 0 ||
+			 strpos($rule['descr'], 'Parental Control - Service Block:') === 0 ||
+			 preg_match('/^Parental Control - .+ (Dynamic Blocking|Service Monitor|Service Block)$/', $rule['descr'])));
+	});
+	$rules = array_values($rules); // Re-index array
+	
+	// Re-find blocking rule index after removal
+	$blocking_rule_index = null;
+	foreach ($rules as $idx => $rule) {
+		if (isset($rule['descr']) && $rule['descr'] === 'Parental Control - Dynamic Blocking') {
+			$blocking_rule_index = $idx;
+			break;
+		}
+	}
+	
+	// Create new service monitoring AND blocking rules
+	// For each service, we create TWO rules:
+	// 1. BLOCK rule: blocks devices in parental_control_blocked from accessing service
+	// 2. MONITOR rule: allows/tracks devices in parental_control_monitor accessing service
+	// 
+	// Rule sequence (evaluated top to bottom):
+	// - DNS/pfSense access (allow blocked devices to see captive portal)
+	// - Service BLOCK rules (block violators from specific services)  ← These rules
+	// - Service MONITOR rules (allow/track everyone else)             ← These rules
+	// - General BLOCK rule (catch-all for blocked devices)
+	
+	$new_rules = array();
+	foreach ($service_aliases as $alias_name) {
+		$service_name = str_replace('PC_Service_', '', $alias_name);
+		
+		// RULE 1: BLOCK rule for devices that exceeded limits
+		$block_rule = array(
+			'type' => 'block',
+			'interface' => 'lan',
+			'ipprotocol' => 'inet',  // IPv4 + IPv6
+			'direction' => 'any',  // Both directions - simpler and more reliable
+			'floating' => 'yes',
+			'quick' => 'yes',
+			'source' => array(
+				'address' => 'parental_control_blocked'  // Devices that exceeded limits
+			),
+			'destination' => array(
+				'address' => $alias_name  // The service alias
+			),
+			'descr' => "Parental Control - {$service_name} Service Block",
+			'created' => array(
+				'time' => time(),
+				'username' => 'system@parentalcontrol'
+			),
+			'log' => 'yes'  // Enable logging for enforcement tracking
+		);
+		
+		// RULE 2: MONITOR rule for all profile devices (usage tracking)
+		$monitor_rule = array(
+			'type' => 'pass',
+			'interface' => 'lan',
+			'ipprotocol' => 'inet',  // IPv4 + IPv6
+			'direction' => 'any',  // Both directions - simpler and more reliable
+			'floating' => 'yes',
+			'quick' => 'yes',
+			'source' => array(
+				'address' => 'parental_control_monitor'  // ALL profile devices
+			),
+			'destination' => array(
+				'address' => $alias_name  // The service alias
+			),
+			'descr' => "Parental Control - {$service_name} Service Monitor",
+			'created' => array(
+				'time' => time(),
+				'username' => 'system@parentalcontrol'
+			),
+			'log' => 'yes'  // Enable logging for usage tracking
+		);
+		
+		// Add block rule first, then monitor rule (order matters!)
+		$new_rules[] = $block_rule;
+		$new_rules[] = $monitor_rule;
+	}
+	
+	// Insert new rules just before the blocking rule
+	array_splice($rules, $blocking_rule_index, 0, $new_rules);
+	
+	config_set_path('filter/rule', $rules);
+	write_config('Parental Control: Updated service monitoring rules');
+	
+	pc_log("Created " . count($new_rules) . " service monitoring rules", 'info', array(
+		'event.action' => 'service_rules_created',
+		'rule.count' => count($new_rules),
+		'services' => implode(', ', array_map(function($a) { return str_replace('PC_Service_', '', $a); }, $service_aliases))
+	));
+	
+	// CRITICAL: Load alias tables into pf and add rules to userrules anchor
+	// WHY: Ensures rules work even if filter_configure() marks aliases as "Unresolvable"
+	// This is a backup mechanism that directly manipulates pf
+	$pf_rules = array();
+	foreach ($service_aliases as $alias_name) {
+		$service_name = str_replace('PC_Service_', '', $alias_name);
+		$table_file = "/var/db/aliastables/{$alias_name}.txt";
+		
+		// Load table into pf if file exists
+		if (file_exists($table_file) && filesize($table_file) > 0) {
+			// Create/update pf table
+			$cmd = "pfctl -t {$alias_name} -T replace -f {$table_file} 2>&1";
+			$output = array();
+			$return_var = 0;
+			exec($cmd, $output, $return_var);
+			
+			if ($return_var === 0) {
+				pc_log("Loaded pf table: {$alias_name}", 'debug');
+			} else {
+				pc_log("Failed to load pf table: {$alias_name} - " . implode(' ', $output), 'warning');
+			}
+			
+			// Add TWO rules to userrules anchor as backup
+			// RULE 1: Block rule for devices that exceeded limits (evaluated first)
+			// RULE 2: Monitor rule for all profile devices (evaluated second, tracks usage)
+			// This ensures the rules work even if filter_configure() doesn't generate them
+			$pf_rules[] = "block in log quick on em1 inet from <parental_control_blocked> to <{$alias_name}> label \"USER_RULE: PC - {$service_name} Service Block\"";
+			$pf_rules[] = "pass in log quick on em1 inet from <parental_control_monitor> to <{$alias_name}> keep state label \"USER_RULE: PC - {$service_name} Service Monitor\"";
+		}
+	}
+	
+	// Load rules into userrules anchor if any were created
+	if (!empty($pf_rules)) {
+		$rules_content = implode("\n", $pf_rules) . "\n";
+		$temp_rules_file = tempnam('/tmp', 'pc_userrules_');
+		file_put_contents($temp_rules_file, $rules_content);
+		
+		$cmd = "pfctl -a userrules -f {$temp_rules_file} 2>&1";
+		$output = array();
+		$return_var = 0;
+		exec($cmd, $output, $return_var);
+		
+		if ($return_var === 0) {
+			pc_log("Loaded " . count($pf_rules) . " rules into userrules anchor", 'info');
+		} else {
+			pc_log("Failed to load rules into userrules anchor: " . implode(' ', $output), 'warning');
+		}
+		
+		@unlink($temp_rules_file);
+	}
+	
+	// Mark that filter needs reload
+	mark_subsystem_dirty('filter');
+	
+	return true;
+}
+
+/**
+ * Get all devices from all profiles
+ * 
+ * Retrieves MAC addresses of all devices configured across all parental
+ * control profiles. Used for creating firewall rules that apply to all
+ * monitored devices.
+ * 
+ * @return array Array of normalized MAC addresses
+ * @since 1.4.7
+ */
+function pc_get_all_profile_devices() {
+	$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', []);
+	$devices = array();
+	
+	foreach ($profiles as $profile) {
+		if (isset($profile['row']) && is_array($profile['row'])) {
+			foreach ($profile['row'] as $device) {
+				if (isset($device['mac_address'])) {
+					$devices[] = pc_normalize_mac($device['mac_address']);
+				}
+			}
+		}
+	}
+	
+	return array_unique($devices);
 }
 
 /**
@@ -2720,8 +3124,9 @@ function pc_create_allow_rules() {
 		$dns_rule = array(
 			'type' => 'pass',
 			'interface' => 'lan',
-			'ipprotocol' => 'inet',
+			'ipprotocol' => 'inet',  // IPv4 + IPv6
 			'protocol' => 'udp',
+			'direction' => 'any',  // Both directions - simpler and more reliable
 			'source' => array(
 				'address' => 'parental_control_blocked'
 			),
@@ -2732,6 +3137,7 @@ function pc_create_allow_rules() {
 			'floating' => 'yes',
 			'quick' => 'yes',
 			'descr' => 'Parental Control - Allow DNS for Blocked Devices',
+			'log' => 'yes',  // Enable logging
 			'created' => array(
 				'time' => time(),
 				'username' => 'system@parentalcontrol'
@@ -2753,8 +3159,9 @@ function pc_create_allow_rules() {
 		$pfsense_rule = array(
 			'type' => 'pass',
 			'interface' => 'lan',
-			'ipprotocol' => 'inet',
+			'ipprotocol' => 'inet',  // IPv4 + IPv6
 			'protocol' => 'tcp',
+			'direction' => 'any',  // Both directions - simpler and more reliable
 			'source' => array(
 				'address' => 'parental_control_blocked'
 			),
@@ -2765,6 +3172,7 @@ function pc_create_allow_rules() {
 			'floating' => 'yes',
 			'quick' => 'yes',
 			'descr' => 'Parental Control - Allow pfSense Access for Blocked Devices',
+			'log' => 'yes',  // Enable logging
 			'created' => array(
 				'time' => time(),
 				'username' => 'system@parentalcontrol'
@@ -3471,6 +3879,11 @@ function parental_control_cron_job() {
 	// Update usage for active devices (now uses REAL connection tracking)
 	$state_changed = pc_update_device_usage($state);
 	
+	// CRITICAL: Update monitoring table with ALL profile device IPs
+	// WHY: Service monitoring rules need this table to track usage for all devices
+	// NOTE: This is separate from blocking - monitoring tracks everyone, blocking only violators
+	pc_update_monitor_table($state);
+	
 	// SMART BLOCKING: Calculate which devices should be blocked NOW
 	// Then compare with previous state and only update changed devices
 	// This avoids calling filter_configure() which causes AQM errors
@@ -3704,43 +4117,67 @@ function pc_reset_daily_counters(&$state) {
  */
 function pc_acquire_pid_lock() {
 	$pid_file = PC_PID_FILE;
-	
-	// Check if PID file exists
-	if (file_exists($pid_file)) {
-		$old_pid = trim(file_get_contents($pid_file));
-		
-		// Check if process is still running
-		if (!empty($old_pid) && posix_kill($old_pid, 0)) {
-			pc_log("Another instance is already running (PID: $old_pid)", 'warn', array(
-				'event.action' => 'lock_exists',
-				'process.pid' => $old_pid,
-				'event.outcome' => 'failure'
-			));
-			return false;
-		} else {
-			// Stale PID file, remove it
-			unlink($pid_file);
-			pc_log("Removed stale PID file (PID: $old_pid)", 'info', array(
-				'event.action' => 'stale_lock_removed',
-				'process.pid.old' => $old_pid
-			));
-		}
-	}
-	
-	// Write current PID
 	$current_pid = getmypid();
-	$result = @file_put_contents($pid_file, $current_pid);
-	if ($result === false) {
-		// Try to provide helpful error message
-		$error_msg = error_get_last();
-		pc_log("Failed to write PID file", 'error', array(
-			'event.action' => 'lock_write_failed',
+	
+	// CRITICAL FIX v1.4.10+: Use file locking to prevent race condition
+	// BUG: Two processes could both pass the file_exists() check simultaneously
+	// ROOT CAUSE: TOCTOU (Time-of-check-time-of-use) race condition
+	// SOLUTION: Use fopen() with exclusive lock (LOCK_EX | LOCK_NB)
+	
+	// Try to open PID file with exclusive non-blocking lock
+	$fp = @fopen($pid_file, 'c+');
+	if ($fp === false) {
+		pc_log("Failed to open PID file", 'error', array(
+			'event.action' => 'lock_open_failed',
 			'file.path' => $pid_file,
-			'error.message' => $error_msg ? $error_msg['message'] : 'Unknown error',
 			'event.outcome' => 'failure'
 		));
 		return false;
 	}
+	
+	// Try to acquire exclusive lock (non-blocking)
+	if (!flock($fp, LOCK_EX | LOCK_NB)) {
+		// Lock failed - another process has it
+		// Read the PID of the lock holder for logging
+		rewind($fp);
+		$old_pid = trim(fgets($fp));
+		fclose($fp);
+		
+		pc_log("Another instance is already running (PID: $old_pid)", 'warn', array(
+			'event.action' => 'lock_exists',
+			'process.pid' => $old_pid,
+			'event.outcome' => 'failure'
+		));
+		return false;
+	}
+	
+	// We have the lock! Check if old PID exists and if process is still running
+	rewind($fp);
+	$old_pid = trim(fgets($fp));
+	
+	if (!empty($old_pid) && $old_pid != $current_pid && posix_kill($old_pid, 0)) {
+		// Old process is still running - should not happen with flock, but check anyway
+		flock($fp, LOCK_UN);
+		fclose($fp);
+		
+		pc_log("Another instance is already running (PID: $old_pid)", 'warn', array(
+			'event.action' => 'lock_exists',
+			'process.pid' => $old_pid,
+			'event.outcome' => 'failure'
+		));
+		return false;
+	}
+	
+	// Write our PID to the file
+	ftruncate($fp, 0);
+	rewind($fp);
+	fwrite($fp, $current_pid . "\n");
+	fflush($fp);
+	
+	// Store file handle in global variable so it stays open (and locked)
+	// The lock will be automatically released when the script exits or we call pc_release_pid_lock()
+	global $pc_pid_lock_handle;
+	$pc_pid_lock_handle = $fp;
 	
 	pc_log("PID lock acquired", 'debug', array(
 		'event.action' => 'lock_acquired',
@@ -3766,14 +4203,25 @@ function pc_acquire_pid_lock() {
  * @see pc_acquire_pid_lock() To acquire the lock
  */
 function pc_release_pid_lock() {
-	$pid_file = PC_PID_FILE;
+	global $pc_pid_lock_handle;
 	
-	if (file_exists($pid_file)) {
-		unlink($pid_file);
+	// CRITICAL FIX v1.4.10+: Properly release file lock
+	// Close the file handle (which automatically releases the flock)
+	if (isset($pc_pid_lock_handle) && is_resource($pc_pid_lock_handle)) {
+		flock($pc_pid_lock_handle, LOCK_UN);
+		fclose($pc_pid_lock_handle);
+		$pc_pid_lock_handle = null;
+		
 		pc_log("PID lock released", 'debug', array(
 			'event.action' => 'lock_released',
 			'process.pid' => getmypid()
 		));
+	}
+	
+	// Clean up PID file
+	$pid_file = PC_PID_FILE;
+	if (file_exists($pid_file)) {
+		@unlink($pid_file);
 	}
 }
 
