@@ -1830,7 +1830,7 @@ function pc_create_block_rule($device, $enforcement_mode, $reason) {
 	$block_page_rule = array(
 		'type' => 'pass',
 		'interface' => 'lan',
-		'ipprotocol' => 'inet',
+		'ipprotocol' => 'inet46',  // IPv4 + IPv6
 		'protocol' => 'tcp',
 		'descr' => "Parental Control: Allow Block Page Access - {$child_name} - {$device_name}",
 		'source' => array('address' => $mac),
@@ -1838,6 +1838,7 @@ function pc_create_block_rule($device, $enforcement_mode, $reason) {
 			'address' => 'LAN address', // pfSense firewall itself
 			'port' => '443' // HTTPS access to block page
 		),
+		'log' => 'yes',  // Enable logging
 		'created' => array(
 			'time' => time(),
 			'username' => 'parental_control'
@@ -1853,10 +1854,11 @@ function pc_create_block_rule($device, $enforcement_mode, $reason) {
 	$rule = array(
 		'type' => 'reject', // Use 'reject' instead of 'block' to send TCP RST
 		'interface' => 'lan',
-		'ipprotocol' => 'inet',
+		'ipprotocol' => 'inet46',  // IPv4 + IPv6
 		'descr' => "Parental Control: {$child_name} - {$device_name} ({$reason})",
 		'source' => array('address' => $mac),
 		'destination' => array('any' => ''),
+		'log' => 'yes',  // Enable logging
 		'created' => array(
 			'time' => time(),
 			'username' => 'parental_control'
@@ -2224,7 +2226,7 @@ function pc_generate_blocking_rule($alias_name, $rule_descr) {
 	return array(
 		'type' => 'block',
 		'interface' => 'LAN_Interfaces',  // Apply to all LAN interfaces
-		'ipprotocol' => 'inet',
+		'ipprotocol' => 'inet46',  // IPv4 + IPv6
 		'descr' => $rule_descr,
 		'source' => array(
 			'address' => $alias_name  // Reference the alias
@@ -2673,7 +2675,7 @@ function pc_create_blocking_rule() {
 	$new_rule = array(
 		'type' => 'block',
 		'interface' => 'lan',  // Apply to LAN interface
-		'ipprotocol' => 'inet',
+		'ipprotocol' => 'inet46',  // IPv4 + IPv6
 		'direction' => 'any',  // Both directions - simpler and more reliable
 		'floating' => 'yes',
 		'quick' => 'yes',  // Apply immediately on match
@@ -2684,6 +2686,7 @@ function pc_create_blocking_rule() {
 			'any' => ''
 		),
 		'descr' => 'Parental Control - Dynamic Blocking',
+		'log' => 'yes',  // Enable logging
 		'created' => array(
 			'time' => time(),
 			'username' => 'system@parentalcontrol'
@@ -2800,7 +2803,7 @@ function pc_create_service_monitoring_rules() {
 		$block_rule = array(
 			'type' => 'block',
 			'interface' => 'lan',
-			'ipprotocol' => 'inet',
+			'ipprotocol' => 'inet46',  // IPv4 + IPv6
 			'direction' => 'any',  // Both directions - simpler and more reliable
 			'floating' => 'yes',
 			'quick' => 'yes',
@@ -2822,7 +2825,7 @@ function pc_create_service_monitoring_rules() {
 		$monitor_rule = array(
 			'type' => 'pass',
 			'interface' => 'lan',
-			'ipprotocol' => 'inet',
+			'ipprotocol' => 'inet46',  // IPv4 + IPv6
 			'direction' => 'any',  // Both directions - simpler and more reliable
 			'floating' => 'yes',
 			'quick' => 'yes',
@@ -3121,7 +3124,7 @@ function pc_create_allow_rules() {
 		$dns_rule = array(
 			'type' => 'pass',
 			'interface' => 'lan',
-			'ipprotocol' => 'inet',
+			'ipprotocol' => 'inet46',  // IPv4 + IPv6
 			'protocol' => 'udp',
 			'direction' => 'any',  // Both directions - simpler and more reliable
 			'source' => array(
@@ -3134,6 +3137,7 @@ function pc_create_allow_rules() {
 			'floating' => 'yes',
 			'quick' => 'yes',
 			'descr' => 'Parental Control - Allow DNS for Blocked Devices',
+			'log' => 'yes',  // Enable logging
 			'created' => array(
 				'time' => time(),
 				'username' => 'system@parentalcontrol'
@@ -3155,7 +3159,7 @@ function pc_create_allow_rules() {
 		$pfsense_rule = array(
 			'type' => 'pass',
 			'interface' => 'lan',
-			'ipprotocol' => 'inet',
+			'ipprotocol' => 'inet46',  // IPv4 + IPv6
 			'protocol' => 'tcp',
 			'direction' => 'any',  // Both directions - simpler and more reliable
 			'source' => array(
@@ -3168,6 +3172,7 @@ function pc_create_allow_rules() {
 			'floating' => 'yes',
 			'quick' => 'yes',
 			'descr' => 'Parental Control - Allow pfSense Access for Blocked Devices',
+			'log' => 'yes',  // Enable logging
 			'created' => array(
 				'time' => time(),
 				'username' => 'system@parentalcontrol'
