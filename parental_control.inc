@@ -1195,7 +1195,12 @@ function pc_save_state($state) {
 	// Rationale: If process crashes mid-write, we don't want partial/corrupt state file.
 	// Rename is atomic on Unix systems - either fully succeeds or fully fails.
 	// This ensures we never have a partially-written state file that could break the system.
-	$temp_file = PC_STATE_FILE . '.tmp';
+	
+	// CRITICAL FIX v1.4.10+: Use unique temp file name with PID to avoid conflicts
+	// BUG: Multiple processes using same temp file name cause race conditions
+	// ROOT CAUSE: Fixed temp file name (state.json.tmp) used by all processes
+	// SOLUTION: Include PID in temp file name for uniqueness
+	$temp_file = PC_STATE_FILE . '.tmp.' . getmypid();
 	
 	// CRITICAL FIX v1.4.6: Check disk space before writing
 	// BUG: file_put_contents() can return byte count but file doesn't exist
@@ -1206,7 +1211,9 @@ function pc_save_state($state) {
 		throw new Exception("Insufficient disk space: need " . ($json_size * 2) . " bytes, have {$disk_free} bytes");
 	}
 	
-	$bytes_written = file_put_contents($temp_file, $json);
+	// CRITICAL FIX v1.4.10+: Use file_put_contents with LOCK_EX for atomic write
+	// Ensures the write is atomic and prevents other processes from interfering
+	$bytes_written = file_put_contents($temp_file, $json, LOCK_EX);
 	if ($bytes_written === false) {
 		// Enhanced error reporting - include permission details
 		$error_details = error_get_last();
@@ -1222,32 +1229,43 @@ function pc_save_state($state) {
 		throw new Exception($error_msg);
 	}
 	
-	// CRITICAL FIX v1.4.6: Verify temp file actually exists after write
-	// BUG: file_put_contents() can succeed but file doesn't exist on disk
-	// ROOT CAUSE: Disk full, write cache not flushed, filesystem corruption, or race condition
-	// SOLUTION: Check file exists and size, but don't fail yet - let rename/copy handle it
+	// CRITICAL FIX v1.4.10+: Add retry mechanism for filesize check
+	// BUG: filesize() can return 0 immediately after write (buffer not flushed)
+	// ROOT CAUSE: OS write buffer hasn't been flushed to disk yet
+	// SOLUTION: Retry with small delays to allow buffer flush
 	clearstatcache(true, $temp_file); // Clear stat cache to get fresh info
 	
-	// Verify temp file exists and has correct size
-	// NOTE: Don't throw exception here - temp file might disappear due to race condition
-	// Let the rename/copy operations handle missing file naturally
-	if (file_exists($temp_file)) {
-		// File exists, verify size
-		$actual_size = filesize($temp_file);
-		if ($actual_size != $bytes_written) {
-			$error_msg = "Temp file size mismatch: wrote {$bytes_written} bytes, file is {$actual_size} bytes";
-			$error_msg .= " (possible disk full or filesystem corruption)";
-			@unlink($temp_file); // Clean up partial file
-			throw new Exception($error_msg);
+	$retries = 3;
+	$actual_size = 0;
+	for ($i = 0; $i < $retries; $i++) {
+		if (file_exists($temp_file)) {
+			$actual_size = filesize($temp_file);
+			if ($actual_size == $bytes_written) {
+				// Size matches, good to go!
+				break;
+			}
+			// Size mismatch, wait a bit for buffer flush
+			usleep(10000); // 10ms delay
+			clearstatcache(true, $temp_file);
+		} else {
+			// File doesn't exist, wait a bit
+			usleep(10000);
+			clearstatcache(true, $temp_file);
 		}
-	} else {
-		// File doesn't exist - log warning but continue
-		// The rename/copy operations will fail naturally and provide full diagnostics
-		pc_log("Warning: Temp file disappeared after write (race condition?)", 'warning', array(
-			'event.action' => 'temp_file_missing',
-			'bytes_written' => $bytes_written,
-			'disk_free' => $disk_free !== false ? $disk_free : 'unknown'
-		));
+	}
+	
+	// After retries, verify file exists and has correct size
+	if (!file_exists($temp_file)) {
+		$error_msg = "Temp file disappeared after write (tried $retries times)";
+		$error_msg .= " - wrote {$bytes_written} bytes but file doesn't exist";
+		throw new Exception($error_msg);
+	}
+	
+	if ($actual_size != $bytes_written) {
+		$error_msg = "Temp file size mismatch after $retries retries: wrote {$bytes_written} bytes, file is {$actual_size} bytes";
+		$error_msg .= " (possible disk full or filesystem corruption)";
+		@unlink($temp_file); // Clean up partial file
+		throw new Exception($error_msg);
 	}
 	
 	// WHY: Atomic rename ensures crash-resistance
@@ -1321,8 +1339,9 @@ function pc_save_state($state) {
 			'state.file' => PC_STATE_FILE
 		));
 		
-		// Clean up temp file if it exists
-		@unlink(PC_STATE_FILE . '.tmp');
+		// Clean up temp files (both old format and new PID-based format)
+		@unlink(PC_STATE_FILE . '.tmp'); // Old format
+		@unlink(PC_STATE_FILE . '.tmp.' . getmypid()); // New format with PID
 		
 		// Re-throw to notify caller of failure
 		throw $e;
@@ -4088,43 +4107,67 @@ function pc_reset_daily_counters(&$state) {
  */
 function pc_acquire_pid_lock() {
 	$pid_file = PC_PID_FILE;
-	
-	// Check if PID file exists
-	if (file_exists($pid_file)) {
-		$old_pid = trim(file_get_contents($pid_file));
-		
-		// Check if process is still running
-		if (!empty($old_pid) && posix_kill($old_pid, 0)) {
-			pc_log("Another instance is already running (PID: $old_pid)", 'warn', array(
-				'event.action' => 'lock_exists',
-				'process.pid' => $old_pid,
-				'event.outcome' => 'failure'
-			));
-			return false;
-		} else {
-			// Stale PID file, remove it
-			unlink($pid_file);
-			pc_log("Removed stale PID file (PID: $old_pid)", 'info', array(
-				'event.action' => 'stale_lock_removed',
-				'process.pid.old' => $old_pid
-			));
-		}
-	}
-	
-	// Write current PID
 	$current_pid = getmypid();
-	$result = @file_put_contents($pid_file, $current_pid);
-	if ($result === false) {
-		// Try to provide helpful error message
-		$error_msg = error_get_last();
-		pc_log("Failed to write PID file", 'error', array(
-			'event.action' => 'lock_write_failed',
+	
+	// CRITICAL FIX v1.4.10+: Use file locking to prevent race condition
+	// BUG: Two processes could both pass the file_exists() check simultaneously
+	// ROOT CAUSE: TOCTOU (Time-of-check-time-of-use) race condition
+	// SOLUTION: Use fopen() with exclusive lock (LOCK_EX | LOCK_NB)
+	
+	// Try to open PID file with exclusive non-blocking lock
+	$fp = @fopen($pid_file, 'c+');
+	if ($fp === false) {
+		pc_log("Failed to open PID file", 'error', array(
+			'event.action' => 'lock_open_failed',
 			'file.path' => $pid_file,
-			'error.message' => $error_msg ? $error_msg['message'] : 'Unknown error',
 			'event.outcome' => 'failure'
 		));
 		return false;
 	}
+	
+	// Try to acquire exclusive lock (non-blocking)
+	if (!flock($fp, LOCK_EX | LOCK_NB)) {
+		// Lock failed - another process has it
+		// Read the PID of the lock holder for logging
+		rewind($fp);
+		$old_pid = trim(fgets($fp));
+		fclose($fp);
+		
+		pc_log("Another instance is already running (PID: $old_pid)", 'warn', array(
+			'event.action' => 'lock_exists',
+			'process.pid' => $old_pid,
+			'event.outcome' => 'failure'
+		));
+		return false;
+	}
+	
+	// We have the lock! Check if old PID exists and if process is still running
+	rewind($fp);
+	$old_pid = trim(fgets($fp));
+	
+	if (!empty($old_pid) && $old_pid != $current_pid && posix_kill($old_pid, 0)) {
+		// Old process is still running - should not happen with flock, but check anyway
+		flock($fp, LOCK_UN);
+		fclose($fp);
+		
+		pc_log("Another instance is already running (PID: $old_pid)", 'warn', array(
+			'event.action' => 'lock_exists',
+			'process.pid' => $old_pid,
+			'event.outcome' => 'failure'
+		));
+		return false;
+	}
+	
+	// Write our PID to the file
+	ftruncate($fp, 0);
+	rewind($fp);
+	fwrite($fp, $current_pid . "\n");
+	fflush($fp);
+	
+	// Store file handle in global variable so it stays open (and locked)
+	// The lock will be automatically released when the script exits or we call pc_release_pid_lock()
+	global $pc_pid_lock_handle;
+	$pc_pid_lock_handle = $fp;
 	
 	pc_log("PID lock acquired", 'debug', array(
 		'event.action' => 'lock_acquired',
@@ -4150,14 +4193,25 @@ function pc_acquire_pid_lock() {
  * @see pc_acquire_pid_lock() To acquire the lock
  */
 function pc_release_pid_lock() {
-	$pid_file = PC_PID_FILE;
+	global $pc_pid_lock_handle;
 	
-	if (file_exists($pid_file)) {
-		unlink($pid_file);
+	// CRITICAL FIX v1.4.10+: Properly release file lock
+	// Close the file handle (which automatically releases the flock)
+	if (isset($pc_pid_lock_handle) && is_resource($pc_pid_lock_handle)) {
+		flock($pc_pid_lock_handle, LOCK_UN);
+		fclose($pc_pid_lock_handle);
+		$pc_pid_lock_handle = null;
+		
 		pc_log("PID lock released", 'debug', array(
 			'event.action' => 'lock_released',
 			'process.pid' => getmypid()
 		));
+	}
+	
+	// Clean up PID file
+	$pid_file = PC_PID_FILE;
+	if (file_exists($pid_file)) {
+		@unlink($pid_file);
 	}
 }
 
