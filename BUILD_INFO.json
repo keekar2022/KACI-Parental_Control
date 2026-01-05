@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "1.4.15",
-    "build_date": "2026-01-06T10:00:00Z",
+    "version": "1.4.16",
+    "build_date": "2026-01-06T11:00:00Z",
     "git_commit": "pending",
     "git_branch": "develop",
     "built_by": "development",
@@ -88,6 +88,44 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.4.16",
+      "date": "2026-01-06",
+      "type": "hotfix",
+      "changes": [
+        "HOTFIX: Reverted inet46 (IPv4+IPv6) to inet (IPv4-only) due to rule errors",
+        "BUG: Filter reload failing with 'rule expands to no valid combination'",
+        "ERROR: IPv6 rule trying to use IPv4-only aliases and addresses",
+        "SPECIFIC ERROR: pass log quick on { em1 } inet6 proto tcp from $parental_control_blocked to 192.168.1.251",
+        "ROOT CAUSE: inet46 tells pfSense to create BOTH IPv4 and IPv6 rules",
+        "ROOT CAUSE: parental_control_blocked alias contains only IPv4 addresses (MACs → IPv4)",
+        "ROOT CAUSE: Destination 192.168.1.251 is IPv4 address",
+        "ROOT CAUSE: IPv6 rule with IPv4-only data = 'no valid combination'",
+        "REALITY CHECK: User's network has NO IPv6 configured (grep inet6 /etc/pf.conf = 0)",
+        "SOLUTION: Reverted ALL rules from 'inet46' back to 'inet' (IPv4-only)",
+        "RESULT: Filter reload successful, no more rule errors",
+        "RESULT: All 9 rules working correctly with IPv4",
+        "LESSON: inet46 requires BOTH:",
+        "  1. IPv6 enabled on network interfaces",
+        "  2. Aliases configured with IPv6 addresses",
+        "  3. Destination addresses supporting IPv6",
+        "FUTURE: IPv6 support can be added when:",
+        "  - User enables IPv6 on pfSense",
+        "  - Aliases updated to support IPv6",
+        "  - Conditional logic added (use inet46 only if IPv6 enabled)",
+        "REVERTED RULES (8 locations):",
+        "  - Block Page Access rule",
+        "  - Device Block rule",
+        "  - Generic Blocking rule",
+        "  - Dynamic Blocking rule",
+        "  - Service Block rules",
+        "  - Service Monitor rules",
+        "  - DNS Allow rule",
+        "  - pfSense Access Allow rule",
+        "MAINTAINED: direction 'any' and log 'yes' settings from v1.4.15",
+        "VERSION: 1.4.15 → 1.4.16"
+      ]
+    },
     {
       "version": "1.4.15",
       "date": "2026-01-06",
