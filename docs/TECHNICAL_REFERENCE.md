@@ -2619,7 +2619,7 @@ parental control package for pfSense that actually works!
    • Auto-updates
 
 🚀 Installation: 5 minutes via SSH
-💰 Cost: FREE forever (MIT License)
+💰 Cost: FREE forever (GPL 3.0 or later)
 🔒 Privacy: 100% local, no cloud
 
 📖 Learn more & install:

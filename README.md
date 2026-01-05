@@ -6,7 +6,7 @@ A comprehensive parental control package for pfSense that helps parents manage a
 **Version:** 1.4.2 (Production Ready)  
 **Author:** Mukesh Kesharwani (Keekar)  
 **Status:** Production Ready  
-**License:** MIT  
+**License:** GPL 3.0 or later  
 **© 2025 Keekar**
 
 ---
@@ -496,7 +496,7 @@ The package uses OpenTelemetry-compliant JSONL format for logs:
 **Version:** 1.4.2 (Production Ready)  
 **Status:** Production Ready  
 **Compatibility:** pfSense 2.6.0+  
-**License:** MIT
+**License:** GPL 3.0 or later
 
 ---
 

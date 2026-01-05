@@ -171,7 +171,7 @@ For advanced users and home automation:
 |---------|---------|------------------|------------------------|
 | **Bypass-proof** | ✅ Network-level | ❌ App-based | ⚠️ Varies |
 | **Shared time limits** | ✅ Across all devices | ❌ Per-device | ❌ Not available |
-| **Free & Open Source** | ✅ MIT License | ❌ Subscription | ⚠️ Varies |
+| **Free & Open Source** | ✅ GPL 3.0 or later | ❌ Subscription | ⚠️ Varies |
 | **Easy to use** | ✅ Web GUI | ✅ Mobile app | ❌ Command-line |
 | **Privacy-respecting** | ✅ Local only | ❌ Cloud-based | ✅ Local only |
 | **Professional support** | ✅ Active development | ⚠️ Vendor-dependent | ❌ Often abandoned |
@@ -350,7 +350,7 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for guidelines.
 
 ## 📜 License
 
-**MIT License** - Free to use, modify, and distribute.
+**GPL 3.0 or later** - Free to use, modify, and distribute under the terms of the GNU General Public License.
 
 See **[LICENSE](LICENSE)** for full terms.
 

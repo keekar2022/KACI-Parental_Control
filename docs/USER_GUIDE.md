@@ -4102,7 +4102,7 @@ MAJOR.MINOR.PATCH
 
 **Release Date:** December 28, 2025  
 **Status:** Production Ready  
-**License:** MIT
+**License:** GPL 3.0 or later
 
 ---
 
@@ -4313,7 +4313,7 @@ We welcome contributions! See [Technical Reference](docs/TECHNICAL_REFERENCE.md)
 - **Documentation:** 5,900+ lines
 - **Development Time:** 3 months
 - **Contributors:** 1 (looking for more!)
-- **License:** MIT (Free forever)
+- **License:** GPL 3.0 or later (Free forever)
 
 ---
 
@@ -4358,7 +4358,7 @@ If you find KACI Parental Control useful, please:
 
 ## 📜 License
 
-MIT License - Free to use, modify, and distribute.
+GPL 3.0 or later - Free to use, modify, and distribute under the terms of the GNU General Public License.
 
 See [LICENSE](LICENSE) for full terms.
 
@@ -4521,7 +4521,7 @@ version of KACI Parental Control for pfSense!
    chmod +x INSTALL.sh
    sudo ./INSTALL.sh install your-firewall-ip
 
-💰 Cost: FREE forever (MIT License)
+💰 Cost: FREE forever (GPL 3.0 or later)
 🔒 Privacy: 100% local, no cloud
 📖 Docs: https://github.com/keekar2022/KACI-Parental_Control/blob/main/docs/README.md
 🌐 Website: https://keekar2022.github.io/KACI-Parental_Control/
