@@ -29,6 +29,10 @@
 			<text>KACI-PC-Schedule</text>
 			<url>/parental_control_schedules.php</url>
 		</tab>
+	<tab>
+		<text>Online-Service</text>
+		<url>/parental_control_services.php</url>
+	</tab>
 		<tab>
 			<text>Status</text>
 			<url>/parental_control_status.php</url>

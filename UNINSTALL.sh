@@ -120,6 +120,7 @@ echo "   ✓ Captive portal server stopped"
 echo "5. Removing PHP files..."
 rm -f /usr/local/www/parental_control_profiles.php
 rm -f /usr/local/www/parental_control_schedules.php
+rm -f /usr/local/www/parental_control_services.php
 rm -f /usr/local/www/parental_control_status.php
 rm -f /usr/local/www/parental_control_blocked.php
 rm -f /usr/local/www/parental_control_captive.php

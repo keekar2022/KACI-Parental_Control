@@ -29,9 +29,37 @@ if (!isAllowedPage($_SERVER['SCRIPT_NAME'])) {
 $pgtitle = array("Services", "Parental Control", "Profiles");
 $pglinks = array("", "/pkg_edit.php?xml=parental_control.xml", "@self");
 
+/**
+ * Get all PC_Service_ aliases from firewall
+ * @return array Array of service aliases with name and description
+ */
+function pc_get_service_aliases() {
+	$service_aliases = array();
+	$aliases = config_get_path('aliases/alias', array());
+	
+	if (is_array($aliases)) {
+		foreach ($aliases as $alias) {
+			// Check if alias name starts with PC_Service_
+			if (isset($alias['name']) && strpos($alias['name'], 'PC_Service_') === 0) {
+				$service_name = substr($alias['name'], strlen('PC_Service_')); // Remove prefix
+				$service_aliases[] = array(
+					'alias_name' => $alias['name'],
+					'service_name' => $service_name,
+					'description' => isset($alias['descr']) ? $alias['descr'] : $service_name
+				);
+			}
+		}
+	}
+	
+	return $service_aliases;
+}
+
 // Get configuration
 $profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', []);
 // DEBUG: error_log("PARENTAL_CONTROL_DEBUG: Loaded " . count($profiles) . " existing profiles");
+
+// Get available service aliases
+$service_aliases = pc_get_service_aliases();
 
 // Handle form submissions
 $input_errors = [];
@@ -119,6 +147,25 @@ if (isset($_POST['save'])) {
 			'weekend_bonus' => isset($_POST['weekend_bonus']) ? intval($_POST['weekend_bonus']) : 0,
 			'enabled' => isset($_POST['enabled']) ? 'on' : 'off'
 		);
+		
+		// Handle service-specific limits
+		$service_limits = array();
+		foreach ($service_aliases as $service) {
+			$alias_name = $service['alias_name'];
+			$daily_key = 'service_daily_' . $alias_name;
+			$weekend_key = 'service_weekend_' . $alias_name;
+			
+			if (isset($_POST[$daily_key]) && is_numeric($_POST[$daily_key]) && intval($_POST[$daily_key]) > 0) {
+				$service_limits[$alias_name] = array(
+					'daily_limit' => intval($_POST[$daily_key]),
+					'weekend_bonus' => isset($_POST[$weekend_key]) && is_numeric($_POST[$weekend_key]) ? intval($_POST[$weekend_key]) : 0
+				);
+			}
+		}
+		
+		if (!empty($service_limits)) {
+			$profile['service_limits'] = $service_limits;
+		}
 		
 		// DEBUG: error_log("PARENTAL_CONTROL_DEBUG: Profile data: " . print_r($profile, true));
 		
@@ -370,6 +417,7 @@ $tab_array = array();
 $tab_array[] = array("Settings", false, "/pkg_edit.php?xml=parental_control.xml");
 $tab_array[] = array("Profiles", true, "/parental_control_profiles.php");
 $tab_array[] = array("KACI-PC-Schedule", false, "/parental_control_schedules.php");
+$tab_array[] = array("Online-Service", false, "/parental_control_services.php");
 $tab_array[] = array("Status", false, "/parental_control_status.php");
 display_top_tabs($tab_array);
 ?>
@@ -413,6 +461,7 @@ display_top_tabs($tab_array);
 							<th>Profile Name</th>
 							<th>Daily Limit</th>
 							<th>Weekend Bonus</th>
+							<th>Service Limits</th>
 							<th>Devices</th>
 							<th>Status</th>
 							<th>Actions</th>
@@ -439,6 +488,40 @@ display_top_tabs($tab_array);
 							<td><strong><?=htmlspecialchars($profile['name'])?></strong></td>
 							<td><code><?=$daily_limit_display?></code></td>
 							<td><code><?=$weekend_bonus_display?></code></td>
+							<td>
+								<?php 
+								$service_limits = isset($profile['service_limits']) ? $profile['service_limits'] : array();
+								if (!empty($service_limits)): 
+								?>
+									<span class="badge badge-info" title="<?=count($service_limits)?> service(s) with custom limits">
+										<i class="fa fa-globe"></i> <?=count($service_limits)?>
+									</span>
+									<button type="button" class="btn btn-xs btn-default" 
+										data-toggle="collapse" data-target="#service-limits-<?=$idx?>" 
+										title="Show/Hide Service Limits">
+										<i class="fa fa-eye"></i>
+									</button>
+									<div id="service-limits-<?=$idx?>" class="collapse" style="margin-top: 5px;">
+										<small>
+											<?php foreach ($service_limits as $alias_name => $limits): 
+												$svc_name = str_replace('PC_Service_', '', $alias_name);
+												$svc_daily = $limits['daily_limit'];
+												$svc_weekend = isset($limits['weekend_bonus']) ? $limits['weekend_bonus'] : 0;
+											?>
+												<div style="padding: 2px 0;">
+													<strong><?=htmlspecialchars($svc_name)?></strong>: 
+													<?=$svc_daily?>min
+													<?php if ($svc_weekend > 0): ?>
+														(+<?=$svc_weekend?>min weekend)
+													<?php endif; ?>
+												</div>
+											<?php endforeach; ?>
+										</small>
+									</div>
+								<?php else: ?>
+									<span class="text-muted">-</span>
+								<?php endif; ?>
+							</td>
 							<td>
 								<span class="badge"><?=$device_count?></span>
 								<a href="?act=devices&amp;id=<?=$idx?>" class="btn btn-xs btn-default" title="Manage Devices">
@@ -514,21 +597,127 @@ display_top_tabs($tab_array);
 				</div>
 			</div>
 			
-			<!-- Weekend Bonus -->
-			<div class="form-group">
-				<label class="col-sm-2 control-label">Weekend Bonus (minutes)</label>
-				<div class="col-sm-10">
-					<input type="number" name="weekend_bonus" class="form-control" style="max-width: 200px;"
-						value="<?=htmlspecialchars($edit_profile['weekend_bonus'] ?? '0')?>" 
-						min="0" placeholder="e.g., 60 (1 extra hour)" />
-					<span class="help-block">
-						Extra time on weekends (Friday-Sunday). Added to daily limit. 
-						Leave 0 for no bonus.
-					</span>
+		<!-- Weekend Bonus -->
+		<div class="form-group">
+			<label class="col-sm-2 control-label">Weekend Bonus (minutes)</label>
+			<div class="col-sm-10">
+				<input type="number" name="weekend_bonus" class="form-control" style="max-width: 200px;"
+					value="<?=htmlspecialchars($edit_profile['weekend_bonus'] ?? '0')?>" 
+					min="0" placeholder="e.g., 60 (1 extra hour)" />
+				<span class="help-block">
+					Extra time on weekends (Friday-Sunday). Added to daily limit. 
+					Leave 0 for no bonus.
+				</span>
+			</div>
+		</div>
+		
+		<!-- Service-Specific Limits -->
+		<?php if (!empty($service_aliases)): ?>
+		<div class="form-group">
+			<label class="col-sm-2 control-label">
+				<i class="fa fa-globe"></i> Service-Specific Limits
+			</label>
+			<div class="col-sm-10">
+				<div class="panel panel-default">
+					<div class="panel-heading">
+						<h3 class="panel-title">
+							<i class="fa fa-list"></i> Online Service Time Limits
+							<span class="badge badge-info"><?=count($service_aliases)?> Available</span>
+						</h3>
+					</div>
+					<div class="panel-body">
+						<p class="text-muted">
+							<i class="fa fa-info-circle"></i> 
+							Set different time limits for specific online services (YouTube, Facebook, Discord, etc.). 
+							These limits are <strong>separate</strong> from the general daily limit above.
+							Leave empty to not track these services separately.
+						</p>
+						
+						<div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+							<table class="table table-striped table-hover table-condensed">
+								<thead style="position: sticky; top: 0; background: #f5f5f5;">
+									<tr>
+										<th width="30%">Service</th>
+										<th width="30%">Daily Limit (min)</th>
+										<th width="30%">Weekend Bonus (min)</th>
+										<th width="10%">Action</th>
+									</tr>
+								</thead>
+								<tbody>
+									<?php 
+									$existing_limits = isset($edit_profile['service_limits']) ? $edit_profile['service_limits'] : array();
+									foreach ($service_aliases as $service): 
+										$alias_name = $service['alias_name'];
+										$service_name = $service['service_name'];
+										$current_daily = isset($existing_limits[$alias_name]['daily_limit']) ? $existing_limits[$alias_name]['daily_limit'] : '';
+										$current_weekend = isset($existing_limits[$alias_name]['weekend_bonus']) ? $existing_limits[$alias_name]['weekend_bonus'] : '';
+									?>
+									<tr>
+										<td>
+											<strong><?=htmlspecialchars($service_name)?></strong>
+											<br>
+											<small class="text-muted"><?=htmlspecialchars($alias_name)?></small>
+										</td>
+										<td>
+											<input type="number" 
+												name="service_daily_<?=htmlspecialchars($alias_name)?>" 
+												class="form-control input-sm" 
+												value="<?=htmlspecialchars($current_daily)?>"
+												min="0" 
+												placeholder="e.g., 30"
+												style="max-width: 150px;">
+										</td>
+										<td>
+											<input type="number" 
+												name="service_weekend_<?=htmlspecialchars($alias_name)?>" 
+												class="form-control input-sm" 
+												value="<?=htmlspecialchars($current_weekend)?>"
+												min="0" 
+												placeholder="e.g., 15"
+												style="max-width: 150px;">
+										</td>
+										<td>
+											<button type="button" class="btn btn-xs btn-default" 
+												onclick="document.getElementsByName('service_daily_<?=htmlspecialchars($alias_name)?>')[0].value=''; document.getElementsByName('service_weekend_<?=htmlspecialchars($alias_name)?>')[0].value='';"
+												title="Clear limits">
+												<i class="fa fa-times"></i>
+											</button>
+										</td>
+									</tr>
+									<?php endforeach; ?>
+								</tbody>
+							</table>
+						</div>
+						
+						<div class="alert alert-info" style="margin-top: 10px; margin-bottom: 0;">
+							<i class="fa fa-lightbulb-o"></i> <strong>How it works:</strong>
+							<ul style="margin-bottom: 0;">
+								<li><strong>General Limit:</strong> Controls total internet time (set above)</li>
+								<li><strong>Service Limits:</strong> Additional restrictions for specific services</li>
+								<li><strong>Example:</strong> 120min daily limit + 30min YouTube limit = child can use YouTube for max 30 minutes of their 120 minutes</li>
+								<li><strong>Note:</strong> Requires firewall rules using these aliases to enforce service-specific blocking</li>
+							</ul>
+						</div>
+					</div>
 				</div>
 			</div>
-			
-			<!-- Enabled -->
+		</div>
+		<?php else: ?>
+		<div class="form-group">
+			<label class="col-sm-2 control-label"></label>
+			<div class="col-sm-10">
+				<div class="alert alert-warning">
+					<i class="fa fa-exclamation-triangle"></i> 
+					<strong>No Service Aliases Found</strong><br>
+					Create service aliases (starting with "PC_Service_") from the 
+					<a href="/parental_control_services.php" class="alert-link">Online-Service</a> tab 
+					to enable per-service time limits.
+				</div>
+			</div>
+		</div>
+		<?php endif; ?>
+		
+		<!-- Enabled -->
 			<div class="form-group">
 				<label class="col-sm-2 control-label">Enabled</label>
 				<div class="col-sm-10">

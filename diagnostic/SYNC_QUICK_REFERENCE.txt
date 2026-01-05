@@ -1,0 +1,68 @@
+═══════════════════════════════════════════════════════════════════
+        PRODUCTION SYNC - QUICK REFERENCE CARD
+═══════════════════════════════════════════════════════════════════
+
+BASIC USAGE:
+───────────────────────────────────────────────────────────────────
+ssh admin@192.168.1.251
+./sync_production_data.sh
+
+SCHEDULE AUTOMATIC (Every 30 min):
+───────────────────────────────────────────────────────────────────
+crontab -e
+*/30 * * * * /root/sync_production_data.sh >> /var/log/kaci_sync_cron.log 2>&1
+
+VIEW LOGS:
+───────────────────────────────────────────────────────────────────
+tail -50 /var/log/kaci_sync.log          # Main log
+cat /tmp/kaci_sync_summary.txt            # Latest summary
+tail -50 /var/log/kaci_sync_cron.log      # Cron log
+
+WHAT GETS SYNCED:
+───────────────────────────────────────────────────────────────────
+✓ State file (usage, blocked devices)
+✓ Dated logs (last 7 days, 5000 lines each)
+  • parental_control-2026-01-05.jsonl
+  • parental_control-2026-01-04.jsonl (etc.)
+✓ Profiles, Devices, Schedules
+✓ Services (YouTube, Facebook, Discord)
+✓ Service Aliases (URL tables)
+✓ Alias IP lists (29K+ IPs)
+
+VERIFY AFTER SYNC:
+───────────────────────────────────────────────────────────────────
+ls -lh /var/db/parental_control_state.json
+ls -lh /var/log/parental_control-*.jsonl
+tail -50 /var/log/parental_control-$(date +%Y-%m-%d).jsonl
+tail -50 /var/log/parental_control-$(date +%Y-%m-%d).jsonl | jq .
+ls -lh /var/db/aliastables/PC_Service_*.txt
+
+TROUBLESHOOTING:
+───────────────────────────────────────────────────────────────────
+SSH fails:       ssh-copy-id admin@192.168.1.1
+Sync running:    rm -f /tmp/kaci_sync.lock
+Permission:      sudo ./sync_production_data.sh
+
+FIRST TIME SETUP:
+───────────────────────────────────────────────────────────────────
+Script will automatically:
+1. Generate SSH key
+2. Prompt for production password
+3. Setup passwordless SSH
+4. Test connection
+
+ARCHITECTURE:
+───────────────────────────────────────────────────────────────────
+Production (192.168.1.1) → Test (192.168.1.251)
+         [Direct SSH/SCP Transfer]
+
+FILES:
+───────────────────────────────────────────────────────────────────
+Script:  /root/sync_production_data.sh
+Docs:    diagnostic/PRODUCTION_SYNC_UPDATED.md
+Lock:    /tmp/kaci_sync.lock
+Log:     /var/log/kaci_sync.log
+Summary: /tmp/kaci_sync_summary.txt
+
+═══════════════════════════════════════════════════════════════════
+
