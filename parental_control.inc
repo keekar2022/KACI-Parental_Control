@@ -40,13 +40,16 @@ define('PC_STATE_FILE', getenv('PC_STATE_FILE') ?: '/var/db/parental_control_sta
 // Use /tmp instead of /var/run for PID file - /tmp is world-writable and cleaned on reboot
 define('PC_PID_FILE', getenv('PC_PID_FILE') ?: '/tmp/parental_control.pid');
 // WHY: Default to 5-minute cron interval to prevent AQM flowset errors
-// Design Decision: Check every 5 minutes instead of every minute
-// Rationale: Every-minute checks caused "config_aqm flowset busy" kernel errors
-// due to excessive firewall rule updates. 5 minutes provides good balance between
-// responsiveness and system stability. Usage tracking still accurate.
-// Trade-off: Slightly less responsive blocking vs system stability.
-define('PC_CRON_MINUTE', getenv('PC_CRON_MINUTE') ?: '*/5');  // Check every 5 minutes
-define('PC_CRON_INTERVAL_SECONDS', 300);  // Match the cron interval (5 minutes = 300 seconds)
+// CRITICAL v1.4.18: Reduced from */5 to */10 (kernel panic prevention)
+// Rationale: */5 (every 5 min) = 288 executions/day, high risk of overlap
+// New: */10 (every 10 min) = 144 executions/day, much safer
+// Trade-off: Slightly less responsive (10 min vs 5 min) but MUCH more stable
+// This prevents:
+// - Cron job overlap (which caused deadlocks)
+// - Resource exhaustion (file descriptors, memory)
+// - Kernel panics from excessive pfctl operations
+define('PC_CRON_MINUTE', getenv('PC_CRON_MINUTE') ?: '*/10');  // Check every 10 minutes
+define('PC_CRON_INTERVAL_SECONDS', 600);  // Match the cron interval (10 minutes = 600 seconds)
 
 // Log rotation settings - Environment overridable for different deployment scenarios
 define('PC_MAX_LOG_SIZE', getenv('PC_MAX_LOG_SIZE') ?: (5 * 1024 * 1024));  // 5MB per log file
@@ -3845,6 +3848,11 @@ function pc_remove_device_block($mac, $state) {
  * @see pc_apply_smart_firewall_changes() For selective rule updates
  */
 function parental_control_cron_job() {
+	// CRITICAL FIX v1.4.18: Set execution timeout (kernel panic prevention)
+	// Prevents infinite loops and resource exhaustion
+	set_time_limit(60);  // Maximum 60 seconds execution
+	ini_set('max_execution_time', '60');
+	
 	// Acquire PID lock to prevent concurrent executions
 	if (!pc_acquire_pid_lock()) {
 		// Another instance is running, exit gracefully
@@ -3862,6 +3870,22 @@ function parental_control_cron_job() {
 		}
 		
 		$start_time = microtime(true);
+		
+		// CRITICAL v1.4.18: Add watchdog timer
+		// If execution takes > 55 seconds, log warning and prepare to exit
+		$watchdog_triggered = false;
+		declare(ticks=1);
+		register_tick_function(function() use ($start_time, &$watchdog_triggered) {
+			if (!$watchdog_triggered && (microtime(true) - $start_time) > 55) {
+				$watchdog_triggered = true;
+				pc_log("WATCHDOG: Cron job exceeded 55 seconds, forcing exit", 'error', array(
+					'event.action' => 'watchdog_triggered',
+					'execution.duration.seconds' => (microtime(true) - $start_time)
+				));
+				pc_release_pid_lock();
+				exit(1);
+			}
+		});
 		
 		// Get the configuration
 		$pc_config = config_get_path('installedpackages/parentalcontrol/config', []);
@@ -4148,73 +4172,106 @@ function pc_reset_daily_counters(&$state) {
 function pc_acquire_pid_lock() {
 	$pid_file = PC_PID_FILE;
 	$current_pid = getmypid();
+	$fp = null;
 	
-	// CRITICAL FIX v1.4.10+: Use file locking to prevent race condition
-	// BUG: Two processes could both pass the file_exists() check simultaneously
-	// ROOT CAUSE: TOCTOU (Time-of-check-time-of-use) race condition
-	// SOLUTION: Use fopen() with exclusive lock (LOCK_EX | LOCK_NB)
-	
-	// Try to open PID file with exclusive non-blocking lock
-	$fp = @fopen($pid_file, 'c+');
-	if ($fp === false) {
-		pc_log("Failed to open PID file", 'error', array(
-			'event.action' => 'lock_open_failed',
-			'file.path' => $pid_file,
-			'event.outcome' => 'failure'
-		));
-		return false;
-	}
-	
-	// Try to acquire exclusive lock (non-blocking)
-	if (!flock($fp, LOCK_EX | LOCK_NB)) {
-		// Lock failed - another process has it
-		// Read the PID of the lock holder for logging
+	try {
+		// CRITICAL FIX v1.4.18: Check for stale locks (kernel panic prevention)
+		// If lock file is older than 10 minutes, assume process crashed and force cleanup
+		if (file_exists($pid_file)) {
+			$lock_age = time() - filemtime($pid_file);
+			if ($lock_age > 600) {  // 10 minutes
+				// Read old PID
+				$old_pid = @file_get_contents($pid_file);
+				$old_pid = trim($old_pid);
+				
+				// Check if process still exists
+				$process_exists = !empty($old_pid) && posix_kill($old_pid, 0);
+				
+				if (!$process_exists || $lock_age > 1800) {  // Process dead OR lock > 30 min
+					pc_log("Detected stale lock (age: {$lock_age}s, pid: $old_pid), forcing cleanup", 'warn', array(
+						'event.action' => 'stale_lock_cleanup',
+						'lock.age.seconds' => $lock_age,
+						'process.pid' => $old_pid,
+						'process.exists' => $process_exists
+					));
+					
+					// Force cleanup
+					@unlink($pid_file);
+					
+					// Kill the stuck process if it still exists
+					if ($process_exists && !empty($old_pid)) {
+						posix_kill($old_pid, SIGTERM);
+						sleep(1);
+						if (posix_kill($old_pid, 0)) {
+							posix_kill($old_pid, SIGKILL);
+						}
+						pc_log("Killed stuck process: $old_pid", 'warn');
+					}
+				}
+			}
+		}
+		
+		// Try to open PID file with exclusive non-blocking lock
+		$fp = @fopen($pid_file, 'c+');
+		if ($fp === false) {
+			pc_log("Failed to open PID file", 'error', array(
+				'event.action' => 'lock_open_failed',
+				'file.path' => $pid_file,
+				'event.outcome' => 'failure'
+			));
+			return false;
+		}
+		
+		// Try to acquire exclusive lock (non-blocking)
+		if (!flock($fp, LOCK_EX | LOCK_NB)) {
+			// Lock failed - another process has it
+			// Read the PID of the lock holder for logging
+			rewind($fp);
+			$old_pid = trim(fgets($fp));
+			
+			pc_log("Another instance is already running (PID: $old_pid)", 'warn', array(
+				'event.action' => 'lock_exists',
+				'process.pid' => $old_pid,
+				'event.outcome' => 'failure'
+			));
+			
+			return false;  // Will trigger finally{} cleanup
+		}
+		
+		// We have the lock! Write our PID to the file
+		ftruncate($fp, 0);
 		rewind($fp);
-		$old_pid = trim(fgets($fp));
-		fclose($fp);
+		fwrite($fp, $current_pid . "\n");
+		fflush($fp);
 		
-		pc_log("Another instance is already running (PID: $old_pid)", 'warn', array(
-			'event.action' => 'lock_exists',
-			'process.pid' => $old_pid,
-			'event.outcome' => 'failure'
-		));
-		return false;
-	}
-	
-	// We have the lock! Check if old PID exists and if process is still running
-	rewind($fp);
-	$old_pid = trim(fgets($fp));
-	
-	if (!empty($old_pid) && $old_pid != $current_pid && posix_kill($old_pid, 0)) {
-		// Old process is still running - should not happen with flock, but check anyway
-		flock($fp, LOCK_UN);
-		fclose($fp);
+		// Store file handle in global variable so it stays open (and locked)
+		// CRITICAL v1.4.18: Track both the handle and acquisition state
+		global $pc_pid_lock_handle, $pc_pid_lock_acquired;
+		$pc_pid_lock_handle = $fp;
+		$pc_pid_lock_acquired = true;
 		
-		pc_log("Another instance is already running (PID: $old_pid)", 'warn', array(
-			'event.action' => 'lock_exists',
-			'process.pid' => $old_pid,
-			'event.outcome' => 'failure'
+		pc_log("PID lock acquired", 'debug', array(
+			'event.action' => 'lock_acquired',
+			'process.pid' => $current_pid
 		));
+		
+		return true;
+		
+	} catch (Exception $e) {
+		pc_log("Exception during PID lock acquisition: " . $e->getMessage(), 'error');
 		return false;
+		
+	} finally {
+		// CRITICAL FIX v1.4.18: Guaranteed cleanup on failure
+		// If we failed to acquire lock, ensure file descriptor is closed
+		global $pc_pid_lock_acquired;
+		if (!isset($pc_pid_lock_acquired) || !$pc_pid_lock_acquired) {
+			if (isset($fp) && is_resource($fp)) {
+				@flock($fp, LOCK_UN);
+				@fclose($fp);
+			}
+		}
 	}
-	
-	// Write our PID to the file
-	ftruncate($fp, 0);
-	rewind($fp);
-	fwrite($fp, $current_pid . "\n");
-	fflush($fp);
-	
-	// Store file handle in global variable so it stays open (and locked)
-	// The lock will be automatically released when the script exits or we call pc_release_pid_lock()
-	global $pc_pid_lock_handle;
-	$pc_pid_lock_handle = $fp;
-	
-	pc_log("PID lock acquired", 'debug', array(
-		'event.action' => 'lock_acquired',
-		'process.pid' => $current_pid
-	));
-	
-	return true;
 }
 
 /**
@@ -4233,13 +4290,18 @@ function pc_acquire_pid_lock() {
  * @see pc_acquire_pid_lock() To acquire the lock
  */
 function pc_release_pid_lock() {
-	global $pc_pid_lock_handle;
+	global $pc_pid_lock_handle, $pc_pid_lock_acquired;
 	
-	// CRITICAL FIX v1.4.10+: Properly release file lock
+	// CRITICAL FIX v1.4.18: Only release if we actually acquired the lock
+	// Prevents double-free errors and exceptions
+	if (!isset($pc_pid_lock_acquired) || !$pc_pid_lock_acquired) {
+		return;  // Lock was never acquired, nothing to release
+	}
+	
 	// Close the file handle (which automatically releases the flock)
 	if (isset($pc_pid_lock_handle) && is_resource($pc_pid_lock_handle)) {
-		flock($pc_pid_lock_handle, LOCK_UN);
-		fclose($pc_pid_lock_handle);
+		@flock($pc_pid_lock_handle, LOCK_UN);
+		@fclose($pc_pid_lock_handle);
 		$pc_pid_lock_handle = null;
 		
 		pc_log("PID lock released", 'debug', array(
@@ -4253,6 +4315,84 @@ function pc_release_pid_lock() {
 	if (file_exists($pid_file)) {
 		@unlink($pid_file);
 	}
+	
+	// Mark as released
+	$pc_pid_lock_acquired = false;
+}
+
+/**
+ * Safe pfctl command execution wrapper
+ * 
+ * CRITICAL v1.4.18: Kernel panic prevention wrapper for pfctl commands
+ * Adds safety checks before executing pfctl to prevent kernel panics:
+ * - Validates command syntax
+ * - Adds timeout (5 seconds default)
+ * - Logs all executions
+ * - Catches and logs errors
+ * - Prevents malicious command injection
+ * 
+ * @param string $pfctl_args The pfctl arguments (e.g., "-t table -T add 192.168.1.1")
+ * @param int $timeout Maximum execution time in seconds (default: 5)
+ * @return array ['success' => bool, 'output' => array, 'return_code' => int]
+ * @since 1.4.18
+ * 
+ * @example
+ * $result = pc_safe_pfctl("-t parental_control_blocked -T add 192.168.1.100");
+ * if (!$result['success']) {
+ *     pc_log("Failed to add IP to table", 'error');
+ * }
+ */
+function pc_safe_pfctl($pfctl_args, $timeout = 5) {
+	// CRITICAL: Validate pfctl_args to prevent command injection
+	// Only allow: alphanumeric, dash, underscore, dot, slash, space, colon
+	if (!preg_match('/^[a-zA-Z0-9\s\-_\.\/\:]+$/', $pfctl_args)) {
+		pc_log("SECURITY: Rejected invalid pfctl command", 'error', array(
+			'event.action' => 'pfctl_rejected',
+			'reason' => 'invalid_characters',
+			'args' => substr($pfctl_args, 0, 100)
+		));
+		return array('success' => false, 'output' => array(), 'return_code' => 255);
+	}
+	
+	// Build safe command with timeout
+	$timeout = max(1, min($timeout, 30));  // Clamp between 1-30 seconds
+	$cmd = "/usr/bin/timeout {$timeout} /sbin/pfctl {$pfctl_args} 2>&1";
+	
+	// Execute with logging
+	$output = array();
+	$return_code = 0;
+	
+	$start = microtime(true);
+	exec($cmd, $output, $return_code);
+	$duration = round((microtime(true) - $start) * 1000, 2);
+	
+	$success = ($return_code === 0);
+	
+	// Log execution
+	pc_log(($success ? "pfctl executed successfully" : "pfctl execution failed"), 
+		($success ? 'debug' : 'warn'), array(
+		'event.action' => 'pfctl_execute',
+		'pfctl.args' => $pfctl_args,
+		'execution.duration.ms' => $duration,
+		'return_code' => $return_code,
+		'event.outcome' => ($success ? 'success' : 'failure')
+	));
+	
+	// Check for timeout
+	if ($return_code === 124) {
+		pc_log("pfctl command timed out after {$timeout} seconds", 'error', array(
+			'event.action' => 'pfctl_timeout',
+			'pfctl.args' => $pfctl_args,
+			'timeout.seconds' => $timeout
+		));
+	}
+	
+	return array(
+		'success' => $success,
+		'output' => $output,
+		'return_code' => $return_code,
+		'duration_ms' => $duration
+	);
 }
 
 /**

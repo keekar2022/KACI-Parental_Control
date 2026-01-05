@@ -1,4 +1,4 @@
-VERSION=1.4.17
+VERSION=1.4.18
 BUILD_DATE=2026-01-06
-RELEASE_TYPE=bugfix
-STATUS=production-ready
+RELEASE_TYPE=critical-hotfix
+STATUS=emergency-release
