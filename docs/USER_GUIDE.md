@@ -18,7 +18,7 @@
 # Configuration Guide
 ## KACI Parental Control - Advanced Configuration Options
 
-**Version:** 1.4.2  
+**Version:** 1.4.10+ (Development)  
 **Author:** Mukesh Kesharwani  
 **Last Updated:** January 1, 2026
 
@@ -597,7 +597,7 @@ vi /var/db/parental_control_state.json
 # Troubleshooting Guide
 ## KACI Parental Control - Common Issues & Solutions
 
-**Version:** 1.4.2  
+**Version:** 1.4.10+ (Development)  
 **Author:** Mukesh Kesharwani  
 **Last Updated:** January 1, 2026
 
