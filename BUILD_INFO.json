@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "1.4.11",
-    "build_date": "2026-01-06T06:00:00Z",
+    "version": "1.4.12",
+    "build_date": "2026-01-06T07:00:00Z",
     "git_commit": "pending",
     "git_branch": "develop",
     "built_by": "development",
@@ -88,6 +88,34 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.4.12",
+      "date": "2026-01-06",
+      "type": "hotfix",
+      "changes": [
+        "HOTFIX: Removed incorrect domain warning from URL verification",
+        "BUG: v1.4.11 showed misleading warning about domain lists",
+        "BUG: Warning claimed 'pfSense can ONLY load IPs, not domain names'",
+        "USER REPORT: Discord domain list works perfectly, warning was wrong",
+        "ROOT CAUSE: Incorrect understanding of pfSense URL alias behavior",
+        "TRUTH: pfSense URL aliases AUTOMATICALLY resolve domains to IPs",
+        "TRUTH: Both domain lists and IP lists work correctly in pfSense",
+        "EVIDENCE: User's PC_Service_Discord alias populated with IPs from domain list",
+        "SOLUTION: Removed misleading warning message",
+        "SOLUTION: Kept domain detection for telemetry only (no user warnings)",
+        "SOLUTION: Simplified content analysis (less aggressive)",
+        "RESULT: Users can add domain lists without confusing warnings",
+        "RESULT: Both IP lists and domain lists work correctly",
+        "TECHNICAL:",
+        "  - Removed domain_warning generation",
+        "  - Removed warning display in verify_fetch action",
+        "  - Updated telemetry to use domain_detected instead of domain_warning",
+        "  - Simplified content detection (5 lines instead of 10)",
+        "APOLOGY: v1.4.11 warning was based on incorrect assumptions",
+        "LESSON: pfSense is smarter than assumed - resolves domains automatically",
+        "VERSION: 1.4.11 → 1.4.12"
+      ]
+    },
     {
       "version": "1.4.11",
       "date": "2026-01-06",

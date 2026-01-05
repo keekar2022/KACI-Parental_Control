@@ -438,9 +438,7 @@ function pc_verify_service_urls($service_name, $service_config) {
 			continue;
 		}
 		
-		// CRITICAL FIX v1.4.10+: Check URL content type (IPs vs Domains)
-		// BUG: Users adding domain lists that can't be loaded into pfSense tables
-		// SOLUTION: Download sample content and detect if it contains domains
+		// Verify URL is accessible
 		$ch = curl_init();
 		curl_setopt($ch, CURLOPT_URL, $url);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -448,6 +446,7 @@ function pc_verify_service_urls($service_name, $service_config) {
 		curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
 		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 		curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
+		curl_setopt($ch, CURLOPT_NOBODY, false); // Get content for basic analysis
 		
 		$content = curl_exec($ch);
 		$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -457,43 +456,30 @@ function pc_verify_service_urls($service_name, $service_config) {
 		// Consider 2xx and 3xx as success
 		$is_active = ($http_code >= 200 && $http_code < 400);
 		$content_type = 'unknown';
-		$has_domains = false;
 		
 		if ($is_active && !empty($content)) {
-			// Check first 10 non-empty, non-comment lines
-			$lines = explode("\n", $content);
-			$sample_lines = 0;
-			$ip_count = 0;
-			$domain_count = 0;
+			// Quick content type detection (first 5 lines for telemetry only)
+			$lines = array_slice(explode("\n", $content), 0, 5);
+			$has_ip = false;
+			$has_domain = false;
 			
 			foreach ($lines as $line) {
 				$line = trim($line);
-				if (empty($line) || strpos($line, '#') === 0) {
-					continue;
-				}
+				if (empty($line) || strpos($line, '#') === 0) continue;
 				
-				// Check if line contains an IP address (simple check)
-				if (preg_match('/^\d+\.\d+\.\d+\.\d+/', $line) || preg_match('/^[0-9a-f:]+:[0-9a-f:]+/i', $line)) {
-					$ip_count++;
-				}
-				// Check if line contains a domain name
-				elseif (preg_match('/^[a-z0-9]([a-z0-9\-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]*[a-z0-9])?)+$/i', $line)) {
-					$domain_count++;
-					$has_domains = true;
-				}
-				
-				$sample_lines++;
-				if ($sample_lines >= 10) {
-					break;
+				if (preg_match('/^\d+\.\d+\.\d+\.\d+/', $line)) {
+					$has_ip = true;
+				} elseif (preg_match('/^[a-z0-9.-]+\.[a-z]{2,}$/i', $line)) {
+					$has_domain = true;
 				}
 			}
 			
-			// Determine content type
-			if ($domain_count > 0 && $ip_count == 0) {
+			// Simple classification
+			if ($has_domain && !$has_ip) {
 				$content_type = 'domains';
-			} elseif ($ip_count > 0 && $domain_count == 0) {
+			} elseif ($has_ip && !$has_domain) {
 				$content_type = 'ips';
-			} elseif ($ip_count > 0 && $domain_count > 0) {
+			} elseif ($has_ip && $has_domain) {
 				$content_type = 'mixed';
 			}
 			
@@ -508,7 +494,7 @@ function pc_verify_service_urls($service_name, $service_config) {
 			'last_tested' => time(),
 			'http_code' => $http_code,
 			'content_type' => $content_type,
-			'has_domains' => $has_domains
+			'has_domains' => ($content_type === 'domains' || $content_type === 'mixed')
 		);
 	}
 	
@@ -524,23 +510,28 @@ function pc_verify_service_urls($service_name, $service_config) {
 		$result['error'] = implode('; ', array_slice($errors, 0, 3)); // Show first 3 errors
 	}
 	
-	// CRITICAL FIX v1.4.10+: Add warning if domain lists detected
-	// BUG: Users adding domain lists that can't be loaded into pfSense IP tables
-	// SOLUTION: Warn users about incompatible content types
+	// INFO: Detect domain lists vs IP lists for informational purposes
+	// NOTE: pfSense URL aliases CAN handle domain lists - they resolve domains to IPs automatically
+	// This detection is kept for future analytics but warnings removed (pfSense handles both types)
 	$domain_urls = array();
+	$ip_urls = array();
 	foreach ($url_statuses as $idx => $status) {
 		if (!empty($status['has_domains'])) {
 			$domain_urls[] = $urls[$idx];
 		}
+		if (!empty($status['content_type']) && $status['content_type'] === 'ips') {
+			$ip_urls[] = $urls[$idx];
+		}
 	}
 	
+	// Store detection results for telemetry (no user-facing warnings)
 	if (!empty($domain_urls)) {
-		$warning = "⚠️ WARNING: " . count($domain_urls) . " URL(s) contain DOMAIN NAMES instead of IP addresses. ";
-		$warning .= "pfSense firewall tables can ONLY load IP addresses, not domain names. ";
-		$warning .= "These URLs will NOT work for blocking. Please use IP-based lists instead. ";
-		$warning .= "For domain-based blocking, use pfSense's DNS Resolver (Unbound) with domain blocking.";
-		$result['domain_warning'] = $warning;
-		$result['domain_urls'] = $domain_urls;
+		$result['domain_detected'] = true;
+		$result['domain_count'] = count($domain_urls);
+	}
+	if (!empty($ip_urls)) {
+		$result['ip_detected'] = true;
+		$result['ip_count'] = count($ip_urls);
 	}
 	
 	return $result;
@@ -766,7 +757,8 @@ if ($_POST) {
 						'total_urls' => count($found['service']['urls']),
 						'verified_urls' => $result['verified_count'],
 						'status_results' => $result['statuses'],
-						'has_domain_warning' => isset($result['domain_warning'])
+						'has_domains' => isset($result['domain_detected']) ? $result['domain_detected'] : false,
+						'has_ips' => isset($result['ip_detected']) ? $result['ip_detected'] : false
 					));
 					
 					// Update individual URL statuses in memory
@@ -781,13 +773,8 @@ if ($_POST) {
 					
 					$savemsg = "Successfully verified {$result['verified_count']} of {$result['total_count']} URLs for '{$service_name}'. Status shown for this session only.";
 					
-					// CRITICAL FIX v1.4.10+: Display domain warning if detected
-					if (isset($result['domain_warning'])) {
-						$input_errors[] = $result['domain_warning'];
-						if (isset($result['domain_urls'])) {
-							$input_errors[] = "Domain-based URLs detected: " . implode(', ', array_slice($result['domain_urls'], 0, 3)) . (count($result['domain_urls']) > 3 ? '...' : '');
-						}
-					}
+					// INFO: Domain detection kept for telemetry only (no user warnings)
+					// pfSense URL aliases handle both domain lists and IP lists correctly
 				} else {
 					$input_errors[] = "Failed to verify '{$service_name}': {$result['error']}";
 				}
