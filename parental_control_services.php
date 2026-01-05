@@ -16,6 +16,12 @@
 require_once("guiconfig.inc");
 require_once("/usr/local/pkg/parental_control.inc");
 
+// CRITICAL FIX v1.4.10+: Start PHP session for persistent URL storage
+// BUG: Session URLs were lost between add_url and verify_fetch actions
+// ROOT CAUSE: $services_config reloaded from config on each request, losing session-based URLs
+// SOLUTION: Store temporary URLs in $_SESSION to persist across POST requests
+session_start();
+
 // Safety check: Ensure config is valid
 if (!is_array($config) || $config === -1) {
 	require_once("config.inc");
@@ -432,23 +438,65 @@ function pc_verify_service_urls($service_name, $service_config) {
 			continue;
 		}
 		
-		// Try to fetch the URL with a short timeout
+		// CRITICAL FIX v1.4.10+: Check URL content type (IPs vs Domains)
+		// BUG: Users adding domain lists that can't be loaded into pfSense tables
+		// SOLUTION: Download sample content and detect if it contains domains
 		$ch = curl_init();
 		curl_setopt($ch, CURLOPT_URL, $url);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_TIMEOUT, 5);
 		curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
 		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-		curl_setopt($ch, CURLOPT_NOBODY, true); // HEAD request only
+		curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
 		
-		$result = curl_exec($ch);
+		$content = curl_exec($ch);
 		$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 		$curl_error = curl_error($ch);
 		curl_close($ch);
 		
 		// Consider 2xx and 3xx as success
 		$is_active = ($http_code >= 200 && $http_code < 400);
-		if ($is_active) {
+		$content_type = 'unknown';
+		$has_domains = false;
+		
+		if ($is_active && !empty($content)) {
+			// Check first 10 non-empty, non-comment lines
+			$lines = explode("\n", $content);
+			$sample_lines = 0;
+			$ip_count = 0;
+			$domain_count = 0;
+			
+			foreach ($lines as $line) {
+				$line = trim($line);
+				if (empty($line) || strpos($line, '#') === 0) {
+					continue;
+				}
+				
+				// Check if line contains an IP address (simple check)
+				if (preg_match('/^\d+\.\d+\.\d+\.\d+/', $line) || preg_match('/^[0-9a-f:]+:[0-9a-f:]+/i', $line)) {
+					$ip_count++;
+				}
+				// Check if line contains a domain name
+				elseif (preg_match('/^[a-z0-9]([a-z0-9\-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]*[a-z0-9])?)+$/i', $line)) {
+					$domain_count++;
+					$has_domains = true;
+				}
+				
+				$sample_lines++;
+				if ($sample_lines >= 10) {
+					break;
+				}
+			}
+			
+			// Determine content type
+			if ($domain_count > 0 && $ip_count == 0) {
+				$content_type = 'domains';
+			} elseif ($ip_count > 0 && $domain_count == 0) {
+				$content_type = 'ips';
+			} elseif ($ip_count > 0 && $domain_count > 0) {
+				$content_type = 'mixed';
+			}
+			
 			$verified_count++;
 		} else {
 			$errors[] = "{$url}: HTTP {$http_code}";
@@ -458,7 +506,9 @@ function pc_verify_service_urls($service_name, $service_config) {
 		$url_statuses[$idx] = array(
 			'active' => $is_active,
 			'last_tested' => time(),
-			'http_code' => $http_code
+			'http_code' => $http_code,
+			'content_type' => $content_type,
+			'has_domains' => $has_domains
 		);
 	}
 	
@@ -472,6 +522,25 @@ function pc_verify_service_urls($service_name, $service_config) {
 	
 	if (!$success && !empty($errors)) {
 		$result['error'] = implode('; ', array_slice($errors, 0, 3)); // Show first 3 errors
+	}
+	
+	// CRITICAL FIX v1.4.10+: Add warning if domain lists detected
+	// BUG: Users adding domain lists that can't be loaded into pfSense IP tables
+	// SOLUTION: Warn users about incompatible content types
+	$domain_urls = array();
+	foreach ($url_statuses as $idx => $status) {
+		if (!empty($status['has_domains'])) {
+			$domain_urls[] = $urls[$idx];
+		}
+	}
+	
+	if (!empty($domain_urls)) {
+		$warning = "⚠️ WARNING: " . count($domain_urls) . " URL(s) contain DOMAIN NAMES instead of IP addresses. ";
+		$warning .= "pfSense firewall tables can ONLY load IP addresses, not domain names. ";
+		$warning .= "These URLs will NOT work for blocking. Please use IP-based lists instead. ";
+		$warning .= "For domain-based blocking, use pfSense's DNS Resolver (Unbound) with domain blocking.";
+		$result['domain_warning'] = $warning;
+		$result['domain_urls'] = $domain_urls;
 	}
 	
 	return $result;
@@ -547,6 +616,25 @@ if (empty($services_config)) {
 	$services_config = $default_services;
 }
 
+// CRITICAL FIX v1.4.10+: Merge session URLs with config URLs
+// BUG: Temporary URLs added via add_url were lost on page reload
+// ROOT CAUSE: $services_config reloaded fresh from config, losing session URLs
+// SOLUTION: Restore session URLs after loading config
+if (!isset($_SESSION['pc_service_urls'])) {
+	$_SESSION['pc_service_urls'] = array();
+}
+
+// Merge session URLs into loaded services
+foreach ($services_config as $idx => $service) {
+	$service_name = $service['name'];
+	if (isset($_SESSION['pc_service_urls'][$service_name])) {
+		// Merge session URLs with config URLs
+		$config_urls = isset($service['urls']) ? (array)$service['urls'] : array();
+		$session_urls = $_SESSION['pc_service_urls'][$service_name];
+		$services_config[$idx]['urls'] = array_unique(array_merge($config_urls, $session_urls));
+	}
+}
+
 // Handle form submissions
 if ($_POST) {
 	if (isset($_POST['action'])) {
@@ -590,17 +678,30 @@ if ($_POST) {
 			if (!empty($new_url)) {
 				$found = pc_find_service_by_name($services_config, $service_name);
 				if ($found !== null) {
-					if (!isset($found['service']['urls'])) {
-						$found['service']['urls'] = array();
+					// CRITICAL FIX v1.4.10+: Store URL in PHP session for persistence
+					// Initialize session storage for this service
+					if (!isset($_SESSION['pc_service_urls'][$service_name])) {
+						$_SESSION['pc_service_urls'][$service_name] = array();
 					}
-					if (!in_array($new_url, $found['service']['urls'])) {
-						$found['service']['urls'][] = $new_url;
-						$services_config[$found['index']] = $found['service'];
+					
+					// Check if URL already exists (in config or session)
+					$existing_urls = isset($found['service']['urls']) ? (array)$found['service']['urls'] : array();
+					$all_urls = array_merge($existing_urls, $_SESSION['pc_service_urls'][$service_name]);
+					
+					if (!in_array($new_url, $all_urls)) {
+						// Add to session storage
+						$_SESSION['pc_service_urls'][$service_name][] = $new_url;
+						
+						// Also update in-memory config for current request
+						if (!isset($services_config[$found['index']]['urls'])) {
+							$services_config[$found['index']]['urls'] = array();
+						}
+						$services_config[$found['index']]['urls'][] = $new_url;
 						
 						// NOTE: Not saving to config to avoid corruption
 						// URLs are session-based until alias is created
-						$savemsg = "URL added to '{$service_name}' for this session. Click [Monitor&Block] to make it permanent.";
-						error_log("Added URL to {$service_name} (session only): {$new_url}");
+						$savemsg = "URL added to '{$service_name}' for this session. Click [Verify] to check, then [Monitor&Block] to make it permanent.";
+						error_log("Added URL to {$service_name} (session storage): {$new_url}");
 					} else {
 						$savemsg = "URL already exists in '{$service_name}'.";
 					}
@@ -614,6 +715,15 @@ if ($_POST) {
 			$found = pc_find_service_by_name($services_config, $service_name);
 			if ($found !== null && isset($found['service']['urls'][$url_index])) {
 				$deleted_url = $found['service']['urls'][$url_index];
+				
+				// CRITICAL FIX v1.4.10+: Also remove from session storage
+				if (isset($_SESSION['pc_service_urls'][$service_name])) {
+					$key = array_search($deleted_url, $_SESSION['pc_service_urls'][$service_name]);
+					if ($key !== false) {
+						unset($_SESSION['pc_service_urls'][$service_name][$key]);
+						$_SESSION['pc_service_urls'][$service_name] = array_values($_SESSION['pc_service_urls'][$service_name]); // Reindex
+					}
+				}
 				
 				// Remove the URL
 				array_splice($found['service']['urls'], $url_index, 1);
@@ -655,7 +765,8 @@ if ($_POST) {
 						'service' => $service_name,
 						'total_urls' => count($found['service']['urls']),
 						'verified_urls' => $result['verified_count'],
-						'status_results' => $result['statuses']
+						'status_results' => $result['statuses'],
+						'has_domain_warning' => isset($result['domain_warning'])
 					));
 					
 					// Update individual URL statuses in memory
@@ -669,6 +780,14 @@ if ($_POST) {
 					// safe_write_config("Verified URLs for service: {$service_name}");
 					
 					$savemsg = "Successfully verified {$result['verified_count']} of {$result['total_count']} URLs for '{$service_name}'. Status shown for this session only.";
+					
+					// CRITICAL FIX v1.4.10+: Display domain warning if detected
+					if (isset($result['domain_warning'])) {
+						$input_errors[] = $result['domain_warning'];
+						if (isset($result['domain_urls'])) {
+							$input_errors[] = "Domain-based URLs detected: " . implode(', ', array_slice($result['domain_urls'], 0, 3)) . (count($result['domain_urls']) > 3 ? '...' : '');
+						}
+					}
 				} else {
 					$input_errors[] = "Failed to verify '{$service_name}': {$result['error']}";
 				}
@@ -736,6 +855,33 @@ if ($_POST) {
 						'url_count' => count($service['urls']),
 						'alias_name' => $alias_name
 					));
+					
+					// CRITICAL FIX v1.4.10+: Save session URLs to config and clear session
+					// BUG: Session URLs were not persisted to config after alias creation
+					// SOLUTION: Save URLs to config and clear session after successful alias creation
+					if (isset($_SESSION['pc_service_urls'][$service_name]) && !empty($_SESSION['pc_service_urls'][$service_name])) {
+						// Update config with session URLs
+						$config_services = config_get_path('installedpackages/parentalcontrolservices/config', array());
+						$config_services = convert_to_numeric_array($config_services);
+						
+						foreach ($config_services as $idx => $cfg_service) {
+							if ($cfg_service['name'] === $service_name) {
+								// Merge session URLs with existing config URLs
+								$existing_urls = isset($cfg_service['urls']) ? (array)$cfg_service['urls'] : array();
+								$all_urls = array_unique(array_merge($existing_urls, $_SESSION['pc_service_urls'][$service_name]));
+								$config_services[$idx]['urls'] = $all_urls;
+								break;
+							}
+						}
+						
+						// Save updated config
+						config_set_path('installedpackages/parentalcontrolservices/config', $config_services);
+						write_config("Saved session URLs for service: {$service_name}");
+						error_log("Saved " . count($_SESSION['pc_service_urls'][$service_name]) . " session URL(s) to config for: {$service_name}");
+						
+						// Clear session URLs for this service (they're now in config)
+						unset($_SESSION['pc_service_urls'][$service_name]);
+					}
 				} catch (Exception $e) {
 					$input_errors[] = "Failed to save URL alias for '{$service_name}': " . $e->getMessage();
 					error_log("Failed to write config for alias: " . $e->getMessage());
