@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "1.4.12",
-    "build_date": "2026-01-06T07:00:00Z",
+    "version": "1.4.13",
+    "build_date": "2026-01-06T08:00:00Z",
     "git_commit": "pending",
     "git_branch": "develop",
     "built_by": "development",
@@ -88,6 +88,34 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.4.13",
+      "date": "2026-01-06",
+      "type": "enhancement",
+      "changes": [
+        "ENHANCEMENT: Simplified firewall rule direction to 'any' for all rules",
+        "USER SUGGESTION: Why not use direction 'any' instead of 'in'/'out'?",
+        "OBSERVATION: Two rules were 'inbound', rest should be 'outbound' - confusing!",
+        "PROBLEM: Having to think about which rules need 'in' vs 'out' direction",
+        "PROBLEM: Risk of getting direction wrong and rules not working",
+        "SOLUTION: Changed ALL rules to use direction 'any' (both directions)",
+        "BENEFIT 1: Simpler - no need to think about traffic direction",
+        "BENEFIT 2: More reliable - catches traffic in both directions",
+        "BENEFIT 3: Consistent - all rules behave the same way",
+        "BENEFIT 4: Foolproof - eliminates direction-related bugs",
+        "RULES UPDATED:",
+        "  - Dynamic Blocking rule: 'in' → 'any'",
+        "  - Service Block rules: 'in' → 'any'",
+        "  - Service Monitor rules: 'in' → 'any'",
+        "  - DNS Allow rule: (no direction) → 'any'",
+        "  - pfSense Access rule: (no direction) → 'any'",
+        "RESULT: All floating rules now use direction 'any'",
+        "RESULT: No more confusion about inbound vs outbound",
+        "RESULT: Rules work correctly regardless of traffic direction",
+        "TECHNICAL: Updated 5 rule creation functions in parental_control.inc",
+        "VERSION: 1.4.12 → 1.4.13"
+      ]
+    },
     {
       "version": "1.4.12",
       "date": "2026-01-06",

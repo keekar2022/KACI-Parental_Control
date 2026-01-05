@@ -2671,7 +2671,7 @@ function pc_create_blocking_rule() {
 		'type' => 'block',
 		'interface' => 'lan',  // Apply to LAN interface
 		'ipprotocol' => 'inet',
-		'direction' => 'in',
+		'direction' => 'any',  // Both directions - simpler and more reliable
 		'floating' => 'yes',
 		'quick' => 'yes',  // Apply immediately on match
 		'source' => array(
@@ -2798,7 +2798,7 @@ function pc_create_service_monitoring_rules() {
 			'type' => 'block',
 			'interface' => 'lan',
 			'ipprotocol' => 'inet',
-			'direction' => 'in',
+			'direction' => 'any',  // Both directions - simpler and more reliable
 			'floating' => 'yes',
 			'quick' => 'yes',
 			'source' => array(
@@ -2820,7 +2820,7 @@ function pc_create_service_monitoring_rules() {
 			'type' => 'pass',
 			'interface' => 'lan',
 			'ipprotocol' => 'inet',
-			'direction' => 'in',
+			'direction' => 'any',  // Both directions - simpler and more reliable
 			'floating' => 'yes',
 			'quick' => 'yes',
 			'source' => array(
@@ -3120,6 +3120,7 @@ function pc_create_allow_rules() {
 			'interface' => 'lan',
 			'ipprotocol' => 'inet',
 			'protocol' => 'udp',
+			'direction' => 'any',  // Both directions - simpler and more reliable
 			'source' => array(
 				'address' => 'parental_control_blocked'
 			),
@@ -3153,6 +3154,7 @@ function pc_create_allow_rules() {
 			'interface' => 'lan',
 			'ipprotocol' => 'inet',
 			'protocol' => 'tcp',
+			'direction' => 'any',  // Both directions - simpler and more reliable
 			'source' => array(
 				'address' => 'parental_control_blocked'
 			),
