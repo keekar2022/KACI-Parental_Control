@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "1.4.13",
-    "build_date": "2026-01-06T08:00:00Z",
+    "version": "1.4.14",
+    "build_date": "2026-01-06T09:00:00Z",
     "git_commit": "pending",
     "git_branch": "develop",
     "built_by": "development",
@@ -88,6 +88,38 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.4.14",
+      "date": "2026-01-06",
+      "type": "bugfix",
+      "changes": [
+        "BUGFIX: Fixed firewall rule removal not working for dash-prefixed rules",
+        "BUG: Dynamic Blocking rule still showed direction 'in' after v1.4.13 update",
+        "USER REPORT: Rule direction not updating despite code changes deployed",
+        "ROOT CAUSE: pc_remove_firewall_rules() only matched 'Parental Control:' (colon)",
+        "ROOT CAUSE: Dynamic Blocking rule uses 'Parental Control -' (dash) in description",
+        "ROOT CAUSE: Old rule with direction 'in' was never removed",
+        "ROOT CAUSE: pc_create_blocking_rule() saw existing rule and skipped creation",
+        "RESULT: Old rule persisted with direction 'in', new rule never created",
+        "SOLUTION: Updated removal function to match both patterns:",
+        "  - 'Parental Control:' (colon) - matches device-specific rules",
+        "  - 'Parental Control -' (dash) - matches system rules",
+        "TECHNICAL: Modified strpos() check to handle both description formats",
+        "VERIFICATION: All 9 rules now show direction 'any':",
+        "  ✓ Allow pfSense Access for Blocked Devices",
+        "  ✓ Allow DNS for Blocked Devices",
+        "  ✓ Discord Service Block",
+        "  ✓ Discord Service Monitor",
+        "  ✓ YouTube Service Block",
+        "  ✓ YouTube Service Monitor",
+        "  ✓ Facebook Service Block",
+        "  ✓ Facebook Service Monitor",
+        "  ✓ Dynamic Blocking",
+        "RESULT: Rule regeneration now works correctly",
+        "RESULT: All rules use direction 'any' as intended",
+        "VERSION: 1.4.13 → 1.4.14"
+      ]
+    },
     {
       "version": "1.4.13",
       "date": "2026-01-06",

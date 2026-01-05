@@ -1,4 +1,4 @@
-VERSION=1.4.13
+VERSION=1.4.14
 BUILD_DATE=2026-01-06
-RELEASE_TYPE=enhancement
+RELEASE_TYPE=bugfix
 STATUS=production-ready

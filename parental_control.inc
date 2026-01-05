@@ -1945,7 +1945,10 @@ function pc_remove_firewall_rules() {
 	$removed_count = 0;
 	
 	foreach ($rules as $rule) {
-		if (isset($rule['descr']) && strpos($rule['descr'], 'Parental Control:') === 0) {
+		// Match both "Parental Control:" (colon) and "Parental Control -" (dash) patterns
+		if (isset($rule['descr']) && 
+		    (strpos($rule['descr'], 'Parental Control:') === 0 || 
+		     strpos($rule['descr'], 'Parental Control -') === 0)) {
 			$removed_count++;
 			continue;
 		}
