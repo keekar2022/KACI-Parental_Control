@@ -45,3 +45,8 @@ credentials.txt
 
 # pfSense specific
 /cf/conf/config.xml.backup*
+
+# Development and diagnostic tools (exclude from main branch)
+# Note: These are tracked in develop branch but should NOT be merged to main
+# See docs/MERGE_STRATEGY.md for proper merge procedure
+diagnostic/
