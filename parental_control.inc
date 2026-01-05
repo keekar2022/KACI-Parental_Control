@@ -920,6 +920,32 @@ function parental_control_device_delete() {
 }
 
 /**
+ * Get today's midnight timestamp
+ * 
+ * Returns the Unix timestamp for midnight (00:00:00) of the current day in the
+ * system's local timezone. This is used for initializing last_reset times to
+ * ensure proper alignment with the daily reset schedule from the moment of
+ * creation.
+ * 
+ * CRITICAL: Without this, new installations or profile creations would set
+ * last_reset to the current time (e.g., 9:13 AM), causing the system to wait
+ * until the next day's midnight before performing the first reset. This function
+ * ensures immediate alignment with the daily reset boundary.
+ * 
+ * @return int Unix timestamp for today at 00:00:00 local time
+ * @since 1.4.17
+ * 
+ * @example
+ * $last_reset = pc_get_today_midnight(); // Returns today at 00:00:00
+ * 
+ * @see pc_init_state() Uses this for state initialization
+ * @see pc_should_reset_counters() For reset time checking
+ */
+function pc_get_today_midnight() {
+	return strtotime("today 00:00:00");
+}
+
+/**
  * Initialize state file with default structure
  * 
  * Creates a new state file with empty devices and profiles arrays if it
@@ -930,6 +956,7 @@ function parental_control_device_delete() {
  * @return void Creates PC_STATE_FILE if it doesn't exist
  * @since 0.1.0
  * @updated 0.1.3 Added debug logging
+ * @updated 1.4.17 Set last_reset to today's midnight instead of current time
  * 
  * @example
  * // Called automatically during installation and first run
@@ -937,6 +964,7 @@ function parental_control_device_delete() {
  * 
  * @see pc_load_state() For reading state
  * @see pc_save_state() For writing state
+ * @see pc_get_today_midnight() For proper reset time initialization
  */
 function pc_init_state() {
 	if (!file_exists(PC_STATE_FILE)) {
@@ -948,11 +976,12 @@ function pc_init_state() {
 		}
 		
 		// CRITICAL: v0.2.1+ uses IP-based structure (Layer 3 compliance)
+		// CRITICAL FIX v1.4.17: Set last_reset to today's midnight for proper alignment
 		$state = array(
 			'devices_by_ip' => array(),
 			'mac_to_ip_cache' => array(),
 			'profiles' => array(),
-			'last_reset' => time(),
+			'last_reset' => pc_get_today_midnight(),
 			'last_check' => time()
 		);
 		
@@ -1040,11 +1069,12 @@ function pc_load_state_from_disk() {
 		pc_init_state();
 		
 		// Return fresh state with IP-based structure
+		// CRITICAL FIX v1.4.17: Set last_reset to today's midnight for proper alignment
 		return array(
 			'devices_by_ip' => array(),
 			'mac_to_ip_cache' => array(),
 			'profiles' => array(),
-			'last_reset' => time(),
+			'last_reset' => pc_get_today_midnight(),
 			'last_check' => time()
 		);
 	}
@@ -4641,17 +4671,18 @@ function pc_update_device_usage(&$state) {
 			// Example: 4 hour limit = 4 hours TOTAL across ALL devices
 			$profile_name = isset($device['profile_name']) ? $device['profile_name'] : null;
 			if ($profile_name) {
-				// Initialize profile tracking if needed
-				if (!isset($state['profiles'])) {
-					$state['profiles'] = array();
-				}
-				if (!isset($state['profiles'][$profile_name])) {
-					$state['profiles'][$profile_name] = array(
-						'usage_today' => 0,
-						'usage_week' => 0,
-						'last_reset' => time()
-					);
-				}
+			// Initialize profile tracking if needed
+			// CRITICAL FIX v1.4.17: Set last_reset to today's midnight for proper alignment
+			if (!isset($state['profiles'])) {
+				$state['profiles'] = array();
+			}
+			if (!isset($state['profiles'][$profile_name])) {
+				$state['profiles'][$profile_name] = array(
+					'usage_today' => 0,
+					'usage_week' => 0,
+					'last_reset' => pc_get_today_midnight()
+				);
+			}
 				
 				// Add usage to PROFILE counter (shared across all devices)
 				$state['profiles'][$profile_name]['usage_today'] += $interval_minutes;
@@ -5496,15 +5527,18 @@ function pc_get_profile_devices($profile) {
 
 /**
  * Get profile usage from state file
+ * 
+ * @updated 1.4.17 Set last_reset to today's midnight for new profiles
  */
 function pc_get_profile_usage($profile_id) {
 	$state = pc_load_state();
 	
 	if (!isset($state['profiles'][$profile_id])) {
+		// CRITICAL FIX v1.4.17: Set last_reset to today's midnight for proper alignment
 		return array(
 			'usage_today' => 0,
 			'usage_week' => 0,
-			'last_reset' => time()
+			'last_reset' => pc_get_today_midnight()
 		);
 	}
 	
@@ -5513,6 +5547,8 @@ function pc_get_profile_usage($profile_id) {
 
 /**
  * Update profile usage in state file
+ * 
+ * @updated 1.4.17 Set last_reset to today's midnight for new profiles
  */
 function pc_update_profile_usage($profile_id, $minutes_to_add) {
 	$state = pc_load_state();
@@ -5522,10 +5558,11 @@ function pc_update_profile_usage($profile_id, $minutes_to_add) {
 	}
 	
 	if (!isset($state['profiles'][$profile_id])) {
+		// CRITICAL FIX v1.4.17: Set last_reset to today's midnight for proper alignment
 		$state['profiles'][$profile_id] = array(
 			'usage_today' => 0,
 			'usage_week' => 0,
-			'last_reset' => time()
+			'last_reset' => pc_get_today_midnight()
 		);
 	}
 	
