@@ -28,10 +28,12 @@ set -e
 PROD_HOST="192.168.1.1"
 USER="admin"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LOCK_FILE="/tmp/kaci_sync.lock"
+LOCK_FILE="/var/run/kaci_sync.lock"
+MAIN_CRON_LOCK="/var/run/parental_control.pid"
 LOG_FILE="/var/log/kaci_sync.log"
 TEMP_DIR="/tmp/kaci_sync_data"
 SYNC_SUMMARY="/tmp/kaci_sync_summary.txt"
+STALE_LOCK_TIMEOUT=600  # 10 minutes
 
 # Files/dirs to sync
 STATE_FILE="/var/db/parental_control_state.json"
@@ -106,22 +108,68 @@ check_ssh_access() {
     return 0
 }
 
+check_main_cron_running() {
+    # CRITICAL v1.4.18: Check if main parental control cron job is running
+    # If it is, we should NOT sync to avoid conflicts
+    if [ -f "$MAIN_CRON_LOCK" ]; then
+        MAIN_PID=$(cat "$MAIN_CRON_LOCK" 2>/dev/null)
+        if [ -n "$MAIN_PID" ] && kill -0 "$MAIN_PID" 2>/dev/null; then
+            # Check lock age to avoid stale locks
+            if [ -f "$MAIN_CRON_LOCK" ]; then
+                LOCK_AGE=$(($(date +%s) - $(stat -f %m "$MAIN_CRON_LOCK" 2>/dev/null || stat -c %Y "$MAIN_CRON_LOCK" 2>/dev/null || echo 0)))
+                if [ $LOCK_AGE -lt $STALE_LOCK_TIMEOUT ]; then
+                    log "Main parental control cron job is running (PID: $MAIN_PID), exiting gracefully"
+                    log "Reason: Avoiding conflicts with active cron job"
+                    exit 0
+                else
+                    log "Main cron lock is stale (age: ${LOCK_AGE}s), proceeding with sync"
+                fi
+            fi
+        fi
+    fi
+}
+
 acquire_lock() {
+    # CRITICAL v1.4.18: Stale lock detection and cleanup
+    # Similar to main cron job locking mechanism
     if [ -f "$LOCK_FILE" ]; then
         LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null)
+        
+        # Check if process is still running
         if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
-            log "Another sync is already running (PID: $LOCK_PID), exiting"
-            exit 0
+            # Process exists, check lock age
+            LOCK_AGE=$(($(date +%s) - $(stat -f %m "$LOCK_FILE" 2>/dev/null || stat -c %Y "$LOCK_FILE" 2>/dev/null || echo 0)))
+            
+            if [ $LOCK_AGE -lt $STALE_LOCK_TIMEOUT ]; then
+                # Lock is fresh and process is running
+                log "Another sync is already running (PID: $LOCK_PID, age: ${LOCK_AGE}s), exiting gracefully"
+                exit 0
+            else
+                # Lock is stale, clean it up
+                log "Detected stale lock (PID: $LOCK_PID, age: ${LOCK_AGE}s), cleaning up"
+                kill -9 "$LOCK_PID" 2>/dev/null || true
+                rm -f "$LOCK_FILE"
+            fi
         else
-            log "Removing stale lock file"
+            # Process is dead, remove stale lock
+            log "Removing stale lock file (PID: $LOCK_PID is dead)"
             rm -f "$LOCK_FILE"
         fi
     fi
+    
+    # Acquire lock
     echo $$ > "$LOCK_FILE"
+    log "Lock acquired (PID: $$)"
 }
 
 release_lock() {
-    rm -f "$LOCK_FILE"
+    if [ -f "$LOCK_FILE" ]; then
+        LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null)
+        if [ "$LOCK_PID" = "$$" ]; then
+            rm -f "$LOCK_FILE"
+            log "Lock released (PID: $$)"
+        fi
+    fi
 }
 
 sync_state_file() {
@@ -456,6 +504,9 @@ main() {
         log "SSH keys not configured. Running first-time setup..."
         setup_ssh_keys
     fi
+    
+    # CRITICAL v1.4.18: Check if main cron job is running first
+    check_main_cron_running
     
     # Acquire lock to prevent concurrent runs
     acquire_lock

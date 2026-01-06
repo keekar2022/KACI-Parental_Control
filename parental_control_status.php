@@ -554,6 +554,191 @@ if (is_array($profiles)) {
 	</div>
 </div>
 
+<!-- Monitored Devices (Table-Based) -->
+<div class="panel panel-default">
+	<div class="panel-heading">
+		<h2 class="panel-title">
+			<i class="fa-solid fa-eye"></i> <?=gettext("Monitored Devices (pfSense Table)")?>
+			<span class="badge" style="background: #5bc0de; margin-left: 10px;" id="monitor-count">Loading...</span>
+		</h2>
+	</div>
+	<div class="panel-body">
+		<?php
+		// Get monitored IPs from pfSense table
+		$monitored_ips = array();
+		exec('pfctl -t parental_control_monitor -T show 2>&1', $monitored_ips, $return_code);
+		
+		// Remove empty lines
+		$monitored_ips = array_filter($monitored_ips, 'trim');
+		
+		// Get device info from state file
+		$state = pc_load_state();
+		$monitored_devices = array();
+		
+		// Create reverse lookup: IP -> MAC (reuse from above if needed)
+		$ip_to_mac = array();
+		if (isset($state['mac_to_ip_cache']) && is_array($state['mac_to_ip_cache'])) {
+			foreach ($state['mac_to_ip_cache'] as $mac => $ip) {
+				$ip_to_mac[$ip] = $mac;
+			}
+		}
+		
+		foreach ($monitored_ips as $ip) {
+			$ip = trim($ip);
+			if (empty($ip)) continue;
+			
+			// Find device info from state
+			$device_name = 'Unknown Device';
+			$device_mac = 'Unknown';
+			$profile_name = 'Unknown';
+			$status = 'Monitoring';
+			
+			// Get MAC from IP
+			if (isset($ip_to_mac[$ip])) {
+				$mac = $ip_to_mac[$ip];
+				$device_mac = $mac;
+				
+				// Get device details from state
+				if (isset($state['devices'][$mac])) {
+					$dev = $state['devices'][$mac];
+					$device_name = isset($dev['name']) ? $dev['name'] : (isset($dev['hostname']) ? $dev['hostname'] : $ip);
+					
+					// Get profile name from device
+					if (isset($dev['profile_name'])) {
+						$profile_name = $dev['profile_name'];
+					} elseif (isset($dev['child_name'])) {
+						$profile_name = $dev['child_name'];
+					}
+				}
+				
+				// Check if device is online
+				$is_online = pc_is_device_online($mac);
+				$status = $is_online ? 'Online' : 'Offline';
+			}
+			
+			$monitored_devices[] = array(
+				'ip' => $ip,
+				'name' => $device_name,
+				'mac' => $device_mac,
+				'profile' => $profile_name,
+				'status' => $status
+			);
+		}
+		
+		$monitor_count = count($monitored_devices);
+		
+		if ($monitor_count > 0) { ?>
+			<div class="alert alert-info">
+				<i class="fa-solid fa-eye"></i>
+				<strong><?=gettext("Monitoring Active")?></strong> - 
+				<?php echo $monitor_count; ?> device(s) currently being monitored by parental control.
+			</div>
+			
+			<p class="text-info">
+				<i class="fa-solid fa-info-circle"></i>
+				<strong>Method:</strong> pfSense Tables (Native) - Monitoring rules ARE visible in <strong>Firewall → Rules → Floating</strong>
+			</p>
+			
+			<div style="margin-top: 15px;">
+				<strong style="font-size: 15px;">
+					<i class="fa-solid fa-eye"></i> <?=gettext("Currently Monitored Devices:")?>
+				</strong>
+				<table class="table table-striped table-hover" style="margin-top: 10px; border: 1px solid #ddd;">
+					<thead>
+						<tr style="background: #5bc0de; color: white;">
+							<th><i class="fa-solid fa-network-wired"></i> IP Address</th>
+							<th><i class="fa-solid fa-laptop"></i> Device Name</th>
+							<th><i class="fa-solid fa-fingerprint"></i> MAC Address</th>
+							<th><i class="fa-solid fa-user"></i> Profile</th>
+							<th><i class="fa-solid fa-signal"></i> Status</th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php foreach ($monitored_devices as $device): 
+							$status_color = ($device['status'] == 'Online') ? '#5cb85c' : '#999';
+							$status_icon = ($device['status'] == 'Online') ? 'fa-check-circle' : 'fa-power-off';
+						?>
+						<tr style="background: #f9f9f9;">
+							<td>
+								<code style="color: #5bc0de; font-weight: bold; font-size: 13px; background: #e6f7ff; padding: 3px 8px; border-radius: 3px;">
+									<?php echo htmlspecialchars($device['ip']); ?>
+								</code>
+							</td>
+							<td>
+								<strong><?php echo htmlspecialchars($device['name']); ?></strong>
+							</td>
+							<td>
+								<span style="font-family: 'Courier New', monospace; font-size: 11px; color: #666; background: #f5f5f5; padding: 2px 6px; border-radius: 3px;">
+									<?php echo htmlspecialchars($device['mac']); ?>
+								</span>
+							</td>
+							<td>
+								<span class="label label-info" style="font-size: 11px;">
+									<i class="fa-solid fa-user-circle"></i> <?php echo htmlspecialchars($device['profile']); ?>
+								</span>
+							</td>
+							<td>
+								<span class="label" style="font-size: 11px; background: <?php echo $status_color; ?>;">
+									<i class="fa-solid <?php echo $status_icon; ?>"></i> <?php echo htmlspecialchars($device['status']); ?>
+								</span>
+							</td>
+						</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+			</div>
+			
+			<div class="alert alert-info" style="margin-top: 15px;">
+				<h4><i class="fa-solid fa-question-circle"></i> <?=gettext("How Device Monitoring Works:")?></h4>
+				<ul style="margin-bottom: 0;">
+					<li><strong>Alias/Table:</strong> <code>parental_control_monitor</code> contains list of monitored device IPs</li>
+					<li><strong>Floating Rules:</strong> Log and track traffic from monitored devices (visible in GUI)</li>
+					<li><strong>Dynamic Updates:</strong> IPs added/removed instantly without filter reload</li>
+					<li><strong>Purpose:</strong> Track usage time and enforce daily limits for profiles</li>
+					<li><strong>Access:</strong> Monitored devices have internet access (unless blocked by time limit)</li>
+				</ul>
+			</div>
+			
+			<script>
+				// Update badge count
+				document.getElementById('monitor-count').textContent = '<?php echo $monitor_count; ?> monitored';
+				document.getElementById('monitor-count').style.background = '#5bc0de';
+			</script>
+			
+		<?php } else { ?>
+			<div class="alert alert-warning">
+				<i class="fa-solid fa-exclamation-circle"></i>
+				<strong><?=gettext("No Monitoring Active")?></strong> - No devices currently being monitored.
+			</div>
+			<p class="text-muted">
+				<i class="fa-solid fa-info-circle"></i>
+				Devices are added to monitoring when:
+			</p>
+			<ul class="text-muted">
+				<li>They are part of an enabled profile</li>
+				<li>They have internet access (not blocked)</li>
+				<li>Their usage time is being tracked</li>
+			</ul>
+			<p class="text-muted">
+				<strong>Note:</strong> IPs are added to the <code>parental_control_monitor</code> table dynamically by the cron job.
+			</p>
+			
+			<script>
+				// Update badge
+				document.getElementById('monitor-count').textContent = '0 monitored';
+				document.getElementById('monitor-count').style.background = '#f0ad4e';
+			</script>
+		<?php } ?>
+		
+		<hr>
+		<p class="text-muted" style="font-size: 11px; margin-bottom: 0;">
+			<strong>Alias/Table:</strong> <code>parental_control_monitor</code> (Firewall → Firewall → Aliases) | 
+			<strong>Floating Rules:</strong> Service-specific monitoring rules (Firewall → Rules → Floating) | 
+			<strong>CLI Command:</strong> <code>pfctl -t parental_control_monitor -T show</code>
+		</p>
+	</div>
+</div>
+
 <div class="panel panel-default">
 	<div class="panel-heading">
 		<h2 class="panel-title"><?=gettext("Recent Log Entries")?></h2>

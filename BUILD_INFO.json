@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "1.4.18",
-    "build_date": "2026-01-06T18:00:00Z",
+    "version": "1.4.19",
+    "build_date": "2026-01-07T12:00:00Z",
     "git_commit": "pending",
     "git_branch": "develop",
     "built_by": "development",
@@ -88,6 +88,25 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.4.19",
+      "date": "2026-01-07",
+      "type": "feature",
+      "changes": [
+        "FEATURE: Added monitored devices display panel to status page",
+        "NEW PANEL: 'Monitored Devices (pfSense Table)' shows all devices in parental_control_monitor alias",
+        "DISPLAY: Table shows IP address, device name, MAC address, profile, and online status",
+        "VISUALIZATION: Color-coded status badges (green for Online, gray for Offline)",
+        "INFORMATION: Displays device count and monitoring status",
+        "INTEGRATION: Uses pfctl -t parental_control_monitor -T show to fetch monitored IPs",
+        "CONSISTENCY: Matches the existing blocked devices panel format",
+        "EXPLANATION: Includes helpful info box explaining how device monitoring works",
+        "PURPOSE: Provides visibility into which devices are actively being tracked for usage",
+        "CLI COMMAND: Shows command to manually check monitored devices (pfctl -t parental_control_monitor -T show)",
+        "USER BENEFIT: Complete visibility into both blocked and monitored device states",
+        "VERSION: 1.4.18 → 1.4.19"
+      ]
+    },
     {
       "version": "1.4.18",
       "date": "2026-01-06",
