@@ -587,7 +587,7 @@ if (is_array($profiles)) {
 			$ip = trim($ip);
 			if (empty($ip)) continue;
 			
-			// Find device info from state
+			// Find device info from profiles configuration
 			$device_name = 'Unknown Device';
 			$device_mac = 'Unknown';
 			$profile_name = 'Unknown';
@@ -598,12 +598,38 @@ if (is_array($profiles)) {
 				$mac = $ip_to_mac[$ip];
 				$device_mac = $mac;
 				
-				// Get device details from state
-				if (isset($state['devices'][$mac])) {
+				// Search through ALL profiles to find this device
+				// This matches the logic used in the main "Profile & Device Status" section
+				$device_found = false;
+				if (is_array($profiles) && !empty($profiles)) {
+					foreach ($profiles as $profile) {
+						if (!is_array($profile) || !isset($profile['name'])) continue;
+						
+						// Get profile devices
+						$profile_devices = isset($profile['devices']) && is_array($profile['devices']) ? $profile['devices'] : array();
+						
+						// Search for matching MAC in this profile
+						foreach ($profile_devices as $device) {
+							if (!is_array($device) || !isset($device['mac_address'])) continue;
+							
+							$device_mac_normalized = strtolower(trim($device['mac_address']));
+							if ($device_mac_normalized === $mac) {
+								// Found the device!
+								$device_name = isset($device['device_name']) && !empty($device['device_name']) ? $device['device_name'] : $ip;
+								$profile_name = $profile['name'];
+								$device_found = true;
+								break 2; // Break out of both loops
+							}
+						}
+					}
+				}
+				
+				// If device not found in profiles, try state file as fallback
+				if (!$device_found && isset($state['devices'][$mac])) {
 					$dev = $state['devices'][$mac];
 					$device_name = isset($dev['name']) ? $dev['name'] : (isset($dev['hostname']) ? $dev['hostname'] : $ip);
 					
-					// Get profile name from device
+					// Try to get profile name from state
 					if (isset($dev['profile_name'])) {
 						$profile_name = $dev['profile_name'];
 					} elseif (isset($dev['child_name'])) {

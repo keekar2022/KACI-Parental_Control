@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "1.4.19",
-    "build_date": "2026-01-07T12:00:00Z",
+    "version": "1.4.20",
+    "build_date": "2026-01-07T13:00:00Z",
     "git_commit": "pending",
     "git_branch": "develop",
     "built_by": "development",
@@ -88,6 +88,41 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.4.20",
+      "date": "2026-01-07",
+      "type": "critical_bugfix",
+      "changes": [
+        "CRITICAL BUGFIX: Fixed monitored devices showing 'Unknown Device' and 'Unknown' profile",
+        "BUG: Monitored devices panel displayed all devices as 'Unknown Device' with 'Unknown' profile",
+        "BUG: Device names and profile assignments were not showing despite being available",
+        "USER REPORT: 'If Device name and Profile details are available in blocked why it is unknown in monitor?'",
+        "ROOT CAUSE: Monitored devices lookup logic only checked $state['devices'][$mac]",
+        "ROOT CAUSE: Device names and profiles are stored in profile configuration (config.xml), not state file",
+        "ROOT CAUSE: Blocked devices section works because it looks at $state['blocked_devices'][$mac]",
+        "COMPARISON:",
+        "  - Blocked devices ✓: Looks at blocked_devices array with full device details",
+        "  - Monitored devices ✗: Only looked at devices array with limited info",
+        "  - Main status table ✓: Iterates through profile configuration to get device names",
+        "SOLUTION: Updated monitored devices lookup to search through ALL profiles",
+        "SOLUTION: Matches the logic used in 'Profile & Device Status' section (lines 140-250)",
+        "SOLUTION: Search profiles → find device by MAC → extract device_name and profile_name",
+        "SOLUTION: Added fallback to state file if device not found in profiles",
+        "RESULT: Monitored devices now show correct device names (e.g., 'Basement-TV', 'HISENSETV')",
+        "RESULT: Monitored devices now show correct profile names (e.g., 'GunGun', 'Anita', 'Vishesh')",
+        "RESULT: Information consistency between blocked and monitored device panels",
+        "RESULT: Users can now properly identify which devices are being monitored",
+        "TECHNICAL CHANGES:",
+        "  - Added profile iteration loop to search for device by MAC address",
+        "  - Extract device_name from profile configuration: $device['device_name']",
+        "  - Extract profile_name from profile: $profile['name']",
+        "  - Maintained state file fallback for edge cases",
+        "  - Uses break 2 to exit nested loops when device found",
+        "BENEFIT: Complete visibility and accurate device identification",
+        "TESTING: Verified with production data showing 10 monitored devices with correct names",
+        "VERSION: 1.4.19 → 1.4.20"
+      ]
+    },
     {
       "version": "1.4.19",
       "date": "2026-01-07",
