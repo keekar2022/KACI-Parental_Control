@@ -554,6 +554,143 @@ if (is_array($profiles)) {
 	</div>
 </div>
 
+<!-- Per-Service Usage Breakdown -->
+<div class="panel panel-default">
+	<div class="panel-heading">
+		<h2 class="panel-title">
+			<i class="fa-solid fa-pie-chart"></i> <?=gettext("Per-Service Usage Breakdown")?>
+		</h2>
+	</div>
+	<div class="panel-body table-responsive">
+		<?php
+		$has_service_usage = false;
+		
+		// Check if any device has service usage
+		if (isset($state['devices_by_ip'])) {
+			foreach ($state['devices_by_ip'] as $ip => $device_data) {
+				if (isset($device_data['service_usage']) && !empty($device_data['service_usage'])) {
+					foreach ($device_data['service_usage'] as $service_name => $service_data) {
+						if ($service_data['usage_today'] > 0) {
+							$has_service_usage = true;
+							break 2;
+						}
+					}
+				}
+			}
+		}
+		
+		if (!$has_service_usage): ?>
+			<div class="alert alert-info">
+				<i class="fa-solid fa-info-circle"></i>
+				<?=gettext("No per-service usage data yet. Service usage will be tracked once devices access monitored services (Facebook, YouTube, Discord, etc.).")?>
+				<p class="text-muted" style="margin-top: 10px; margin-bottom: 0;">
+					<strong>Tracked Services:</strong> Check the <em>Online-Service</em> tab to see configured services.
+				</p>
+			</div>
+		<?php else: ?>
+			<table class="table table-striped table-hover">
+				<thead>
+					<tr style="background: #5bc0de; color: white;">
+						<th><?=gettext("Profile")?></th>
+						<th><?=gettext("Device")?></th>
+						<th><?=gettext("Service")?></th>
+						<th><?=gettext("Time Today")?></th>
+						<th><?=gettext("Time This Week")?></th>
+						<th><?=gettext("Last Seen")?></th>
+						<th><?=gettext("Active Now")?></th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php 
+					// Service icon mapping
+					$service_icons = array(
+						'Facebook' => 'fa-facebook',
+						'YouTube' => 'fa-youtube-play',
+						'Discord' => 'fa-comments',
+						'TikTok' => 'fa-music',
+						'Instagram' => 'fa-instagram',
+						'Twitter' => 'fa-twitter',
+						'Twitch' => 'fa-twitch',
+						'Netflix' => 'fa-film'
+					);
+					
+					// Iterate through profiles to get device-to-profile mapping
+					foreach ($profiles as $profile):
+						if (!is_array($profile) || !isset($profile['name'])) continue;
+						if (!isset($profile['enabled']) || $profile['enabled'] != 'on') continue;
+						
+						$profile_name = htmlspecialchars($profile['name']);
+						$devices = isset($profile['devices']) && is_array($profile['devices']) ? $profile['devices'] : array();
+						
+						foreach ($devices as $device):
+							if (!is_array($device) || !isset($device['mac_address'])) continue;
+							
+							$mac = strtolower(trim($device['mac_address']));
+							$device_name = htmlspecialchars($device['device_name']);
+							
+							// Get IP from state
+							$device_ip = null;
+							if (isset($state['mac_to_ip_cache'][$mac])) {
+								$device_ip = $state['mac_to_ip_cache'][$mac];
+							}
+							
+							if (!$device_ip || !isset($state['devices_by_ip'][$device_ip])) continue;
+							if (!isset($state['devices_by_ip'][$device_ip]['service_usage'])) continue;
+							
+							$service_usage = $state['devices_by_ip'][$device_ip]['service_usage'];
+							
+							// Display each service this device has used
+							foreach ($service_usage as $service_name => $service_data):
+								if ($service_data['usage_today'] == 0) continue; // Skip unused services
+								
+								$usage_today = sprintf("%d:%02d", floor($service_data['usage_today'] / 60), $service_data['usage_today'] % 60);
+								$usage_week = sprintf("%d:%02d", floor($service_data['usage_week'] / 60), $service_data['usage_week'] % 60);
+								$last_seen = isset($service_data['last_seen']) && $service_data['last_seen'] > 0 ? 
+									date('H:i:s', $service_data['last_seen']) : 'Never';
+								$connections = isset($service_data['connections']) ? $service_data['connections'] : 0;
+								
+								$icon = isset($service_icons[$service_name]) ? $service_icons[$service_name] : 'fa-globe';
+							?>
+							<tr>
+								<td><?=$profile_name?></td>
+								<td><strong><?=$device_name?></strong></td>
+								<td>
+									<i class="fa-solid <?=$icon?>"></i>
+									<strong><?=htmlspecialchars($service_name)?></strong>
+								</td>
+								<td><span class="label label-primary" style="font-size: 13px;"><?=$usage_today?></span></td>
+								<td><?=$usage_week?></td>
+								<td><small class="text-muted"><?=$last_seen?></small></td>
+								<td>
+									<?php if ($connections > 0): ?>
+										<span class="label label-success"><?=$connections?> active</span>
+									<?php else: ?>
+										<span class="label label-default">Idle</span>
+									<?php endif; ?>
+								</td>
+							</tr>
+							<?php 
+							endforeach; // services
+						endforeach; // devices
+					endforeach; // profiles
+					?>
+				</tbody>
+			</table>
+			
+			<div class="alert alert-info" style="margin-top: 15px;">
+				<h4><i class="fa-solid fa-info-circle"></i> <?=gettext("About Service Tracking")?></h4>
+				<ul style="margin-bottom: 0;">
+					<li><strong>Tracked Services:</strong> Only services configured in <em>Online-Service</em> tab are tracked</li>
+					<li><strong>Update Frequency:</strong> Service usage updates every <?=PC_CRON_INTERVAL_SECONDS / 60?> minutes</li>
+					<li><strong>Accuracy:</strong> Based on actual TCP connections to service IP ranges</li>
+					<li><strong>Active Connections:</strong> Number of current connections to this service</li>
+					<li><strong>Reset:</strong> Daily usage resets at midnight (weekly usage preserved)</li>
+				</ul>
+			</div>
+		<?php endif; ?>
+	</div>
+</div>
+
 <!-- Monitored Devices (Table-Based) -->
 <div class="panel panel-default">
 	<div class="panel-heading">

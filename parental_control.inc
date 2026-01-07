@@ -4133,6 +4133,16 @@ function pc_reset_daily_counters(&$state) {
 	if (isset($state['devices_by_ip']) && is_array($state['devices_by_ip'])) {
 		foreach ($state['devices_by_ip'] as $ip => &$device_state) {
 			$device_state['usage_today'] = 0;
+			
+			// NEW v1.4.22: Reset per-service usage
+			if (isset($device_state['service_usage']) && is_array($device_state['service_usage'])) {
+				foreach ($device_state['service_usage'] as $service_name => &$service_data) {
+					$service_data['usage_today'] = 0;
+					// Keep usage_week, last_seen, and connections
+				}
+				unset($service_data); // Break reference
+			}
+			
 			$reset_count++;
 		}
 		unset($device_state); // Break reference
@@ -4634,6 +4644,120 @@ function pc_has_active_connections($ip) {
 }
 
 /**
+ * Check if IP matches IP address or CIDR range
+ * 
+ * @param string $ip IP address to check
+ * @param string $range IP address or CIDR range (e.g., "157.240.1.0/24")
+ * @return bool True if IP is in range
+ * @since 1.4.22
+ */
+function pc_ip_matches_range($ip, $range) {
+	$range = trim($range);
+	
+	// Simple IP match
+	if ($ip === $range) {
+		return true;
+	}
+	
+	// CIDR range check
+	if (strpos($range, '/') !== false) {
+		list($subnet, $bits) = explode('/', $range);
+		$ip_long = ip2long($ip);
+		$subnet_long = ip2long($subnet);
+		
+		if ($ip_long === false || $subnet_long === false) {
+			return false;
+		}
+		
+		$mask = -1 << (32 - (int)$bits);
+		$subnet_long &= $mask; // Apply mask to subnet
+		
+		return ($ip_long & $mask) == $subnet_long;
+	}
+	
+	return false;
+}
+
+/**
+ * Get service-specific connection counts for a device
+ * 
+ * Checks pfSense state table for connections from device IP to service-specific IP ranges.
+ * Returns array of service names and their connection counts.
+ * 
+ * @param string $device_ip Device IP address
+ * @return array Array of ['service_name' => connection_count]
+ * @since 1.4.22
+ */
+function pc_get_service_connections($device_ip) {
+	// Get all PC_Service_ aliases
+	$service_aliases = array();
+	$aliases = config_get_path('aliases/alias', array());
+	
+	if (is_array($aliases)) {
+		foreach ($aliases as $alias) {
+			if (isset($alias['name']) && strpos($alias['name'], 'PC_Service_') === 0) {
+				$service_name = str_replace('PC_Service_', '', $alias['name']);
+				$service_aliases[$service_name] = $alias['name'];
+			}
+		}
+	}
+	
+	if (empty($service_aliases)) {
+		return array();
+	}
+	
+	// Load service IPs from pfctl tables (cached for this run)
+	static $service_ips_cache = null;
+	if ($service_ips_cache === null) {
+		$service_ips_cache = array();
+		foreach ($service_aliases as $service_name => $alias_name) {
+			$cmd = "pfctl -t {$alias_name} -T show 2>&1";
+			exec($cmd, $output, $return_var);
+			
+			if ($return_var === 0 && !empty($output)) {
+				$service_ips_cache[$service_name] = $output;
+			}
+		}
+	}
+	
+	// Get all ESTABLISHED connections for this device
+	$cmd = "pfctl -ss 2>&1 | grep 'all tcp.*{$device_ip}:' | grep ESTABLISHED | head -50";
+	$output = array();
+	exec($cmd, $output, $return_var);
+	
+	if ($return_var !== 0 || empty($output)) {
+		return array(); // No connections
+	}
+	
+	// Count connections per service
+	$service_connections = array();
+	foreach ($service_aliases as $service_name => $alias_name) {
+		$service_connections[$service_name] = 0;
+	}
+	
+	foreach ($output as $line) {
+		// Parse state line to extract destination IP
+		// Format: "all tcp 192.168.1.110:12345 -> 157.240.1.1:443"
+		if (preg_match('/\s+(\d+\.\d+\.\d+\.\d+):(\d+)\s+->\s+(\d+\.\d+\.\d+\.\d+):(\d+)/', $line, $matches)) {
+			$src_ip = $matches[1];
+			$dst_ip = $matches[3];
+			
+			// Check which service this destination IP belongs to
+			foreach ($service_ips_cache as $service_name => $ip_list) {
+				foreach ($ip_list as $service_ip_or_range) {
+					if (pc_ip_matches_range($dst_ip, $service_ip_or_range)) {
+						$service_connections[$service_name]++;
+						break 2; // Connection counted, move to next line
+					}
+				}
+			}
+		}
+	}
+	
+	return $service_connections;
+}
+
+/**
  * Update device usage tracking using real connection tracking
  * 
  * For each configured device, checks for ACTIVE connections in pfSense state table.
@@ -4808,11 +4932,40 @@ function pc_update_device_usage(&$state) {
 				continue; // Skip to next device
 			}
 			
-			// Device has active connections and NOT in blocked schedule - increment usage
-			$state['devices_by_ip'][$ip]['usage_today'] += $interval_minutes;
-			$state['devices_by_ip'][$ip]['usage_week'] += $interval_minutes;
-			$state['devices_by_ip'][$ip]['last_seen'] = time();
-			$tracked_count++;
+		// Device has active connections and NOT in blocked schedule - increment usage
+		$state['devices_by_ip'][$ip]['usage_today'] += $interval_minutes;
+		$state['devices_by_ip'][$ip]['usage_week'] += $interval_minutes;
+		$state['devices_by_ip'][$ip]['last_seen'] = time();
+		$tracked_count++;
+		
+		// NEW v1.4.22: Track per-service usage
+		$service_connections = pc_get_service_connections($ip);
+		if (!empty($service_connections)) {
+			// Initialize service usage tracking
+			if (!isset($state['devices_by_ip'][$ip]['service_usage'])) {
+				$state['devices_by_ip'][$ip]['service_usage'] = array();
+			}
+			
+			foreach ($service_connections as $service_name => $conn_count) {
+				if ($conn_count > 0) {
+					// Initialize service if needed
+					if (!isset($state['devices_by_ip'][$ip]['service_usage'][$service_name])) {
+						$state['devices_by_ip'][$ip]['service_usage'][$service_name] = array(
+							'usage_today' => 0,
+							'usage_week' => 0,
+							'last_seen' => 0,
+							'connections' => 0
+						);
+					}
+					
+					// Add interval minutes to service usage
+					$state['devices_by_ip'][$ip]['service_usage'][$service_name]['usage_today'] += $interval_minutes;
+					$state['devices_by_ip'][$ip]['service_usage'][$service_name]['usage_week'] += $interval_minutes;
+					$state['devices_by_ip'][$ip]['service_usage'][$service_name]['last_seen'] = time();
+					$state['devices_by_ip'][$ip]['service_usage'][$service_name]['connections'] = $conn_count;
+				}
+			}
+		}
 			
 			// CRITICAL: SHARED PROFILE TIME ACCOUNTING
 			// WHY: Time limits are per PROFILE, not per device
