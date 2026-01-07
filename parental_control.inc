@@ -2896,6 +2896,14 @@ function pc_create_service_monitoring_rules() {
 	// CRITICAL: Load alias tables into pf and add rules to userrules anchor
 	// WHY: Ensures rules work even if filter_configure() marks aliases as "Unresolvable"
 	// This is a backup mechanism that directly manipulates pf
+	
+	// Get the real LAN interface (e.g., igc0, em0, etc.)
+	$lan_if = get_real_interface('lan');
+	if (empty($lan_if)) {
+		pc_log("Could not determine LAN interface, skipping backup pfctl rules", 'warning');
+		$lan_if = 'lan';  // Fallback
+	}
+	
 	$pf_rules = array();
 	foreach ($service_aliases as $alias_name) {
 		$service_name = str_replace('PC_Service_', '', $alias_name);
@@ -2919,8 +2927,9 @@ function pc_create_service_monitoring_rules() {
 			// RULE 1: Block rule for devices that exceeded limits (evaluated first)
 			// RULE 2: Monitor rule for all profile devices (evaluated second, tracks usage)
 			// This ensures the rules work even if filter_configure() doesn't generate them
-			$pf_rules[] = "block in log quick on em1 inet from <parental_control_blocked> to <{$alias_name}> label \"USER_RULE: PC - {$service_name} Service Block\"";
-			$pf_rules[] = "pass in log quick on em1 inet from <parental_control_monitor> to <{$alias_name}> keep state label \"USER_RULE: PC - {$service_name} Service Monitor\"";
+			// NOTE: Using dynamically detected LAN interface ({$lan_if})
+			$pf_rules[] = "block in log quick on {$lan_if} inet from <parental_control_blocked> to <{$alias_name}> label \"USER_RULE: PC - {$service_name} Service Block\"";
+			$pf_rules[] = "pass in log quick on {$lan_if} inet from <parental_control_monitor> to <{$alias_name}> keep state label \"USER_RULE: PC - {$service_name} Service Monitor\"";
 		}
 	}
 	

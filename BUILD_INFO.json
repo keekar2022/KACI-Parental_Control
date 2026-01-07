@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "1.4.20",
-    "build_date": "2026-01-07T13:00:00Z",
+    "version": "1.4.21",
+    "build_date": "2026-01-07T14:00:00Z",
     "git_commit": "pending",
     "git_branch": "develop",
     "built_by": "development",
@@ -88,6 +88,48 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.4.21",
+      "date": "2026-01-07",
+      "type": "critical_bugfix",
+      "changes": [
+        "CRITICAL BUGFIX: Fixed service monitor rules interface inconsistency",
+        "BUG: Discord Monitor rule created on 'LAN_Interfaces' while Facebook/YouTube on 'igc0'",
+        "BUG: Inconsistent interface configuration causing some service rules to not match traffic",
+        "USER REPORT: 'Service rules showing blank state despite aliases having IPs and rules enabled'",
+        "ROOT CAUSE: Backup pfctl rules hardcoded interface 'em1' instead of dynamically detecting LAN interface",
+        "ROOT CAUSE: Some service rules created with 'LAN_Interfaces', others with 'lan' (which becomes igc0)",
+        "EVIDENCE:",
+        "  - Discord Monitor: on LAN_Interfaces → 0 packets (broken)",
+        "  - Facebook Monitor: on igc0 → 146 packets, 41KB (working)",
+        "  - YouTube Monitor: on igc0 → 234,602 packets, 165MB (working)",
+        "DIAGNOSTIC FINDINGS:",
+        "  ✓ Service aliases loaded correctly (92-10,519 IPs each)",
+        "  ✓ Monitor alias populated by cron job (11 devices)",
+        "  ✓ Block rules working (showing packet counts)",
+        "  ✗ Monitor rules inconsistent interfaces",
+        "SOLUTION: Dynamically detect LAN interface using get_real_interface('lan')",
+        "SOLUTION: Updated backup pfctl rules to use detected interface instead of hardcoded 'em1'",
+        "SOLUTION: Added interface detection at line 2901: $lan_if = get_real_interface('lan')",
+        "SOLUTION: Updated pfctl rules to use $lan_if variable (lines 2930-2931)",
+        "SOLUTION: Added fallback to 'lan' if interface detection fails",
+        "SOLUTION: Added warning log if LAN interface cannot be determined",
+        "RESULT: All service monitor rules now use consistent interface",
+        "RESULT: Backup pfctl rules use correct interface (igc0, not em1)",
+        "RESULT: Discord Monitor rule will match traffic correctly after rule regeneration",
+        "FIX SCRIPT: Created diagnostic/fix_service_rules_interface.php to regenerate rules",
+        "TESTING: Verified Facebook and YouTube Monitor rules working with 234K+ packets",
+        "DEPLOYMENT: Run fix script on firewall to regenerate service rules with consistent config",
+        "TECHNICAL CHANGES:",
+        "  - Added $lan_if = get_real_interface('lan') before pfctl rules loop",
+        "  - Changed hardcoded 'em1' to dynamic $lan_if in pfctl commands",
+        "  - Added error handling for interface detection failure",
+        "  - All service monitor rules now guaranteed to use same interface",
+        "BENEFIT: Service monitoring works consistently across all services",
+        "BENEFIT: No more interface mismatches causing blank state",
+        "VERSION: 1.4.20 → 1.4.21"
+      ]
+    },
     {
       "version": "1.4.20",
       "date": "2026-01-07",
