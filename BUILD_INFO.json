@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "1.4.22",
-    "build_date": "2026-01-07T15:00:00Z",
+    "version": "1.4.23",
+    "build_date": "2026-01-07T15:15:00Z",
     "git_commit": "pending",
     "git_branch": "develop",
     "built_by": "development",
@@ -88,6 +88,23 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.4.23",
+      "date": "2026-01-07",
+      "type": "critical_bugfix",
+      "changes": [
+        "CRITICAL BUGFIX: Fixed NAT state table parsing for per-service tracking",
+        "ISSUE: v1.4.22 service tracking showed 'No data' despite firewall rules logging traffic",
+        "ROOT CAUSE: Grep pattern looking for 'device_ip:' format, but pfSense NAT uses '(device_ip:port) -> dest' format",
+        "FIX: Changed grep to search for '(device_ip:' pattern",
+        "FIX: Updated regex to parse NAT format: /\\(device_ip:(\\d+)\\)\\s+(?:->|<->)\\s+(\\d+\\.\\d+\\.\\d+\\.\\d+):(\\d+)/",
+        "RESULT: Successfully detecting service connections (tested with 14 active connections)",
+        "VERIFIED: State file now populates with per-service usage data",
+        "VERIFIED: Status page now displays YouTube, Discord, and Facebook usage",
+        "FUNCTION MODIFIED: pc_get_service_connections() in parental_control.inc:4723-4758",
+        "VERSION: 1.4.22 → 1.4.23"
+      ]
+    },
     {
       "version": "1.4.22",
       "date": "2026-01-07",

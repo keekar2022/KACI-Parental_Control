@@ -1,4 +1,4 @@
-VERSION=1.4.22
+VERSION=1.4.23
 BUILD_DATE=2026-01-07
-RELEASE_TYPE=major_feature
-STATUS=stable
+RELEASE_TYPE=critical_bugfix
+STATUS=production-ready

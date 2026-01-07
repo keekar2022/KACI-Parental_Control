@@ -4721,7 +4721,9 @@ function pc_get_service_connections($device_ip) {
 	}
 	
 	// Get all ESTABLISHED connections for this device
-	$cmd = "pfctl -ss 2>&1 | grep 'all tcp.*{$device_ip}:' | grep ESTABLISHED | head -50";
+	// Format with NAT: "all tcp NAT_IP:port (DEVICE_IP:port) -> DEST_IP:port ESTABLISHED:ESTABLISHED"
+	$escaped_ip = preg_quote($device_ip, '/');
+	$cmd = "pfctl -ss 2>&1 | grep 'ESTABLISHED' | grep '({$device_ip}:' | head -100";
 	$output = array();
 	exec($cmd, $output, $return_var);
 	
@@ -4736,10 +4738,11 @@ function pc_get_service_connections($device_ip) {
 	}
 	
 	foreach ($output as $line) {
-		// Parse state line to extract destination IP
-		// Format: "all tcp 192.168.1.110:12345 -> 157.240.1.1:443"
-		if (preg_match('/\s+(\d+\.\d+\.\d+\.\d+):(\d+)\s+->\s+(\d+\.\d+\.\d+\.\d+):(\d+)/', $line, $matches)) {
-			$src_ip = $matches[1];
+		// Parse NAT state line to extract device IP and destination IP
+		// Format: "all tcp NAT_IP:port (192.168.1.110:12345) -> 157.240.1.1:443 ESTABLISHED:ESTABLISHED"
+		// Format: "all tcp NAT_IP:port (192.168.1.110:12345) (157.240.1.1:443) <-> 157.240.1.1:443 ESTABLISHED:ESTABLISHED"
+		if (preg_match('/\((' . $escaped_ip . '):(\d+)\)\s+(?:\([\d.]+:\d+\)\s+)?(?:->|<->)\s+(\d+\.\d+\.\d+\.\d+):(\d+)/', $line, $matches)) {
+			$device_ip_matched = $matches[1];
 			$dst_ip = $matches[3];
 			
 			// Check which service this destination IP belongs to
