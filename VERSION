@@ -1,4 +1,4 @@
-VERSION=1.4.23
+VERSION=1.4.24
 BUILD_DATE=2026-01-07
-RELEASE_TYPE=critical_bugfix
+RELEASE_TYPE=hotfix
 STATUS=production-ready

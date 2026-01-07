@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "1.4.23",
-    "build_date": "2026-01-07T15:15:00Z",
+    "version": "1.4.24",
+    "build_date": "2026-01-07T15:30:00Z",
     "git_commit": "pending",
     "git_branch": "develop",
     "built_by": "development",
@@ -88,6 +88,23 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.4.24",
+      "date": "2026-01-07",
+      "type": "hotfix",
+      "changes": [
+        "HOTFIX: Fixed cron interval mismatch causing double-counted usage",
+        "ISSUE: User reported usage incrementing by 10 minutes when cron runs every 5 minutes",
+        "ROOT CAUSE: Cron scheduled at */5 but PC_CRON_INTERVAL_SECONDS set to 600 (10 minutes)",
+        "RESULT: Every 5-minute cron run added 10 minutes of usage (2x overcounting)",
+        "FIX: Changed PC_CRON_INTERVAL_SECONDS from 600 back to 300 (5 minutes)",
+        "FIX: Changed PC_CRON_MINUTE from */10 back to */5",
+        "BENEFIT: Usage tracking now accurate (5 minutes added per 5-minute interval)",
+        "NOTE: This restores the original 5-minute interval from before v1.4.18 emergency hotfix",
+        "IMPACT: Existing usage data may be inflated by 2x, will correct over time",
+        "VERSION: 1.4.23 → 1.4.24"
+      ]
+    },
     {
       "version": "1.4.23",
       "date": "2026-01-07",

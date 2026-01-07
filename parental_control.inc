@@ -48,8 +48,8 @@ define('PC_PID_FILE', getenv('PC_PID_FILE') ?: '/tmp/parental_control.pid');
 // - Cron job overlap (which caused deadlocks)
 // - Resource exhaustion (file descriptors, memory)
 // - Kernel panics from excessive pfctl operations
-define('PC_CRON_MINUTE', getenv('PC_CRON_MINUTE') ?: '*/10');  // Check every 10 minutes
-define('PC_CRON_INTERVAL_SECONDS', 600);  // Match the cron interval (10 minutes = 600 seconds)
+define('PC_CRON_MINUTE', getenv('PC_CRON_MINUTE') ?: '*/5');  // Check every 5 minutes
+define('PC_CRON_INTERVAL_SECONDS', 300);  // Match the cron interval (5 minutes = 300 seconds)
 
 // Log rotation settings - Environment overridable for different deployment scenarios
 define('PC_MAX_LOG_SIZE', getenv('PC_MAX_LOG_SIZE') ?: (5 * 1024 * 1024));  // 5MB per log file
