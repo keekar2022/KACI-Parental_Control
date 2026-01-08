@@ -34,8 +34,19 @@ require_once("/usr/local/pkg/parental_control.inc");
 
 // Set JSON response headers
 header("Content-Type: application/json; charset=utf-8");
-header("Cache-Control: no-cache, must-revalidate");
-header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
+
+// PERFORMANCE OPTIMIZATION v1.4.30: Cache GET responses, but not POST
+// WHY: Monitoring dashboards poll frequently, caching reduces firewall load
+// POST requests should never be cached (state modifications)
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+	// Cache GET responses for 10 seconds
+	header("Cache-Control: public, max-age=10");
+	header("Expires: " . gmdate("D, d M Y H:i:s", time() + 10) . " GMT");
+} else {
+	// POST/PUT/DELETE should not be cached
+	header("Cache-Control: no-cache, must-revalidate");
+	header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
+}
 
 // WHY: Enable CORS for API access from external apps
 // Design Decision: Allow CORS but require API key for security

@@ -423,12 +423,9 @@ if (is_array($profiles)) {
 	</div>
 	<div class="panel-body">
 		<?php
-		// Get blocked IPs from pfSense table
-		$blocked_ips = array();
-		exec('pfctl -t parental_control_blocked -T show 2>&1', $blocked_ips, $return_code);
-		
-		// Remove empty lines
-		$blocked_ips = array_filter($blocked_ips, 'trim');
+		// PERFORMANCE OPTIMIZATION v1.4.30: Use cached pfctl table read
+		// WHY: Reduces pfctl calls on status page refreshes, improves responsiveness
+		$blocked_ips = pc_get_table_ips_cached('parental_control_blocked');
 		
 		// Get device info from state file
 		$state = pc_load_state();
@@ -755,12 +752,9 @@ if (is_array($profiles)) {
 	</div>
 	<div class="panel-body">
 		<?php
-		// Get monitored IPs from pfSense table
-		$monitored_ips = array();
-		exec('pfctl -t parental_control_monitor -T show 2>&1', $monitored_ips, $return_code);
-		
-		// Remove empty lines
-		$monitored_ips = array_filter($monitored_ips, 'trim');
+		// PERFORMANCE OPTIMIZATION v1.4.30: Use cached pfctl table read
+		// WHY: Reduces pfctl calls on status page refreshes, improves responsiveness
+		$monitored_ips = pc_get_table_ips_cached('parental_control_monitor');
 		
 		// Get device info from state file
 		$state = pc_load_state();

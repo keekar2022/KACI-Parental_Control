@@ -118,6 +118,30 @@ function pc_get_cached($cache_key, $callback, $ttl = PC_CACHE_TTL) {
 }
 
 /**
+ * Get IPs from pfctl table with caching
+ * 
+ * PERFORMANCE OPTIMIZATION v1.4.30: Cache pfctl table reads for status pages
+ * WHY: pfctl table queries are expensive, cache for short period to improve responsiveness
+ * Use case: Status page refreshes, API polling
+ * 
+ * @param string $table_name Table name (e.g., 'parental_control_blocked')
+ * @param int $ttl Cache TTL in seconds (default: 15)
+ * @return array Array of IP addresses (empty array on error)
+ * @since 1.4.30
+ * 
+ * @example
+ * $blocked_ips = pc_get_table_ips_cached('parental_control_blocked');
+ * $monitored_ips = pc_get_table_ips_cached('parental_control_monitor');
+ */
+function pc_get_table_ips_cached($table_name, $ttl = 15) {
+	return pc_get_cached("pfctl_table_{$table_name}", function() use ($table_name) {
+		$ips = array();
+		exec("pfctl -t " . escapeshellarg($table_name) . " -T show 2>&1", $ips, $return_code);
+		return ($return_code === 0) ? array_filter($ips) : array();
+	}, $ttl);
+}
+
+/**
  * Clear performance cache
  * 
  * WHY: Called after configuration changes to ensure fresh data is loaded.
