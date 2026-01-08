@@ -1,4 +1,4 @@
-VERSION=1.4.27
+VERSION=1.4.28
 BUILD_DATE=2026-01-08
-RELEASE_TYPE=security_enhancement
+RELEASE_TYPE=performance_optimization
 STATUS=production-ready

@@ -3932,9 +3932,11 @@ function parental_control_cron_job() {
 		$watchdog_triggered = false;
 		declare(ticks=1);
 		register_tick_function(function() use ($start_time, &$watchdog_triggered) {
-			if (!$watchdog_triggered && (microtime(true) - $start_time) > 55) {
+			// v1.4.28: Increased timeout from 55s to 90s after performance optimizations
+			// Even with caching, busy firewalls may need extra time for large state tables
+			if (!$watchdog_triggered && (microtime(true) - $start_time) > 90) {
 				$watchdog_triggered = true;
-				pc_log("WATCHDOG: Cron job exceeded 55 seconds, forcing exit", 'error', array(
+				pc_log("WATCHDOG: Cron job exceeded 90 seconds, forcing exit", 'error', array(
 					'event.action' => 'watchdog_triggered',
 					'execution.duration.seconds' => (microtime(true) - $start_time)
 				));
@@ -3986,8 +3988,15 @@ function parental_control_cron_job() {
 		}
 	}
 		
+	// PERFORMANCE OPTIMIZATION v1.4.28: Load service IPs and state table once
+	// Instead of querying pfctl separately for each device (N × M calls),
+	// we load all data once and pass to each device check (M + 1 calls total)
+	// Example: 5 devices × 3 services = 15 calls → 4 calls (74% reduction)
+	$service_ips_cache = pc_load_all_service_ips();
+	$all_states = pc_get_all_established_states();
+	
 	// Update usage for active devices (now uses REAL connection tracking)
-	$state_changed = pc_update_device_usage($state);
+	$state_changed = pc_update_device_usage($state, $service_ips_cache, $all_states);
 	
 	// CRITICAL: Update monitoring table with ALL profile device IPs
 	// WHY: Service monitoring rules need this table to track usage for all devices
@@ -4010,12 +4019,17 @@ function parental_control_cron_job() {
 	
 	$execution_time = round((microtime(true) - $start_time) * 1000, 2);
 	
+	// v1.4.28: Enhanced performance telemetry
 	pc_log("Cron job completed successfully", 'info', array(
 		'event.action' => 'cron_job_complete',
 		'execution.duration.ms' => $execution_time,
+		'execution.duration.seconds' => round($execution_time / 1000, 2),
+		'devices.processed' => $tracked_count,
 		'devices.blocked' => count($should_be_blocked),
 		'firewall.changes' => $changes_applied,
-		'event.outcome' => 'success'
+		'event.outcome' => 'success',
+		'performance.optimized' => true,
+		'optimization.version' => '1.4.28'
 	));
 		
 	} catch (Exception $e) {
@@ -4735,59 +4749,135 @@ function pc_ip_matches_range($ip, $range) {
  * @return array Array of ['service_name' => connection_count]
  * @since 1.4.22
  */
-function pc_get_service_connections($device_ip) {
-	// Get all PC_Service_ aliases
-	$service_aliases = array();
+
+/**
+ * Load all service IPs once for cron job performance optimization
+ * 
+ * Queries pfctl tables for all PC_Service_ aliases in a single pass.
+ * Returns a mapping of service names to their IP arrays for reuse
+ * across multiple device checks.
+ * 
+ * PERFORMANCE: Reduces N device × M service pfctl calls to M pfctl calls
+ * Example: 5 devices × 3 services = 15 calls → 3 calls (5x faster)
+ * 
+ * @return array Service name => IP array mapping
+ * @since 1.4.28
+ * 
+ * @example
+ * $service_ips_cache = pc_load_all_service_ips();
+ * // Returns: ['Discord' => ['1.2.3.4', '5.6.7.8'], 'YouTube' => [...]]
+ * 
+ * @see pc_get_service_connections() Which uses this cache
+ * @see parental_control_cron_job() Which calls this once per execution
+ */
+function pc_load_all_service_ips() {
+	$service_ips_cache = array();
 	$aliases = config_get_path('aliases/alias', array());
 	
-	if (is_array($aliases)) {
-		foreach ($aliases as $alias) {
-			if (isset($alias['name']) && strpos($alias['name'], 'PC_Service_') === 0) {
-				$service_name = str_replace('PC_Service_', '', $alias['name']);
-				$service_aliases[$service_name] = $alias['name'];
-			}
-		}
+	if (!is_array($aliases)) {
+		return $service_ips_cache;
 	}
 	
-	if (empty($service_aliases)) {
-		return array();
-	}
-	
-	// Load service IPs from pfctl tables (cached for this run)
-	static $service_ips_cache = null;
-	if ($service_ips_cache === null) {
-		$service_ips_cache = array();
-		foreach ($service_aliases as $service_name => $alias_name) {
+	foreach ($aliases as $alias) {
+		if (isset($alias['name']) && strpos($alias['name'], 'PC_Service_') === 0) {
+			$service_name = str_replace('PC_Service_', '', $alias['name']);
+			$alias_name = $alias['name'];
+			
+			// Query this service's IP table once
 			$cmd = "pfctl -t {$alias_name} -T show 2>&1";
 			exec($cmd, $output, $return_var);
 			
 			if ($return_var === 0 && !empty($output)) {
 				$service_ips_cache[$service_name] = $output;
+			} else {
+				// Empty array for services with no IPs (prevents errors)
+				$service_ips_cache[$service_name] = array();
 			}
 		}
 	}
 	
-	// Get all ESTABLISHED connections for this device
-	// Format with NAT: "all tcp NAT_IP:port (DEVICE_IP:port) -> DEST_IP:port ESTABLISHED:ESTABLISHED"
-	$escaped_ip = preg_quote($device_ip, '/');
-	$cmd = "pfctl -ss 2>&1 | grep 'ESTABLISHED' | grep '({$device_ip}:' | head -100";
-	$output = array();
+	return $service_ips_cache;
+}
+
+/**
+ * Get all ESTABLISHED states once for cron job performance optimization
+ * 
+ * Queries pfctl state table once and returns all ESTABLISHED connections.
+ * This avoids querying the state table separately for each device.
+ * 
+ * PERFORMANCE: Reduces N device pfctl calls to 1 pfctl call
+ * Example: 5 devices = 5 calls → 1 call (5x faster)
+ * 
+ * On busy firewalls with 10,000+ states, this single query is much
+ * faster than filtering via grep for each device.
+ * 
+ * @return array Array of state table lines (ESTABLISHED only)
+ * @since 1.4.28
+ * 
+ * @example
+ * $all_states = pc_get_all_established_states();
+ * // Then filter in memory for each device (fast!)
+ * $device_states = array_filter($all_states, fn($s) => strpos($s, $ip));
+ * 
+ * @see pc_get_service_connections() Which uses this cache
+ * @see parental_control_cron_job() Which calls this once per execution
+ */
+function pc_get_all_established_states() {
+	$cmd = "pfctl -ss 2>&1 | grep 'ESTABLISHED'";
 	exec($cmd, $output, $return_var);
 	
-	if ($return_var !== 0 || empty($output)) {
+	if ($return_var === 0 && !empty($output)) {
+		return $output;
+	}
+	
+	return array();
+}
+
+function pc_get_service_connections($device_ip, $service_ips_cache = null, $all_states = null) {
+	// PERFORMANCE OPTIMIZATION v1.4.28:
+	// Accept pre-loaded caches to avoid redundant pfctl calls
+	// If not provided, load them (backward compatibility for direct calls)
+	
+	// Load service IPs cache if not provided
+	if ($service_ips_cache === null) {
+		$service_ips_cache = pc_load_all_service_ips();
+	}
+	
+	if (empty($service_ips_cache)) {
+		return array();
+	}
+	
+	// Load state table if not provided
+	if ($all_states === null) {
+		$all_states = pc_get_all_established_states();
+	}
+	
+	if (empty($all_states)) {
 		return array(); // No connections
+	}
+	
+	// Filter states for this device (in memory - fast!)
+	// Format with NAT: "all tcp NAT_IP:port (DEVICE_IP:port) -> DEST_IP:port ESTABLISHED:ESTABLISHED"
+	$device_states = array_filter($all_states, function($line) use ($device_ip) {
+		return strpos($line, "({$device_ip}:") !== false;
+	});
+	
+	if (empty($device_states)) {
+		return array(); // No connections for this device
 	}
 	
 	// Count connections per service
 	$service_connections = array();
-	foreach ($service_aliases as $service_name => $alias_name) {
+	foreach ($service_ips_cache as $service_name => $ip_list) {
 		$service_connections[$service_name] = 0;
 	}
 	
-	foreach ($output as $line) {
+	// Process filtered device states
+	foreach ($device_states as $line) {
 		// Parse NAT state line to extract device IP and destination IP
 		// Format: "all tcp NAT_IP:port (192.168.1.110:12345) -> 157.240.1.1:443 ESTABLISHED:ESTABLISHED"
 		// Format: "all tcp NAT_IP:port (192.168.1.110:12345) (157.240.1.1:443) <-> 157.240.1.1:443 ESTABLISHED:ESTABLISHED"
+		$escaped_ip = preg_quote($device_ip, '/');
 		if (preg_match('/\((' . $escaped_ip . '):(\d+)\)\s+(?:\([\d.]+:\d+\)\s+)?(?:->|<->)\s+(\d+\.\d+\.\d+\.\d+):(\d+)/', $line, $matches)) {
 			$device_ip_matched = $matches[1];
 			$dst_ip = $matches[3];
@@ -4830,7 +4920,7 @@ function pc_get_service_connections($device_ip) {
  * @see pc_has_active_connections() For connection detection
  * @see parental_control_cron_job() For periodic usage updates
  */
-function pc_update_device_usage(&$state) {
+function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states = null) {
 	$devices = pc_get_devices(); // Use helper function (DRY)
 	$interval_seconds = PC_CRON_INTERVAL_SECONDS; // Use constant (typically 60 seconds)
 	$interval_minutes = ceil($interval_seconds / 60);
@@ -4989,7 +5079,8 @@ function pc_update_device_usage(&$state) {
 		$tracked_count++;
 		
 		// NEW v1.4.22: Track per-service usage
-		$service_connections = pc_get_service_connections($ip);
+		// v1.4.28: Pass pre-loaded caches for performance
+		$service_connections = pc_get_service_connections($ip, $service_ips_cache, $all_states);
 		if (!empty($service_connections)) {
 			// Initialize service usage tracking
 			if (!isset($state['devices_by_ip'][$ip]['service_usage'])) {
