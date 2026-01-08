@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "1.4.28",
-    "build_date": "2026-01-08T21:00:00Z",
+    "version": "1.4.29",
+    "build_date": "2026-01-09T12:00:00Z",
     "git_commit": "pending",
     "git_branch": "develop",
     "built_by": "development",
@@ -88,6 +88,26 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.4.29",
+      "date": "2026-01-09",
+      "type": "ui_improvement",
+      "changes": [
+        "UI ENHANCEMENT: Reduced font size of 'How Table-Based Blocking Works' info panel",
+        "Changed font size from 14px to 7px (50% reduction) for better space utilization",
+        "Applied consistent styling with other info blocks (icon size, padding, line-height)",
+        "Improved visual hierarchy and readability on status page",
+        "Files Modified: parental_control_status.php"
+      ],
+      "impact": "low",
+      "breaking_changes": false,
+      "requires_reboot": false,
+      "deployment_notes": [
+        "UI-only change, no functionality affected",
+        "No firewall reload required",
+        "Changes visible immediately after page refresh"
+      ]
+    },
     {
       "version": "1.4.28",
       "date": "2026-01-08",

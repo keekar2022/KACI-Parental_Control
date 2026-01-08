@@ -1,4 +1,4 @@
-VERSION=1.4.28
-BUILD_DATE=2026-01-08
-RELEASE_TYPE=performance_optimization
+VERSION=1.4.29
+BUILD_DATE=2026-01-09
+RELEASE_TYPE=ui_improvement
 STATUS=production-ready

@@ -557,15 +557,15 @@ if (is_array($profiles)) {
 				</table>
 			</div>
 			
-			<div class="alert alert-info" style="margin-top: 15px;">
-				<h4><i class="fa-solid fa-question-circle"></i> <?=gettext("How Table-Based Blocking Works:")?></h4>
-				<ul style="margin-bottom: 0;">
-					<li><strong>Alias/Table:</strong> <code>parental_control_blocked</code> contains list of blocked IPs</li>
-					<li><strong>Floating Rule:</strong> Blocks traffic from IPs in the table (visible in GUI)</li>
-					<li><strong>Dynamic Updates:</strong> IPs added/removed instantly without filter reload</li>
-					<li><strong>Rule Ordering:</strong> Floating rules are evaluated BEFORE interface rules (correct order)</li>
-				</ul>
-			</div>
+		<div class="alert alert-info" style="margin-top: 5px; padding: 5px 10px; font-size: 7px;">
+			<h4 style="font-size: 8px; margin-bottom: 5px;"><i class="fa-solid fa-question-circle" style="font-size: 7px;"></i> <?=gettext("How Table-Based Blocking Works:")?></h4>
+			<ul style="margin-bottom: 0; line-height: 1.3;">
+				<li style="margin-bottom: 2px;"><strong>Alias/Table:</strong> <code>parental_control_blocked</code> contains list of blocked IPs</li>
+				<li style="margin-bottom: 2px;"><strong>Floating Rule:</strong> Blocks traffic from IPs in the table (visible in GUI)</li>
+				<li style="margin-bottom: 2px;"><strong>Dynamic Updates:</strong> IPs added/removed instantly without filter reload</li>
+				<li style="margin-bottom: 2px;"><strong>Rule Ordering:</strong> Floating rules are evaluated BEFORE interface rules (correct order)</li>
+			</ul>
+		</div>
 			
 			<script>
 				// Update badge count
