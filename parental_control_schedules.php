@@ -31,56 +31,65 @@ $savemsg = '';
 
 // DELETE action
 if ($_POST['act'] === 'del' && isset($_POST['id']) && is_numeric($_POST['id'])) {
-	$id = intval($_POST['id']);
-	if (isset($schedules[$id])) {
-		$schedule_name = $schedules[$id]['name'];
-		unset($schedules[$id]);
-		$schedules = array_values($schedules); // Re-index
-		config_set_path('installedpackages/parentalcontrolschedules/config', $schedules);
-		write_config("Deleted schedule: {$schedule_name}");
-		
-		try {
-			parental_control_sync();
-		} catch (Exception $e) {
-			pc_log("Sync failed but schedule deleted: " . $e->getMessage(), 'warning');
+	// Admin access control
+	if (!pc_is_admin_user()) {
+		$input_errors[] = "Access denied. Only administrators can delete schedules.";
+	} else {
+		$id = intval($_POST['id']);
+		if (isset($schedules[$id])) {
+			$schedule_name = $schedules[$id]['name'];
+			unset($schedules[$id]);
+			$schedules = array_values($schedules); // Re-index
+			config_set_path('installedpackages/parentalcontrolschedules/config', $schedules);
+			write_config("Deleted schedule: {$schedule_name}");
+			
+			try {
+				parental_control_sync();
+			} catch (Exception $e) {
+				pc_log("Sync failed but schedule deleted: " . $e->getMessage(), 'warning');
+			}
+			
+			$savemsg = "Schedule '{$schedule_name}' has been deleted successfully.";
+			pc_log("Schedule deleted via GUI", 'info', array(
+				'schedule.name' => $schedule_name,
+				'event.action' => 'schedule_deleted'
+			));
 		}
-		
-		$savemsg = "Schedule '{$schedule_name}' has been deleted successfully.";
-		pc_log("Schedule deleted via GUI", 'info', array(
-			'schedule.name' => $schedule_name,
-			'event.action' => 'schedule_deleted'
-		));
 	}
 }
 
 // SAVE action (Add or Edit)
 if (isset($_POST['save'])) {
-	// Validation
-	if (empty($_POST['name'])) {
-		$input_errors[] = "Schedule name is required.";
-	}
-	if (empty($_POST['profile_names']) || !is_array($_POST['profile_names'])) {
-		$input_errors[] = "At least one profile must be selected.";
-	}
-	if (empty($_POST['days']) || !is_array($_POST['days'])) {
-		$input_errors[] = "At least one day must be selected.";
-	}
-	if (empty($_POST['start_time'])) {
-		$input_errors[] = "Start time is required.";
-	}
-	if (empty($_POST['end_time'])) {
-		$input_errors[] = "End time is required.";
-	}
-	
-	// Time format validation
-	if (!empty($_POST['start_time']) && !preg_match('/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/', $_POST['start_time'])) {
-		$input_errors[] = "Start time must be in HH:MM format (e.g., 08:00, 13:30, 22:00).";
-	}
-	if (!empty($_POST['end_time']) && !preg_match('/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/', $_POST['end_time'])) {
-		$input_errors[] = "End time must be in HH:MM format (e.g., 17:00, 20:30, 24:00).";
-	}
-	
-	if (empty($input_errors)) {
+	// Admin access control - check FIRST before any validation
+	if (!pc_is_admin_user()) {
+		$input_errors[] = "Access denied. Only administrators can modify schedules.";
+	} else {
+		// Validation
+		if (empty($_POST['name'])) {
+			$input_errors[] = "Schedule name is required.";
+		}
+		if (empty($_POST['profile_names']) || !is_array($_POST['profile_names'])) {
+			$input_errors[] = "At least one profile must be selected.";
+		}
+		if (empty($_POST['days']) || !is_array($_POST['days'])) {
+			$input_errors[] = "At least one day must be selected.";
+		}
+		if (empty($_POST['start_time'])) {
+			$input_errors[] = "Start time is required.";
+		}
+		if (empty($_POST['end_time'])) {
+			$input_errors[] = "End time is required.";
+		}
+		
+		// Time format validation
+		if (!empty($_POST['start_time']) && !preg_match('/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/', $_POST['start_time'])) {
+			$input_errors[] = "Start time must be in HH:MM format (e.g., 08:00, 13:30, 22:00).";
+		}
+		if (!empty($_POST['end_time']) && !preg_match('/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/', $_POST['end_time'])) {
+			$input_errors[] = "End time must be in HH:MM format (e.g., 17:00, 20:30, 24:00).";
+		}
+		
+		if (empty($input_errors)) {
 		$schedule = array(
 			'name' => trim($_POST['name']),
 			'profile_names' => is_array($_POST['profile_names']) ? implode(',', $_POST['profile_names']) : $_POST['profile_names'],
@@ -121,6 +130,7 @@ if (isset($_POST['save'])) {
 		
 		// Reload schedules
 		$schedules = config_get_path('installedpackages/parentalcontrolschedules/config', []);
+		}
 	}
 }
 

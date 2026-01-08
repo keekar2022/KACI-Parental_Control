@@ -294,6 +294,53 @@ function pc_is_service_enabled() {
 }
 
 /**
+ * Check if current user is an administrator
+ * 
+ * WHY: Some sensitive operations (like manual usage reset) should only be available
+ * to administrators, not all logged-in users.
+ * 
+ * Uses pfSense native functions to properly check group membership.
+ * Group membership is stored in system/group[]/member[] arrays by UID,
+ * not in the user record itself.
+ * 
+ * @return bool True if current user is in the 'admins' group or has UID 0
+ * @since 1.4.25
+ * 
+ * @example
+ * if (!pc_is_admin_user()) {
+ *     return; // Not admin, deny access
+ * }
+ */
+function pc_is_admin_user() {
+	if (!isset($_SESSION['Username'])) {
+		return false;
+	}
+	
+	$username = $_SESSION['Username'];
+	
+	// Use pfSense native function to get user entry
+	// getUserEntry() returns ['idx' => index, 'item' => user_data]
+	$user_entry = getUserEntry($username);
+	
+	if (!$user_entry || !isset($user_entry['item'])) {
+		return false;
+	}
+	
+	$user = $user_entry['item'];
+	
+	// Check if user has UID 0 (root/admin)
+	if (isset($user['uid']) && $user['uid'] == '0') {
+		return true;
+	}
+	
+	// Use pfSense native function to get user's groups
+	// This checks system/group[]/member[] arrays for user's UID
+	$user_groups = local_user_get_groups($user, true);
+	
+	return in_array('admins', $user_groups);
+}
+
+/**
  * Check if a device is enabled
  * 
  * WHY: Device enable/disable logic is used in multiple loops.

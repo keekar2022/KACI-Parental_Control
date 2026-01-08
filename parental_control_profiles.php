@@ -78,26 +78,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // DELETE action
 if ($_POST['act'] === 'del' && isset($_POST['id']) && is_numeric($_POST['id'])) {
-	$id = intval($_POST['id']);
-	if (isset($profiles[$id])) {
-		$profile_name = $profiles[$id]['name'];
-		unset($profiles[$id]);
-		$profiles = array_values($profiles); // Re-index
-		config_set_path('installedpackages/parentalcontrolprofiles/config', $profiles);
-		write_config("Deleted profile: {$profile_name}");
-		
-		// Try to sync, but don't fail if it doesn't work
-		try {
-			parental_control_sync();
-		} catch (Exception $e) {
-			pc_log("Sync failed but profile deleted: " . $e->getMessage(), 'warning');
+	// Admin access control
+	if (!pc_is_admin_user()) {
+		$input_errors[] = "Access denied. Only administrators can delete profiles.";
+	} else {
+		$id = intval($_POST['id']);
+		if (isset($profiles[$id])) {
+			$profile_name = $profiles[$id]['name'];
+			unset($profiles[$id]);
+			$profiles = array_values($profiles); // Re-index
+			config_set_path('installedpackages/parentalcontrolprofiles/config', $profiles);
+			write_config("Deleted profile: {$profile_name}");
+			
+			// Try to sync, but don't fail if it doesn't work
+			try {
+				parental_control_sync();
+			} catch (Exception $e) {
+				pc_log("Sync failed but profile deleted: " . $e->getMessage(), 'warning');
+			}
+			
+			$savemsg = "Profile '{$profile_name}' has been deleted successfully.";
+			pc_log("Profile deleted via GUI", 'info', array(
+				'profile.name' => $profile_name,
+				'event.action' => 'profile_deleted'
+			));
 		}
-		
-		$savemsg = "Profile '{$profile_name}' has been deleted successfully.";
-		pc_log("Profile deleted via GUI", 'info', array(
-			'profile.name' => $profile_name,
-			'event.action' => 'profile_deleted'
-		));
 	}
 }
 
@@ -124,21 +129,25 @@ if ($_POST['act'] === 'del_device' && isset($_POST['profile_id']) && isset($_POS
 
 // SAVE action (Add or Edit Profile)
 if (isset($_POST['save'])) {
-	// DEBUG: Log that save was triggered
-	// DEBUG: error_log("PARENTAL_CONTROL_DEBUG: Save button clicked");
-	// DEBUG: error_log("PARENTAL_CONTROL_DEBUG: POST data: " . print_r($_POST, true));
-	
-	// Validation
-	if (empty($_POST['name'])) {
-		$input_errors[] = "Profile name is required.";
-		// DEBUG: error_log("PARENTAL_CONTROL_DEBUG: Validation failed - name empty");
-	}
-	if (empty($_POST['daily_limit']) || !is_numeric($_POST['daily_limit'])) {
-		$input_errors[] = "Daily limit must be a number (minutes).";
-		// DEBUG: error_log("PARENTAL_CONTROL_DEBUG: Validation failed - daily_limit invalid");
-	}
-	
-	if (empty($input_errors)) {
+	// Admin access control - check FIRST before any validation
+	if (!pc_is_admin_user()) {
+		$input_errors[] = "Access denied. Only administrators can modify profiles.";
+	} else {
+		// DEBUG: Log that save was triggered
+		// DEBUG: error_log("PARENTAL_CONTROL_DEBUG: Save button clicked");
+		// DEBUG: error_log("PARENTAL_CONTROL_DEBUG: POST data: " . print_r($_POST, true));
+		
+		// Validation
+		if (empty($_POST['name'])) {
+			$input_errors[] = "Profile name is required.";
+			// DEBUG: error_log("PARENTAL_CONTROL_DEBUG: Validation failed - name empty");
+		}
+		if (empty($_POST['daily_limit']) || !is_numeric($_POST['daily_limit'])) {
+			$input_errors[] = "Daily limit must be a number (minutes).";
+			// DEBUG: error_log("PARENTAL_CONTROL_DEBUG: Validation failed - daily_limit invalid");
+		}
+		
+		if (empty($input_errors)) {
 		// DEBUG: error_log("PARENTAL_CONTROL_DEBUG: Validation passed, creating profile");
 		
 		$profile = array(
@@ -223,26 +232,31 @@ if (isset($_POST['save'])) {
 		// Reload profiles
 		$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', []);
 		// DEBUG: error_log("PARENTAL_CONTROL_DEBUG: Reloaded profiles, count: " . count($profiles));
-	} else {
-		// DEBUG: error_log("PARENTAL_CONTROL_DEBUG: Save failed due to validation errors");
+		} else {
+			// DEBUG: error_log("PARENTAL_CONTROL_DEBUG: Save failed due to validation errors");
+		}
 	}
 }
 
 // SAVE DEVICE action (Add or Edit Device)
 if ($_POST['save_device']) {
-	$profile_id = intval($_POST['profile_id']);
-	
-	// Validation
-	if (empty($_POST['device_name'])) {
-		$input_errors[] = "Device name is required.";
-	}
-	if (empty($_POST['mac_address'])) {
-		$input_errors[] = "MAC address is required.";
-	} elseif (!preg_match('/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/', $_POST['mac_address'])) {
-		$input_errors[] = "Invalid MAC address format. Use format: XX:XX:XX:XX:XX:XX";
-	}
-	
-	if (empty($input_errors)) {
+	// Admin access control - check FIRST before any validation
+	if (!pc_is_admin_user()) {
+		$input_errors[] = "Access denied. Only administrators can modify devices.";
+	} else {
+		$profile_id = intval($_POST['profile_id']);
+		
+		// Validation
+		if (empty($_POST['device_name'])) {
+			$input_errors[] = "Device name is required.";
+		}
+		if (empty($_POST['mac_address'])) {
+			$input_errors[] = "MAC address is required.";
+		} elseif (!preg_match('/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/', $_POST['mac_address'])) {
+			$input_errors[] = "Invalid MAC address format. Use format: XX:XX:XX:XX:XX:XX";
+		}
+		
+		if (empty($input_errors)) {
 		$device = array(
 			'device_name' => trim($_POST['device_name']),
 			'mac_address' => strtolower(trim($_POST['mac_address'])),
@@ -278,6 +292,7 @@ if ($_POST['save_device']) {
 		
 		// Reload profiles
 		$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', []);
+		}
 	}
 }
 

@@ -15,6 +15,23 @@
 require_once("guiconfig.inc");
 require_once("/usr/local/pkg/parental_control.inc");
 
+// Handle manual reset (admin only)
+// Note: CSRF protection is automatic via csrf-magic.php included in guiconfig.inc
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'manual_reset') {
+	if (!pc_is_admin_user()) {
+		$error_message = "Access denied. Only administrators can reset usage.";
+	} else {
+		// Perform reset using proven logic from diagnostic script
+		$state = pc_load_state_from_disk();
+		pc_reset_daily_counters($state);
+		$state['last_reset'] = time(); // Set to current time, not midnight
+		pc_save_state($state);
+		
+		pc_log("Manual usage reset performed by admin: " . $_SESSION['Username'], 'info');
+		$success_message = "Usage counters have been reset successfully!";
+	}
+}
+
 $pgtitle = array(gettext("Services"), gettext("Keekar's Parental Control"), gettext("Status"));
 $pglinks = array("", "@self", "@self");
 
@@ -110,6 +127,41 @@ if (is_array($profiles)) {
 		</dl>
 	</div>
 </div>
+
+<?php if (pc_is_admin_user()): ?>
+<div class="panel panel-warning">
+	<div class="panel-heading">
+		<h2 class="panel-title">
+			<i class="fa-solid fa-undo"></i> <?=gettext("Administrator Controls")?>
+		</h2>
+	</div>
+	<div class="panel-body">
+		<?php if (isset($error_message)): ?>
+			<div class="alert alert-danger">
+				<i class="fa-solid fa-exclamation-triangle"></i>
+				<?=htmlspecialchars($error_message)?>
+			</div>
+		<?php endif; ?>
+		
+		<?php if (isset($success_message)): ?>
+			<div class="alert alert-success">
+				<i class="fa-solid fa-check-circle"></i>
+				<?=htmlspecialchars($success_message)?>
+			</div>
+		<?php endif; ?>
+		
+		<form method="post" action="<?=$_SERVER['PHP_SELF']?>" onsubmit="return confirm('Are you sure you want to reset all usage counters? This will set all profile and device usage to zero.');">
+			<input type="hidden" name="action" value="manual_reset">
+			<button type="submit" class="btn btn-warning" name="reset">
+				<i class="fa-solid fa-undo"></i> <?=gettext("Reset All Usage Counters")?>
+			</button>
+			<p class="text-muted" style="margin: 5px 0 0 0; padding: 3px 0; font-size: 7px; line-height: 1.3;">
+				<strong><?=gettext("Note:")?>:</strong> <?=gettext("This will immediately reset all usage counters to zero for all profiles and devices. The automatic midnight reset will continue to run as scheduled.")?>
+			</p>
+		</form>
+	</div>
+</div>
+<?php endif; ?>
 
 <div class="panel panel-default">
 	<div class="panel-heading">
@@ -526,17 +578,19 @@ if (is_array($profiles)) {
 				<i class="fa-solid fa-check-circle"></i>
 				<strong><?=gettext("No Blocking Active")?></strong> - All devices currently have access.
 			</div>
-			<p class="text-muted">
-				<i class="fa-solid fa-info-circle"></i>
-				Devices will be blocked automatically when:
-			</p>
-			<ul class="text-muted">
-				<li>Profile time limit exceeded</li>
-				<li>Currently in blocked schedule time (e.g., bedtime)</li>
-			</ul>
-			<p class="text-muted">
-				<strong>Note:</strong> IPs are added to the <code>parental_control_blocked</code> table dynamically.
-			</p>
+			<div style="font-size: 7px; line-height: 1.3; margin: 5px 0; padding: 5px 0;">
+				<p style="margin: 2px 0;">
+					<i class="fa-solid fa-info-circle" style="font-size: 7px;"></i>
+					<strong>Devices will be blocked automatically when:</strong>
+				</p>
+				<ul style="margin: 2px 0; padding-left: 15px; column-count: 2; column-gap: 10px;">
+					<li style="margin-bottom: 2px;">Profile time limit exceeded</li>
+					<li style="margin-bottom: 2px;">Currently in blocked schedule time (e.g., bedtime)</li>
+				</ul>
+				<p style="margin: 2px 0;">
+					<strong>Note:</strong> IPs are added to the <code>parental_control_blocked</code> table dynamically.
+				</p>
+			</div>
 			
 			<script>
 				// Update badge
@@ -677,14 +731,14 @@ if (is_array($profiles)) {
 				</tbody>
 			</table>
 			
-			<div class="alert alert-info" style="margin-top: 15px;">
-				<h4><i class="fa-solid fa-info-circle"></i> <?=gettext("About Service Tracking")?></h4>
-				<ul style="margin-bottom: 0;">
-					<li><strong>Tracked Services:</strong> Only services configured in <em>Online-Service</em> tab are tracked</li>
-					<li><strong>Update Frequency:</strong> Service usage updates every <?=PC_CRON_INTERVAL_SECONDS / 60?> minutes</li>
-					<li><strong>Accuracy:</strong> Based on actual TCP connections to service IP ranges</li>
-					<li><strong>Active Connections:</strong> Number of current connections to this service</li>
-					<li><strong>Reset:</strong> Daily usage resets at midnight (weekly usage preserved)</li>
+			<div class="alert alert-info" style="margin: 5px 0; padding: 5px 10px; font-size: 7px; line-height: 1.3;">
+				<h4 style="font-size: 8px; margin: 2px 0 4px 0;"><i class="fa-solid fa-info-circle" style="font-size: 7px;"></i> <?=gettext("About Service Tracking")?></h4>
+				<ul style="margin: 0; padding-left: 15px; column-count: 2; column-gap: 10px;">
+					<li style="margin-bottom: 2px;"><strong>Tracked Services:</strong> Only services configured in <em>Online-Service</em> tab are tracked</li>
+					<li style="margin-bottom: 2px;"><strong>Update Frequency:</strong> Service usage updates every <?=PC_CRON_INTERVAL_SECONDS / 60?> minutes</li>
+					<li style="margin-bottom: 2px;"><strong>Accuracy:</strong> Based on actual TCP connections to service IP ranges</li>
+					<li style="margin-bottom: 2px;"><strong>Active Connections:</strong> Number of current connections to this service</li>
+					<li style="margin-bottom: 2px;"><strong>Reset:</strong> Daily usage resets at midnight (weekly usage preserved)</li>
 				</ul>
 			</div>
 		<?php endif; ?>
@@ -851,14 +905,14 @@ if (is_array($profiles)) {
 				</table>
 			</div>
 			
-			<div class="alert alert-info" style="margin-top: 15px;">
-				<h4><i class="fa-solid fa-question-circle"></i> <?=gettext("How Device Monitoring Works:")?></h4>
-				<ul style="margin-bottom: 0;">
-					<li><strong>Alias/Table:</strong> <code>parental_control_monitor</code> contains list of monitored device IPs</li>
-					<li><strong>Floating Rules:</strong> Log and track traffic from monitored devices (visible in GUI)</li>
-					<li><strong>Dynamic Updates:</strong> IPs added/removed instantly without filter reload</li>
-					<li><strong>Purpose:</strong> Track usage time and enforce daily limits for profiles</li>
-					<li><strong>Access:</strong> Monitored devices have internet access (unless blocked by time limit)</li>
+			<div class="alert alert-info" style="margin: 5px 0; padding: 5px 10px; font-size: 7px; line-height: 1.3;">
+				<h4 style="font-size: 8px; margin: 2px 0 4px 0;"><i class="fa-solid fa-question-circle" style="font-size: 7px;"></i> <?=gettext("How Device Monitoring Works:")?></h4>
+				<ul style="margin: 0; padding-left: 15px; column-count: 2; column-gap: 10px;">
+					<li style="margin-bottom: 2px;"><strong>Alias/Table:</strong> <code>parental_control_monitor</code> contains list of monitored device IPs</li>
+					<li style="margin-bottom: 2px;"><strong>Floating Rules:</strong> Log and track traffic from monitored devices (visible in GUI)</li>
+					<li style="margin-bottom: 2px;"><strong>Dynamic Updates:</strong> IPs added/removed instantly without filter reload</li>
+					<li style="margin-bottom: 2px;"><strong>Purpose:</strong> Track usage time and enforce daily limits for profiles</li>
+					<li style="margin-bottom: 2px;"><strong>Access:</strong> Monitored devices have internet access (unless blocked by time limit)</li>
 				</ul>
 			</div>
 			
@@ -894,7 +948,7 @@ if (is_array($profiles)) {
 		<?php } ?>
 		
 		<hr>
-		<p class="text-muted" style="font-size: 11px; margin-bottom: 0;">
+		<p class="text-muted" style="font-size: 5.5px; margin-bottom: 0;">
 			<strong>Alias/Table:</strong> <code>parental_control_monitor</code> (Firewall → Firewall → Aliases) | 
 			<strong>Floating Rules:</strong> Service-specific monitoring rules (Firewall → Rules → Floating) | 
 			<strong>CLI Command:</strong> <code>pfctl -t parental_control_monitor -T show</code>
