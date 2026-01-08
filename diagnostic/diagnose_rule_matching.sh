@@ -56,6 +56,15 @@ if [ -z "$MONITOR_IPS" ]; then
     echo "${YELLOW}   ⚠  This is why logs show () - traffic doesn't match PC rules${NC}"
     DEVICE_IN_MONITOR=0
 else
+    # First check if target device is in list (before displaying)
+    DEVICE_IN_MONITOR=0
+    if [ -n "$DEVICE_IP" ]; then
+        if echo "$MONITOR_IPS" | grep -qw "$DEVICE_IP"; then
+            DEVICE_IN_MONITOR=1
+        fi
+    fi
+    
+    # Display the list
     echo "$MONITOR_IPS" | while read ip; do
         if [ "$ip" = "$DEVICE_IP" ]; then
             echo "   ${GREEN}✓ $ip ${BOLD}(TARGET DEVICE)${NC}"
@@ -64,14 +73,12 @@ else
         fi
     done
     
+    # Show status
+    echo ""
     if [ -n "$DEVICE_IP" ]; then
-        if echo "$MONITOR_IPS" | grep -q "^${DEVICE_IP}$"; then
-            DEVICE_IN_MONITOR=1
-            echo ""
+        if [ $DEVICE_IN_MONITOR -eq 1 ]; then
             echo "${GREEN}   ✓ Target device IS in monitor table${NC}"
         else
-            DEVICE_IN_MONITOR=0
-            echo ""
             echo "${RED}   ✗ Target device NOT in monitor table${NC}"
             echo "${YELLOW}   ⚠  Traffic from this device won't match PC monitoring rules${NC}"
         fi
@@ -86,6 +93,15 @@ if [ -z "$BLOCKED_IPS" ]; then
     echo "   ${GREEN}✓ Table is empty - no devices currently blocked${NC}"
     DEVICE_IN_BLOCKED=0
 else
+    # First check if target device is in list (before displaying)
+    DEVICE_IN_BLOCKED=0
+    if [ -n "$DEVICE_IP" ]; then
+        if echo "$BLOCKED_IPS" | grep -qw "$DEVICE_IP"; then
+            DEVICE_IN_BLOCKED=1
+        fi
+    fi
+    
+    # Display the list
     echo "$BLOCKED_IPS" | while read ip; do
         if [ "$ip" = "$DEVICE_IP" ]; then
             echo "   ${RED}✗ $ip ${BOLD}(TARGET DEVICE - BLOCKED!)${NC}"
@@ -94,14 +110,12 @@ else
         fi
     done
     
+    # Show status
+    echo ""
     if [ -n "$DEVICE_IP" ]; then
-        if echo "$BLOCKED_IPS" | grep -q "^${DEVICE_IP}$"; then
-            DEVICE_IN_BLOCKED=1
-            echo ""
+        if [ $DEVICE_IN_BLOCKED -eq 1 ]; then
             echo "${RED}   ✗ Target device IS blocked${NC}"
         else
-            DEVICE_IN_BLOCKED=0
-            echo ""
             echo "${GREEN}   ✓ Target device is NOT blocked${NC}"
         fi
     fi
@@ -243,21 +257,31 @@ if [ -n "$DEVICE_IP" ]; then
     
     # Try to match against service IPs
     echo "${BLUE}🎯 Matching Connections Against Service Aliases:${NC}"
+    SERVICE_MATCHES_FOUND=0
+    
     for service in YouTube Facebook Discord; do
         TABLE_NAME="PC_Service_${service}"
         SERVICE_IPS=$(pfctl -t "$TABLE_NAME" -T show 2>/dev/null)
         
         if [ -n "$SERVICE_IPS" ] && [ -n "$CONNECTIONS" ]; then
-            MATCHED=0
-            echo "$CONNECTIONS" | while read conn; do
-                DEST_IP=$(echo "$conn" | awk '{print $4}' | cut -d: -f1)
-                if echo "$SERVICE_IPS" | grep -q "^${DEST_IP}$"; then
-                    MATCHED=1
-                    echo "   ${GREEN}✓ $service: Connection to $DEST_IP${NC}"
+            # Extract destination IPs from connections
+            DEST_IPS=$(echo "$CONNECTIONS" | awk '{print $4}' | cut -d: -f1 | sort -u)
+            
+            for dest_ip in $DEST_IPS; do
+                # Check if this IP is in the service alias
+                if echo "$SERVICE_IPS" | grep -qw "$dest_ip"; then
+                    echo "   ${GREEN}✓ $service: Connection to $dest_ip${NC}"
+                    SERVICE_MATCHES_FOUND=1
                 fi
             done
         fi
     done
+    
+    if [ $SERVICE_MATCHES_FOUND -eq 0 ]; then
+        echo "   ${YELLOW}⚠  No connections match YouTube/Facebook/Discord IPs${NC}"
+        echo "   ${BLUE}ℹ  Device is connecting to generic Google/Apple services${NC}"
+        echo "   ${BLUE}ℹ  These connections will show () in logs (expected behavior)${NC}"
+    fi
     echo ""
 fi
 
