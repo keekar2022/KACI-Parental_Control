@@ -412,23 +412,32 @@ if (!is_array($config['installedpackages']['menu'])) {
     $config['installedpackages']['menu'] = array();
 }
 
-// Check if menu entry exists
-$menu_exists = false;
-foreach ($config['installedpackages']['menu'] as $menu_item) {
-    if ($menu_item['name'] === 'Keekar\'s Parental Control') {
-        $menu_exists = true;
-        break;
+// Remove any existing Parental Control menu entries to avoid duplicates
+$config['installedpackages']['menu'] = array_filter(
+    $config['installedpackages']['menu'],
+    function($item) {
+        return !isset($item['name']) || 
+               (strpos($item['name'], 'Parental Control') === false && 
+                strpos($item['name'], 'Keekar') === false);
     }
-}
+);
+$config['installedpackages']['menu'] = array_values($config['installedpackages']['menu']);
 
-// Add menu entry if not exists
-if (!$menu_exists) {
-    $config['installedpackages']['menu'][] = array(
-        'name' => 'Keekar\'s Parental Control',
-        'section' => 'Services',
-        'url' => '/pkg_edit.php?xml=parental_control.xml'
-    );
-}
+// Add Services menu entry
+$config['installedpackages']['menu'][] = array(
+    'name' => 'Keekar\'s Parental Control',
+    'tooltiptext' => 'Configure parental control and time limits',
+    'section' => 'Services',
+    'url' => '/pkg_edit.php?xml=parental_control.xml&id=0'
+);
+
+// Add Status menu entry
+$config['installedpackages']['menu'][] = array(
+    'name' => 'Parental Control',
+    'tooltiptext' => 'View parental control status and device usage',
+    'section' => 'Status',
+    'url' => '/parental_control_status.php'
+);
 
 // Initialize configuration if not exists
 if (!is_array($config['installedpackages']['parentalcontrol'])) {
@@ -1022,11 +1031,13 @@ do_install() {
         check_dependencies
     fi
     
-    # Setup authentication (only for full install)
-    if [ "$MODE" = "install" ]; then
-        setup_ssh_keys
-        setup_sudo
-    fi
+    # CRITICAL: Always ensure passwordless SSH and sudo are configured
+    # WHY: All modes (install, update, fix, verify, debug) require authentication
+    # SSH keys can expire, be removed, or not be set up initially
+    # This ensures seamless operation for all functions
+    print_info "Ensuring passwordless authentication..."
+    setup_ssh_keys
+    setup_sudo
     
     # Upload files
     upload_files
@@ -1129,6 +1140,13 @@ case "$MODE" in
         echo ""
         echo "Target: $PFSENSE_IP"
         echo ""
+        
+        # Ensure authentication for uninstall
+        print_info "Ensuring passwordless authentication..."
+        setup_ssh_keys
+        setup_sudo
+        
+        echo ""
         print_warning "This will completely remove Keekar's Parental Control package"
         echo ""
         do_uninstall
@@ -1161,8 +1179,30 @@ case "$MODE" in
         echo ""
         echo "Target: $PFSENSE_IP"
         echo ""
+        
+        # Ensure authentication is set up for update/fix operations
+        print_info "Ensuring passwordless authentication..."
+        setup_ssh_keys
+        setup_sudo
+        
+        echo ""
         upload_files
         if [ $? -eq 0 ]; then
+            # Trigger package sync to apply updates
+            print_info "Triggering package configuration sync..."
+            ssh -o BatchMode=yes $PFSENSE_USER@$PFSENSE_IP "sudo -n /usr/local/bin/php -r \"require_once('/usr/local/pkg/parental_control.inc'); parental_control_sync();\"" 2>/dev/null || \
+            ssh -t $PFSENSE_USER@$PFSENSE_IP "sudo /usr/local/bin/php -r \"require_once('/usr/local/pkg/parental_control.inc'); parental_control_sync();\""
+            
+            if [ $? -eq 0 ]; then
+                print_success "Package configuration synced"
+                print_info "New service-specific blocking tables and rules will be created"
+            else
+                print_warning "Could not trigger sync - may need manual sync"
+                echo "  Navigate to Services > Keekar's Parental Control > Settings"
+                echo "  Click 'Save' to trigger configuration sync"
+            fi
+            
+            echo ""
             verify_installation
         fi
         ;;
@@ -1172,6 +1212,14 @@ case "$MODE" in
         echo "============================================"
         echo ""
         echo "Target: $PFSENSE_IP"
+        echo ""
+        
+        # Ensure authentication for verification
+        print_info "Ensuring passwordless authentication..."
+        setup_ssh_keys
+        setup_sudo
+        
+        echo ""
         verify_installation
         ;;
     debug)
@@ -1180,6 +1228,14 @@ case "$MODE" in
         echo "============================================"
         echo ""
         echo "Target: $PFSENSE_IP"
+        echo ""
+        
+        # Ensure authentication for debug
+        print_info "Ensuring passwordless authentication..."
+        setup_ssh_keys
+        setup_sudo
+        
+        echo ""
         run_debug
         ;;
 esac

@@ -724,14 +724,18 @@ function parental_control_sync() {
 		// Initialize state file if needed
 		pc_init_state();
 		
-		// CRITICAL: Create pfSense aliases (tables) for dynamic blocking and monitoring
-		// WHY: Tables integrate properly with pfSense's rule system (unlike anchors)
-		// 1. parental_control_blocked - Devices that exceeded limits (for blocking)
-		// 2. parental_control_monitor - ALL profile devices (for usage tracking)
-		pc_create_blocking_alias();
-		pc_create_monitoring_alias();
-		
-		// CRITICAL: Create allow rules for DNS and pfSense access
+	// CRITICAL: Create pfSense aliases (tables) for dynamic blocking and monitoring
+	// WHY: Tables integrate properly with pfSense's rule system (unlike anchors)
+	// 1. parental_control_blocked - Devices that exceeded limits (for blocking)
+	// 2. parental_control_monitor - ALL profile devices (for usage tracking)
+	pc_create_blocking_alias();
+	pc_create_monitoring_alias();
+	
+	// v1.4.31: Initialize service-specific blocking tables
+	// Creates per-service blocking aliases for granular service limit enforcement
+	pc_init_service_block_tables();
+	
+	// CRITICAL: Create allow rules for DNS and pfSense access
 		// WHY: Blocked devices need DNS to resolve names and access to pfSense for block page
 		// ORDER: These MUST come BEFORE the block-all rule (floating rules with quick)
 		pc_create_allow_rules();
@@ -2350,6 +2354,103 @@ function pc_generate_blocking_rule($alias_name, $rule_descr) {
 }
 
 /**
+ * Initialize service-specific blocking tables/aliases
+ * 
+ * Creates one alias per monitored service for granular per-service blocking.
+ * When a profile's combined usage for a service exceeds its limit, all devices
+ * in that profile are added to the service-specific block table.
+ * 
+ * This enables blocking access to specific services (e.g., YouTube) while
+ * allowing access to other services and general internet.
+ * 
+ * @return bool True if initialization successful, false on error
+ * @since 1.4.31
+ */
+function pc_init_service_block_tables() {
+	global $config;
+	
+	// Get all PC_Service_ aliases
+	$service_aliases = array();
+	$aliases = config_get_path('aliases/alias', array());
+	
+	if (is_array($aliases)) {
+		foreach ($aliases as $alias) {
+			if (isset($alias['name']) && strpos($alias['name'], 'PC_Service_') === 0) {
+				$service_name = str_replace('PC_Service_', '', $alias['name']);
+				$service_aliases[] = strtolower($service_name);
+			}
+		}
+	}
+	
+	if (empty($service_aliases)) {
+		pc_log("No service aliases found, skipping service block table creation", 'debug');
+		return true;
+	}
+	
+	$needs_reload = false;
+	
+	// Ensure aliases structure exists
+	if (!isset($config['aliases'])) {
+		$config['aliases'] = array();
+	}
+	if (!isset($config['aliases']['alias'])) {
+		$config['aliases']['alias'] = array();
+	}
+	
+	// Create one blocking alias per service
+	// CRITICAL: pfSense table names limited to 31 characters (FreeBSD pf limitation)
+	// Use shortened prefix: pc_blocked_ instead of parental_control_blocked_
+	foreach ($service_aliases as $service_name) {
+		$alias_name = 'pc_blocked_' . $service_name;
+		$alias_exists = false;
+		
+		// Check if alias already exists
+		foreach ($config['aliases']['alias'] as $idx => $alias) {
+			if ($alias['name'] === $alias_name) {
+				$alias_exists = true;
+				// Ensure it's a host alias
+				if ($alias['type'] !== 'host') {
+					pc_log("Correcting alias '{$alias_name}' type to host", 'info');
+					$config['aliases']['alias'][$idx]['type'] = 'host';
+					$needs_reload = true;
+				}
+				break;
+			}
+		}
+		
+		if (!$alias_exists) {
+			pc_log("Creating service blocking alias: {$alias_name}", 'info', array(
+				'event.action' => 'service_alias_created',
+				'alias.name' => $alias_name,
+				'alias.type' => 'host',
+				'service' => $service_name
+			));
+			
+			$new_alias = array(
+				'name' => $alias_name,
+				'type' => 'host',
+				'address' => '',  // Start empty
+				'descr' => "Dynamically managed IPs blocked from {$service_name} service",
+				'detail' => 'DO NOT EDIT - Managed automatically by Parental Control package'
+			);
+			$config['aliases']['alias'][] = $new_alias;
+			$needs_reload = true;
+		}
+	}
+	
+	if ($needs_reload) {
+		pc_log("Service blocking tables initialized", 'info', array(
+			'event.action' => 'service_tables_initialized',
+			'services.count' => count($service_aliases),
+			'services' => implode(', ', $service_aliases)
+		));
+		mark_subsystem_dirty('aliases');
+	}
+	
+	return true;
+}
+
+/**
  * Inject anchor reference into live pfSense firewall configuration
  * 
  * CRITICAL WORKAROUND: Since pfSense's filter generation hooks aren't being called
@@ -2902,8 +3003,13 @@ function pc_create_service_monitoring_rules() {
 	$new_rules = array();
 	foreach ($service_aliases as $alias_name) {
 		$service_name = str_replace('PC_Service_', '', $alias_name);
+		$service_name_lower = strtolower($service_name);
+		// CRITICAL: Use shortened prefix to stay within 31 char limit
+		$service_block_alias = 'pc_blocked_' . $service_name_lower;
 		
-		// RULE 1: BLOCK rule for devices that exceeded limits
+		// RULE 1: BLOCK rule for devices that exceeded service-specific limits
+		// v1.4.31: Now uses per-service block tables instead of general block table
+		// This allows blocking specific services while allowing others
 		$block_rule = array(
 			'type' => 'block',
 			'interface' => 'lan',
@@ -2912,7 +3018,7 @@ function pc_create_service_monitoring_rules() {
 			'floating' => 'yes',
 			'quick' => 'yes',
 			'source' => array(
-				'address' => 'parental_control_blocked'  // Devices that exceeded limits
+				'address' => $service_block_alias  // Service-specific block table
 			),
 			'destination' => array(
 				'address' => $alias_name  // The service alias
@@ -3718,6 +3824,151 @@ function pc_remove_device_block_table($mac, $state) {
 }
 
 /**
+ * Add IP to a service-specific blocking table
+ * 
+ * Blocks a specific IP address from accessing a particular service
+ * (e.g., YouTube, Facebook, Discord) while allowing access to other
+ * services and general internet.
+ * 
+ * @param string $ip IP address to block
+ * @param string $service_name Service name (e.g., 'youtube', 'facebook')
+ * @return bool True if IP added successfully
+ * @since 1.4.31
+ */
+function pc_add_ip_to_service_table($ip, $service_name) {
+	if (empty($ip) || empty($service_name)) {
+		return false;
+	}
+	
+	$service_name_lower = strtolower($service_name);
+	// CRITICAL: Use shortened prefix to stay within 31 char limit
+	$table_name = 'pc_blocked_' . $service_name_lower;
+	
+	// Add IP to service-specific table
+	exec("/sbin/pfctl -t {$table_name} -T add {$ip} 2>&1", $output, $return_code);
+	
+	if ($return_code === 0) {
+		pc_log("Blocked {$ip} from {$service_name} service", 'info', array(
+			'event.action' => 'service_blocked',
+			'device.ip' => $ip,
+			'service.name' => $service_name,
+			'method' => 'pf_table',
+			'table.name' => $table_name
+		));
+		return true;
+	} else {
+		pc_log("Failed to block {$ip} from {$service_name}: " . implode(' ', $output), 'warning', array(
+			'event.action' => 'service_block_failed',
+			'device.ip' => $ip,
+			'service.name' => $service_name,
+			'error' => implode(' ', $output)
+		));
+		return false;
+	}
+}
+
+/**
+ * Remove IP from a service-specific blocking table
+ * 
+ * Unblocks an IP address from a specific service, restoring access
+ * to that service.
+ * 
+ * @param string $ip IP address to unblock
+ * @param string $service_name Service name (e.g., 'youtube', 'facebook')
+ * @return bool True if IP removed successfully
+ * @since 1.4.31
+ */
+function pc_remove_ip_from_service_table($ip, $service_name) {
+	if (empty($ip) || empty($service_name)) {
+		return false;
+	}
+	
+	$service_name_lower = strtolower($service_name);
+	// CRITICAL: Use shortened prefix to stay within 31 char limit
+	$table_name = 'pc_blocked_' . $service_name_lower;
+	
+	// Remove IP from service-specific table
+	exec("/sbin/pfctl -t {$table_name} -T delete {$ip} 2>&1", $output, $return_code);
+	
+	if ($return_code === 0) {
+		pc_log("Unblocked {$ip} from {$service_name} service", 'info', array(
+			'event.action' => 'service_unblocked',
+			'device.ip' => $ip,
+			'service.name' => $service_name,
+			'method' => 'pf_table',
+			'table.name' => $table_name
+		));
+		return true;
+	}
+	
+	return false;
+}
+
+/**
+ * Get all IPs currently blocked from a specific service
+ * 
+ * Queries the pfctl table for a service to get the list of
+ * IP addresses currently blocked from that service.
+ * 
+ * @param string $service_name Service name (e.g., 'youtube', 'facebook')
+ * @return array Array of IP addresses
+ * @since 1.4.31
+ */
+function pc_get_service_blocked_ips($service_name) {
+	if (empty($service_name)) {
+		return array();
+	}
+	
+	$service_name_lower = strtolower($service_name);
+	// CRITICAL: Use shortened prefix to stay within 31 char limit
+	$table_name = 'pc_blocked_' . $service_name_lower;
+	
+	// Query the table
+	exec("/sbin/pfctl -t {$table_name} -T show 2>&1", $output, $return_code);
+	
+	if ($return_code === 0 && !empty($output)) {
+		// Filter out empty lines and return
+		return array_filter(array_map('trim', $output));
+	}
+	
+	return array();
+}
+
+/**
+ * Clear all IPs from a service-specific blocking table
+ * 
+ * Removes all entries from a service block table, typically used
+ * during daily reset or manual unblock operations.
+ * 
+ * @param string $service_name Service name (e.g., 'youtube', 'facebook')
+ * @return bool True if table cleared successfully
+ * @since 1.4.31
+ */
+function pc_clear_service_table($service_name) {
+	if (empty($service_name)) {
+		return false;
+	}
+	
+	$service_name_lower = strtolower($service_name);
+	// CRITICAL: Use shortened prefix to stay within 31 char limit
+	$table_name = 'pc_blocked_' . $service_name_lower;
+	
+	// Flush the table
+	exec("/sbin/pfctl -t {$table_name} -T flush 2>&1", $output, $return_code);
+	
+	if ($return_code === 0) {
+		pc_log("Cleared all IPs from {$service_name} block table", 'info', array(
+			'event.action' => 'service_table_cleared',
+			'service.name' => $service_name,
+			'table.name' => $table_name
+		));
+		return true;
+	}
+	
+	return false;
+}
+
+/**
  * Add firewall block for a specific device using pfSense anchor
  * 
  * @deprecated since 1.1.8 - Use pc_add_device_block_table() instead
@@ -3898,6 +4149,119 @@ function pc_remove_device_block($mac, $state) {
 }
 
 /**
+ * Check and enforce profile-level service limits
+ * 
+ * For each enabled profile, checks if service-specific usage limits have been
+ * exceeded. When a limit is exceeded, all devices in that profile are blocked
+ * from accessing that specific service while retaining access to other services.
+ * 
+ * Service limits support weekend bonuses and automatic midnight reset.
+ * 
+ * @param array &$state Current state array (modified by reference)
+ * @return void Devices are added/removed from service-specific block tables
+ * @since 1.4.31
+ */
+function pc_check_profile_service_limits(&$state) {
+	// Get all profiles
+	$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', array());
+	
+	if (!is_array($profiles) || empty($profiles)) {
+		return;
+	}
+	
+	// Check if it's weekend (Saturday or Sunday)
+	$is_weekend = (date('N') >= 6);
+	
+	// Process each profile
+	foreach ($profiles as $profile) {
+		// Skip disabled profiles
+		if (!isset($profile['enabled']) || $profile['enabled'] !== 'on') {
+			continue;
+		}
+		
+		$profile_name = $profile['name'];
+		
+		// Check if profile has service limits configured
+		if (!isset($profile['service_limits']) || !is_array($profile['service_limits'])) {
+			continue;
+		}
+		
+		// Get all devices in this profile
+		$profile_devices = array();
+		$profile_device_ips = array();
+		
+		if (isset($profile['devices']) && is_array($profile['devices'])) {
+			foreach ($profile['devices'] as $device) {
+				$mac = pc_normalize_mac($device['mac_address']);
+				$profile_devices[] = $mac;
+				
+				// Get IP from state cache
+				if (isset($state['mac_to_ip_cache'][$mac])) {
+					$ip = $state['mac_to_ip_cache'][$mac];
+					if (!empty($ip)) {
+						$profile_device_ips[] = $ip;
+					}
+				}
+			}
+		}
+		
+		if (empty($profile_device_ips)) {
+			// No online devices in this profile, skip
+			continue;
+		}
+		
+		// Check each service limit
+		foreach ($profile['service_limits'] as $service_alias => $limit_config) {
+			// Extract service name from alias (e.g., 'pc_service_youtube' -> 'youtube')
+			$service_name = str_replace('pc_service_', '', strtolower($service_alias));
+			
+			// Get the daily limit
+			$daily_limit = isset($limit_config['daily_limit']) ? intval($limit_config['daily_limit']) : 0;
+			
+			if ($daily_limit <= 0) {
+				continue; // No limit configured for this service
+			}
+			
+			// Apply weekend bonus if applicable
+			$effective_limit = $daily_limit;
+			if ($is_weekend && isset($limit_config['weekend_bonus'])) {
+				$effective_limit += intval($limit_config['weekend_bonus']);
+			}
+			
+			// Get profile's current usage for this service
+			$service_usage = 0;
+			if (isset($state['profiles'][$profile_name]['service_usage'][$service_name]['usage_today'])) {
+				$service_usage = $state['profiles'][$profile_name]['service_usage'][$service_name]['usage_today'];
+			}
+			
+			// Check if limit exceeded
+			if ($service_usage >= $effective_limit) {
+				// BLOCK: Add all profile device IPs to service-specific block table
+				foreach ($profile_device_ips as $ip) {
+					pc_add_ip_to_service_table($ip, $service_name);
+				}
+				
+				pc_log("Profile {$profile_name} exceeded {$service_name} limit - blocked all devices", 'info', array(
+					'event.action' => 'profile_service_limit_exceeded',
+					'profile.name' => $profile_name,
+					'service.name' => $service_name,
+					'usage.today' => $service_usage,
+					'usage.limit' => $effective_limit,
+					'devices.blocked' => count($profile_device_ips),
+					'weekend.bonus' => $is_weekend ? ($effective_limit - $daily_limit) : 0
+				));
+			} else {
+				// UNBLOCK: Remove profile device IPs from service-specific block table
+				// (in case they were manually unblocked or usage was reset)
+				foreach ($profile_device_ips as $ip) {
+					pc_remove_ip_from_service_table($ip, $service_name);
+				}
+			}
+		}
+	}
+}
+
+/**
  * Cron job handler for periodic enforcement and tracking
  * 
  * Main cron job function called every 5 minutes by system cron. Performs:
@@ -4026,6 +4390,10 @@ function parental_control_cron_job() {
 	// WHY: Service monitoring rules need this table to track usage for all devices
 	// NOTE: This is separate from blocking - monitoring tracks everyone, blocking only violators
 	pc_update_monitor_table($state);
+	
+	// NEW v1.4.31: Check and enforce service-specific limits
+	// Blocks devices from specific services when profile service limits are exceeded
+	pc_check_profile_service_limits($state);
 	
 	// SMART BLOCKING: Calculate which devices should be blocked NOW
 	// Then compare with previous state and only update changed devices
@@ -4240,9 +4608,38 @@ function pc_reset_daily_counters(&$state) {
 		foreach ($state['profiles'] as $profile_name => &$profile_state) {
 			$profile_state['usage_today'] = 0;
 			$profile_state['last_reset'] = time();
+			
+			// NEW v1.4.31: Reset profile service usage
+			if (isset($profile_state['service_usage']) && is_array($profile_state['service_usage'])) {
+				foreach ($profile_state['service_usage'] as $service_name => &$service_data) {
+					$service_data['usage_today'] = 0;
+					// Keep usage_week and last_seen
+				}
+				unset($service_data); // Break reference
+			}
+			
 			$profile_reset_count++;
 		}
 		unset($profile_state); // Break reference
+	}
+	
+	// NEW v1.4.31: Clear all service-specific block tables
+	// WHY: Service blocks should be lifted at midnight when usage counters reset
+	// Get all service aliases to know which tables to clear
+	$aliases = config_get_path('aliases/alias', array());
+	$services_cleared = 0;
+	
+	if (is_array($aliases)) {
+		foreach ($aliases as $alias) {
+			if (isset($alias['name']) && strpos($alias['name'], 'PC_Service_') === 0) {
+				$service_name = str_replace('PC_Service_', '', $alias['name']);
+				$service_name_lower = strtolower($service_name);
+				
+				if (pc_clear_service_table($service_name_lower)) {
+					$services_cleared++;
+				}
+			}
+		}
 	}
 	
 	pc_log("Daily usage counters reset", 'info', array(
@@ -4250,6 +4647,7 @@ function pc_reset_daily_counters(&$state) {
 		'event.category' => 'system',
 		'devices.reset' => $reset_count,
 		'profiles.reset' => $profile_reset_count,
+		'services.cleared' => $services_cleared,
 		'reset.type' => 'daily'
 	));
 }
@@ -5131,25 +5529,53 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 				}
 			}
 		}
+		
+		// CRITICAL: SHARED PROFILE TIME ACCOUNTING
+		// WHY: Time limits are per PROFILE, not per device
+		// All devices in a profile share the same time budget
+		// Example: 4 hour limit = 4 hours TOTAL across ALL devices
+		$profile_name = isset($device['profile_name']) ? $device['profile_name'] : null;
+		if ($profile_name) {
+		// Initialize profile tracking if needed
+		// CRITICAL FIX v1.4.17: Set last_reset to today's midnight for proper alignment
+		if (!isset($state['profiles'])) {
+			$state['profiles'] = array();
+		}
+		if (!isset($state['profiles'][$profile_name])) {
+			$state['profiles'][$profile_name] = array(
+				'usage_today' => 0,
+				'usage_week' => 0,
+				'last_reset' => pc_get_today_midnight()
+			);
+		}
+		
+		// NEW v1.4.31: Aggregate service usage to profile level
+		// WHY: Service limits are per PROFILE (like general time limits)
+		// All devices in a profile share the same service time budget
+		if (!empty($service_connections)) {
+			// Initialize profile service usage tracking if needed
+			if (!isset($state['profiles'][$profile_name]['service_usage'])) {
+				$state['profiles'][$profile_name]['service_usage'] = array();
+			}
 			
-			// CRITICAL: SHARED PROFILE TIME ACCOUNTING
-			// WHY: Time limits are per PROFILE, not per device
-			// All devices in a profile share the same time budget
-			// Example: 4 hour limit = 4 hours TOTAL across ALL devices
-			$profile_name = isset($device['profile_name']) ? $device['profile_name'] : null;
-			if ($profile_name) {
-			// Initialize profile tracking if needed
-			// CRITICAL FIX v1.4.17: Set last_reset to today's midnight for proper alignment
-			if (!isset($state['profiles'])) {
-				$state['profiles'] = array();
+			foreach ($service_connections as $service_name => $conn_count) {
+				if ($conn_count > 0) {
+					// Initialize profile service if needed
+					if (!isset($state['profiles'][$profile_name]['service_usage'][$service_name])) {
+						$state['profiles'][$profile_name]['service_usage'][$service_name] = array(
+							'usage_today' => 0,
+							'usage_week' => 0,
+							'last_seen' => 0
+						);
+					}
+					
+					// Add interval minutes to profile's service usage
+					$state['profiles'][$profile_name]['service_usage'][$service_name]['usage_today'] += $interval_minutes;
+					$state['profiles'][$profile_name]['service_usage'][$service_name]['usage_week'] += $interval_minutes;
+					$state['profiles'][$profile_name]['service_usage'][$service_name]['last_seen'] = time();
+				}
 			}
-			if (!isset($state['profiles'][$profile_name])) {
-				$state['profiles'][$profile_name] = array(
-					'usage_today' => 0,
-					'usage_week' => 0,
-					'last_reset' => pc_get_today_midnight()
-				);
-			}
+		}
 				
 				// Add usage to PROFILE counter (shared across all devices)
 				$state['profiles'][$profile_name]['usage_today'] += $interval_minutes;

@@ -307,26 +307,50 @@ if ($method === 'GET' && $resource === 'devices' && $id !== null) {
 				$device_ip = $state['mac_to_ip_cache'][$mac];
 			}
 			
-			// Get usage from IP-based state
-			$usage = null;
-			if ($device_ip && isset($state['devices_by_ip'][$device_ip])) {
-				$usage = $state['devices_by_ip'][$device_ip];
+		// Get usage from IP-based state
+		$usage = null;
+		if ($device_ip && isset($state['devices_by_ip'][$device_ip])) {
+			$usage = $state['devices_by_ip'][$device_ip];
+		}
+		
+		// NEW v1.4.31: Get service block status
+		$service_blocks = array();
+		if ($device_ip) {
+			// Get all service aliases to check block status
+			$aliases = config_get_path('aliases/alias', array());
+			if (is_array($aliases)) {
+				foreach ($aliases as $alias) {
+					if (isset($alias['name']) && strpos($alias['name'], 'PC_Service_') === 0) {
+						$service_name = str_replace('PC_Service_', '', $alias['name']);
+						$service_name_lower = strtolower($service_name);
+						
+						// Check if device IP is in service block table
+						$blocked_ips = pc_get_service_blocked_ips($service_name_lower);
+						$is_blocked = in_array($device_ip, $blocked_ips);
+						
+						if ($is_blocked) {
+							$service_blocks[] = $service_name;
+						}
+					}
+				}
 			}
-			
-			$device_info = array(
-				'mac_address' => $mac,
-				'device_name' => $device['device_name'],
-				'child_name' => $profile_name,
-				'ip_address' => $device_ip,
-				'enabled' => pc_is_device_enabled($device),
-				'online' => pc_is_device_online($mac),
-				'daily_limit' => isset($device['daily_limit']) ? intval($device['daily_limit']) : 0,
-				'weekly_limit' => isset($device['weekly_limit']) ? intval($device['weekly_limit']) : 0,
-				'usage' => $usage,
-				'schedules_applied' => $schedules_applied,
-				'currently_blocked' => pc_is_in_blocked_schedule($device) || pc_is_time_limit_exceeded($device, $state)
-			);
-			api_response(200, $device_info);
+		}
+		
+		$device_info = array(
+			'mac_address' => $mac,
+			'device_name' => $device['device_name'],
+			'child_name' => $profile_name,
+			'ip_address' => $device_ip,
+			'enabled' => pc_is_device_enabled($device),
+			'online' => pc_is_device_online($mac),
+			'daily_limit' => isset($device['daily_limit']) ? intval($device['daily_limit']) : 0,
+			'weekly_limit' => isset($device['weekly_limit']) ? intval($device['weekly_limit']) : 0,
+			'usage' => $usage,
+			'schedules_applied' => $schedules_applied,
+			'currently_blocked' => pc_is_in_blocked_schedule($device) || pc_is_time_limit_exceeded($device, $state),
+			'services_blocked' => $service_blocks  // NEW v1.4.31: List of blocked services
+		);
+		api_response(200, $device_info);
 		}
 	}
 	
@@ -419,22 +443,60 @@ if ($method === 'GET' && $resource === 'profiles' && $id !== null) {
 	
 	foreach ($profiles as $profile) {
 		if (isset($profile['id']) && $profile['id'] == $id) {
-			// Get schedules that apply to this profile
-			$profile_name = isset($profile['name']) ? $profile['name'] : '';
-			$schedules_applied = api_get_schedules_for_profile($profile_name);
-			
-			$profile_info = array(
-				'id' => $profile['id'],
-				'name' => $profile_name,
-				'description' => isset($profile['description']) ? $profile['description'] : '',
-				'enabled' => isset($profile['enabled']) && $profile['enabled'] === 'on',
-				'daily_limit' => isset($profile['daily_limit']) ? intval($profile['daily_limit']) : 0,
-				'weekend_bonus' => isset($profile['weekend_bonus']) ? intval($profile['weekend_bonus']) : 0,
-				'devices' => isset($profile['devices']) ? $profile['devices'] : array(),
-				'schedules_applied' => $schedules_applied,
-				'usage' => pc_get_profile_usage($profile)
-			);
-			api_response(200, $profile_info);
+		// Get schedules that apply to this profile
+		$profile_name = isset($profile['name']) ? $profile['name'] : '';
+		$schedules_applied = api_get_schedules_for_profile($profile_name);
+		
+		// NEW v1.4.31: Get service limits and usage
+		$state = pc_load_state();
+		$service_limits_info = array();
+		$is_weekend = (date('N') >= 6);
+		
+		if (isset($profile['service_limits']) && is_array($profile['service_limits'])) {
+			foreach ($profile['service_limits'] as $service_alias => $limit_config) {
+				$service_name = str_replace('pc_service_', '', strtolower($service_alias));
+				
+				$daily_limit = isset($limit_config['daily_limit']) ? intval($limit_config['daily_limit']) : 0;
+				$weekend_bonus = isset($limit_config['weekend_bonus']) ? intval($limit_config['weekend_bonus']) : 0;
+				$effective_limit = $daily_limit + ($is_weekend ? $weekend_bonus : 0);
+				
+				// Get usage from state
+				$usage_today = 0;
+				$usage_week = 0;
+				if (isset($state['profiles'][$profile_name]['service_usage'][$service_name])) {
+					$usage_today = $state['profiles'][$profile_name]['service_usage'][$service_name]['usage_today'];
+					$usage_week = isset($state['profiles'][$profile_name]['service_usage'][$service_name]['usage_week']) ?
+						$state['profiles'][$profile_name]['service_usage'][$service_name]['usage_week'] : 0;
+				}
+				
+				$is_blocked = ($effective_limit > 0 && $usage_today >= $effective_limit);
+				
+				$service_limits_info[] = array(
+					'service' => $service_name,
+					'daily_limit' => $daily_limit,
+					'weekend_bonus' => $weekend_bonus,
+					'effective_limit' => $effective_limit,
+					'usage_today' => $usage_today,
+					'usage_week' => $usage_week,
+					'remaining' => max(0, $effective_limit - $usage_today),
+					'is_blocked' => $is_blocked
+				);
+			}
+		}
+		
+		$profile_info = array(
+			'id' => $profile['id'],
+			'name' => $profile_name,
+			'description' => isset($profile['description']) ? $profile['description'] : '',
+			'enabled' => isset($profile['enabled']) && $profile['enabled'] === 'on',
+			'daily_limit' => isset($profile['daily_limit']) ? intval($profile['daily_limit']) : 0,
+			'weekend_bonus' => isset($profile['weekend_bonus']) ? intval($profile['weekend_bonus']) : 0,
+			'devices' => isset($profile['devices']) ? $profile['devices'] : array(),
+			'schedules_applied' => $schedules_applied,
+			'usage' => pc_get_profile_usage($profile),
+			'service_limits' => $service_limits_info  // NEW v1.4.31: Service-specific limits and usage
+		);
+		api_response(200, $profile_info);
 		}
 	}
 	

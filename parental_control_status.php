@@ -701,20 +701,67 @@ if (is_array($profiles)) {
 								$connections = isset($service_data['connections']) ? $service_data['connections'] : 0;
 								
 								$icon = isset($service_icons[$service_name]) ? $service_icons[$service_name] : 'fa-globe';
+								
+								// NEW v1.4.31: Get profile-level service usage and limits
+								$profile_service_usage = 0;
+								$service_limit = 0;
+								$service_limit_with_bonus = 0;
+								$is_weekend = (date('N') >= 6);
+								$is_service_blocked = false;
+								
+								// Get profile service usage
+								if (isset($state['profiles'][$profile_name]['service_usage'][$service_name]['usage_today'])) {
+									$profile_service_usage = $state['profiles'][$profile_name]['service_usage'][$service_name]['usage_today'];
+								}
+								
+								// Get service limit from profile config
+								if (isset($profile['service_limits'])) {
+									$service_alias = 'pc_service_' . strtolower($service_name);
+									if (isset($profile['service_limits'][$service_alias]['daily_limit'])) {
+										$service_limit = intval($profile['service_limits'][$service_alias]['daily_limit']);
+										$service_limit_with_bonus = $service_limit;
+										
+										// Add weekend bonus if applicable
+										if ($is_weekend && isset($profile['service_limits'][$service_alias]['weekend_bonus'])) {
+											$service_limit_with_bonus += intval($profile['service_limits'][$service_alias]['weekend_bonus']);
+										}
+										
+										// Check if blocked
+										if ($service_limit > 0 && $profile_service_usage >= $service_limit_with_bonus) {
+											$is_service_blocked = true;
+										}
+									}
+								}
+								
+								$remaining_minutes = $service_limit_with_bonus - $profile_service_usage;
+								$row_style = $is_service_blocked ? 'background-color: #f8d7da;' : '';
 							?>
-							<tr>
+							<tr style="<?=$row_style?>">
 								<td><?=$profile_name?></td>
 								<td><strong><?=$device_name?></strong></td>
 								<td>
 									<i class="fa-solid <?=$icon?>"></i>
 									<strong><?=htmlspecialchars($service_name)?></strong>
+									<?php if ($is_service_blocked): ?>
+										<span class="label label-danger" style="margin-left: 5px;">BLOCKED</span>
+									<?php endif; ?>
+									<?php if ($service_limit > 0): ?>
+										<br><small class="text-muted">
+											Profile: <?=sprintf("%d:%02d", floor($profile_service_usage / 60), $profile_service_usage % 60)?> / <?=sprintf("%d:%02d", floor($service_limit_with_bonus / 60), $service_limit_with_bonus % 60)?>
+											<?php if (!$is_service_blocked && $remaining_minutes > 0): ?>
+												(<?=sprintf("%d:%02d", floor($remaining_minutes / 60), $remaining_minutes % 60)?> left)
+											<?php endif; ?>
+										</small>
+									<?php endif; ?>
 								</td>
 								<td><span class="label label-primary" style="font-size: 13px;"><?=$usage_today?></span></td>
 								<td><?=$usage_week?></td>
 								<td><small class="text-muted"><?=$last_seen?></small></td>
 								<td>
-									<?php if ($connections > 0): ?>
+									<?php if ($connections > 0 && !$is_service_blocked): ?>
 										<span class="label label-success"><?=$connections?> active</span>
+									<?php elseif ($is_service_blocked): ?>
+										<span class="label label-danger">Blocked</span>
 									<?php else: ?>
 										<span class="label label-default">Idle</span>
 									<?php endif; ?>
