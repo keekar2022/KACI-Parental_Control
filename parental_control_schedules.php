@@ -6,7 +6,7 @@
  * Pure PHP implementation (no XML complexity)
  * 
  * Part of KACI-Parental_Control for pfSense
- * Copyright (c) 2025 Mukesh Kesharwani
+ * Copyright (c) 2026 Mukesh Kesharwani
  */
 
 require_once("guiconfig.inc");

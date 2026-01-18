@@ -3,12 +3,12 @@
  * parental_control.inc
  * 
  * part of pfSense Parental Control Package
- * Copyright (c) 2025 Mukesh Kesharwani
+ * Copyright (c) 2026 Mukesh Kesharwani
  * Built with Passion
  * All rights reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
+ * Licensed under the GNU General Public License v3.0 or later (GPL-3.0-or-later)
+ * See LICENSE file for details.
  */
 
 require_once("config.inc");
