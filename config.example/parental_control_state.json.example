@@ -3,23 +3,70 @@
   "_usage": "Copy this file to /var/db/parental_control_state.json to manually initialize state.",
   "_note": "The system will create this file automatically on first run if it doesn't exist.",
   
-  "devices": {
-    "aa:bb:cc:dd:ee:ff": {
-      "usage_today": 0,
-      "usage_week": 0,
-      "last_seen": 0,
-      "_description": "Device usage tracking by MAC address",
-      "_notes": "usage_today and usage_week are in minutes; last_seen is Unix timestamp"
+  "devices_by_ip": {
+    "192.168.1.110": {
+      "name": "Emma's iPhone",
+      "mac": "aa:bb:cc:dd:ee:ff",
+      "usage_today": 120,
+      "usage_week": 540,
+      "last_seen": 1735084800,
+      "service_usage": {
+        "YouTube": {
+          "usage_today": 45,
+          "usage_week": 180,
+          "last_seen": 1735084800,
+          "connections": 12,
+          "connection_history": [3, 5, 4, 6, 12, 8, 10, 15, 12, 14, 11, 13, 9, 10, 12],
+          "bot_score": 0,
+          "bot_detected_at": 0,
+          "is_bot": false,
+          "_description": "Per-service tracking with bot detection",
+          "_notes": "connection_history: last 15 minutes of connection counts; bot_score: consecutive bot-like samples (0-15); is_bot: true if currently flagged as bot traffic"
+        },
+        "Facebook": {
+          "usage_today": 0,
+          "usage_week": 0,
+          "last_seen": 1735080000,
+          "connections": 2,
+          "connection_history": [2, 2, 1, 2, 2, 3, 2, 2, 1, 2, 2, 2, 3, 2, 2],
+          "bot_score": 15,
+          "bot_detected_at": 1735084000,
+          "is_bot": true,
+          "_description": "Bot detected - usage tracking paused",
+          "_notes": "Low, consistent connections (2-3) for 15+ minutes indicate background/bot traffic"
+        }
+      },
+      "_description": "Device usage tracking by IP address (Layer 3 architecture)",
+      "_notes": "usage_today and usage_week are in minutes; last_seen is Unix timestamp; IP-based tracking handles DHCP changes"
     }
+  },
+  
+  "mac_to_ip_cache": {
+    "aa:bb:cc:dd:ee:ff": "192.168.1.110",
+    "_description": "Maps MAC addresses to current IP addresses",
+    "_notes": "Updated dynamically when devices renew DHCP leases"
   },
   
   "profiles": {
     "Emma": {
-      "usage_today": 0,
-      "usage_week": 0,
+      "usage_today": 120,
+      "usage_week": 540,
       "last_reset": 1735084800,
+      "service_usage": {
+        "YouTube": {
+          "usage_today": 45,
+          "usage_week": 180,
+          "last_seen": 1735084800,
+          "_description": "Profile-level service usage (aggregated from all devices)"
+        },
+        "TikTok": {
+          "usage_today": 30,
+          "usage_week": 120,
+          "last_seen": 1735084500
+        }
+      },
       "_description": "Profile usage tracking (shared across all devices in profile)",
-      "_notes": "last_reset is Unix timestamp of last daily reset"
+      "_notes": "last_reset is Unix timestamp of last daily reset; service usage does NOT include bot traffic"
     }
   },
   
@@ -27,16 +74,36 @@
   "last_check": 1735084800,
   
   "_metadata": {
-    "version": "0.1.3",
+    "version": "1.4.43",
     "created": "2025-12-25T00:00:00Z",
-    "description": "Parental Control State File - tracks usage and timestamps"
+    "description": "Parental Control State File - tracks usage, timestamps, and bot detection"
   },
   
   "_field_descriptions": {
-    "devices": "Per-device usage tracking keyed by MAC address",
+    "devices_by_ip": "Per-device usage tracking keyed by IP address (Layer 3 architecture)",
+    "mac_to_ip_cache": "Maps MAC addresses to current IPs for DHCP handling",
     "profiles": "Per-profile usage tracking (shared across profile devices)",
     "last_reset": "Unix timestamp of last daily counter reset",
     "last_check": "Unix timestamp of last cron job check"
+  },
+  
+  "_bot_detection": {
+    "description": "NEW v1.4.43: Automatic detection of bot/background traffic",
+    "how_it_works": "Tracks connection patterns for each device+service. If connections remain low (1-5) and consistent for 15+ minutes, it's flagged as bot traffic.",
+    "what_happens": "When bot detected: usage tracking is PAUSED for that specific device+service combination. CRITICAL v1.4.44: Accumulated usage BEFORE bot detection is PRESERVED!",
+    "why_needed": "Background processes (iOS app refresh, smart TV telemetry) inflate usage time inappropriately. Bot detection prevents this.",
+    "usage_preservation": "IMPORTANT: If user watched YouTube for 60 minutes, then bot detected, the 60 minutes is KEPT. Only future bot traffic is ignored. When user returns, tracking resumes from 60 minutes.",
+    "example_bots": [
+      "iOS Background App Refresh connecting to YouTube API",
+      "Smart TV telemetry pinging Facebook servers",
+      "iPad notification checks to social media services"
+    ],
+    "thresholds": {
+      "max_connections": 5,
+      "min_samples": 15,
+      "consecutive_threshold": 15,
+      "max_variance": 2.0
+    }
   }
 }
 

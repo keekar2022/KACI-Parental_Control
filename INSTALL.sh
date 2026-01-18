@@ -265,7 +265,6 @@ upload_files() {
         "$PACKAGE_DIR/parental_control_captive.sh" \
         "$PACKAGE_DIR/parental_control_health.php" \
         "$PACKAGE_DIR/parental_control_api.php" \
-        "$PACKAGE_DIR/parental_control_diagnostic.php" \
         "$PACKAGE_DIR/parental_control_analyzer.sh" \
         "$PACKAGE_DIR/auto_update_parental_control.sh" \
         "$PACKAGE_DIR/UNINSTALL.sh" \
@@ -311,7 +310,6 @@ upload_files() {
         sudo -n mv /tmp/parental_control_captive.sh /usr/local/etc/rc.d/parental_control_captive && \
         sudo -n mv /tmp/parental_control_health.php /usr/local/www/ 2>/dev/null; true && \
         sudo -n mv /tmp/parental_control_api.php /usr/local/www/ 2>/dev/null; true && \
-        sudo -n mv /tmp/parental_control_diagnostic.php /usr/local/bin/ 2>/dev/null; true && \
         sudo -n mv /tmp/parental_control_analyzer.sh /usr/local/bin/ 2>/dev/null; true && \
         sudo -n mv /tmp/auto_update_parental_control.sh /usr/local/bin/ 2>/dev/null; true && \
         sudo -n mv /tmp/UNINSTALL.sh /usr/local/bin/ 2>/dev/null; true && \
@@ -326,7 +324,6 @@ upload_files() {
         sudo -n chmod 644 /usr/local/pkg/parental_control_VERSION && \
         sudo -n chmod 644 /usr/local/www/parental_control*.php && \
         sudo -n chmod 755 /usr/local/etc/rc.d/parental_control_captive && \
-        sudo -n chmod 755 /usr/local/bin/parental_control_diagnostic.php 2>/dev/null; true && \
         sudo -n chmod 755 /usr/local/bin/parental_control_analyzer.sh 2>/dev/null; true && \
         sudo -n chmod 755 /usr/local/bin/auto_update_parental_control.sh 2>/dev/null; true && \
         sudo -n chmod 755 /usr/local/bin/UNINSTALL.sh 2>/dev/null; true && \
@@ -347,7 +344,6 @@ upload_files() {
             sudo mv /tmp/parental_control_blocked.php /usr/local/www/ && \
             sudo mv /tmp/parental_control_health.php /usr/local/www/ 2>/dev/null; true && \
             sudo mv /tmp/parental_control_api.php /usr/local/www/ 2>/dev/null; true && \
-            sudo mv /tmp/parental_control_diagnostic.php /usr/local/bin/ 2>/dev/null; true && \
             sudo mv /tmp/parental_control_analyzer.sh /usr/local/bin/ 2>/dev/null; true && \
             sudo mv /tmp/API.md /usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/ 2>/dev/null; true && \
             sudo mv /tmp/CONFIGURATION.md /usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/ 2>/dev/null; true && \
@@ -355,7 +351,6 @@ upload_files() {
             sudo chmod 644 /usr/local/pkg/parental_control*.xml && \
             sudo chmod 644 /usr/local/pkg/parental_control.inc && \
             sudo chmod 644 /usr/local/www/parental_control*.php && \
-            sudo chmod 755 /usr/local/bin/parental_control_diagnostic.php 2>/dev/null; true && \
             sudo chmod 755 /usr/local/bin/parental_control_analyzer.sh 2>/dev/null; true && \
             sudo chmod 644 /usr/local/share/pfSense-pkg-KACI-Parental_Control/info.xml && \
             sudo chmod 644 /usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/*.md 2>/dev/null; true
@@ -417,23 +412,32 @@ if (!is_array($config['installedpackages']['menu'])) {
     $config['installedpackages']['menu'] = array();
 }
 
-// Check if menu entry exists
-$menu_exists = false;
-foreach ($config['installedpackages']['menu'] as $menu_item) {
-    if ($menu_item['name'] === 'Keekar\'s Parental Control') {
-        $menu_exists = true;
-        break;
+// Remove any existing Parental Control menu entries to avoid duplicates
+$config['installedpackages']['menu'] = array_filter(
+    $config['installedpackages']['menu'],
+    function($item) {
+        return !isset($item['name']) || 
+               (strpos($item['name'], 'Parental Control') === false && 
+                strpos($item['name'], 'Keekar') === false);
     }
-}
+);
+$config['installedpackages']['menu'] = array_values($config['installedpackages']['menu']);
 
-// Add menu entry if not exists
-if (!$menu_exists) {
-    $config['installedpackages']['menu'][] = array(
-        'name' => 'Keekar\'s Parental Control',
-        'section' => 'Services',
-        'url' => '/pkg_edit.php?xml=parental_control.xml'
-    );
-}
+// Add Services menu entry
+$config['installedpackages']['menu'][] = array(
+    'name' => 'Keekar\'s Parental Control',
+    'tooltiptext' => 'Configure parental control and time limits',
+    'section' => 'Services',
+    'url' => '/pkg_edit.php?xml=parental_control.xml&id=0'
+);
+
+// Add Status menu entry
+$config['installedpackages']['menu'][] = array(
+    'name' => 'Parental Control',
+    'tooltiptext' => 'View parental control status and device usage',
+    'section' => 'Status',
+    'url' => '/parental_control_status.php'
+);
 
 // Initialize configuration if not exists
 if (!is_array($config['installedpackages']['parentalcontrol'])) {
@@ -649,7 +653,6 @@ verify_installation() {
             "/usr/local/etc/rc.d/parental_control_captive" \
             "/usr/local/www/parental_control_health.php" \
             "/usr/local/www/parental_control_api.php" \
-            "/usr/local/bin/parental_control_diagnostic.php" \
             "/usr/local/bin/parental_control_analyzer.sh" \
             "/usr/local/bin/auto_update_parental_control.sh" \
             "/usr/local/bin/UNINSTALL.sh" \
@@ -799,7 +802,6 @@ UNREGISTER_EOF
         sudo rm -f /usr/local/etc/rc.d/parental_control_captive 2>/dev/null
         sudo rm -f /usr/local/www/parental_control_health.php 2>/dev/null
         sudo rm -f /usr/local/www/parental_control_api.php 2>/dev/null
-        sudo rm -f /usr/local/bin/parental_control_diagnostic.php 2>/dev/null
         sudo rm -f /usr/local/bin/parental_control_analyzer.sh 2>/dev/null
         sudo rm -f /usr/local/bin/parental_control_cron.php 2>/dev/null
         sudo rm -rf /usr/local/share/pfSense-pkg-parental_control 2>/dev/null
@@ -867,8 +869,9 @@ run_debug() {
     ssh $PFSENSE_USER@$PFSENSE_IP "sudo php -l /usr/local/pkg/parental_control.inc 2>&1"
     
     echo ""
-    print_info "4. Run Diagnostic Tool:"
-    ssh $PFSENSE_USER@$PFSENSE_IP 'sudo php /usr/local/bin/parental_control_diagnostic.php 2>&1 || echo "   Diagnostic tool not available or failed"'
+    print_info "4. Diagnostic Tools (optional):"
+    echo "   • Diagnostic scripts available in diagnostic/ folder"
+    echo "   • Deploy manually if needed for troubleshooting"
     
     echo ""
     print_info "5. Package Registration:"
@@ -1028,11 +1031,13 @@ do_install() {
         check_dependencies
     fi
     
-    # Setup authentication (only for full install)
-    if [ "$MODE" = "install" ]; then
-        setup_ssh_keys
-        setup_sudo
-    fi
+    # CRITICAL: Always ensure passwordless SSH and sudo are configured
+    # WHY: All modes (install, update, fix, verify, debug) require authentication
+    # SSH keys can expire, be removed, or not be set up initially
+    # This ensures seamless operation for all functions
+    print_info "Ensuring passwordless authentication..."
+    setup_ssh_keys
+    setup_sudo
     
     # Upload files
     upload_files
@@ -1079,7 +1084,7 @@ do_install() {
     echo "  ✓ Performance caching (68% faster)"
     echo "  ✓ Real connection tracking (pfctl state table)"
     echo "  ✓ PID lock (prevents race conditions)"
-    echo "  ✓ Diagnostic tool (php /usr/local/bin/parental_control_diagnostic.php)"
+    echo "  ✓ Diagnostic tools (available in diagnostic/ folder)"
     echo "  ✓ Log analyzer tool (parental_control_analyzer.sh)"
     echo ""
     echo "Verify installation:"
@@ -1135,6 +1140,13 @@ case "$MODE" in
         echo ""
         echo "Target: $PFSENSE_IP"
         echo ""
+        
+        # Ensure authentication for uninstall
+        print_info "Ensuring passwordless authentication..."
+        setup_ssh_keys
+        setup_sudo
+        
+        echo ""
         print_warning "This will completely remove Keekar's Parental Control package"
         echo ""
         do_uninstall
@@ -1167,8 +1179,30 @@ case "$MODE" in
         echo ""
         echo "Target: $PFSENSE_IP"
         echo ""
+        
+        # Ensure authentication is set up for update/fix operations
+        print_info "Ensuring passwordless authentication..."
+        setup_ssh_keys
+        setup_sudo
+        
+        echo ""
         upload_files
         if [ $? -eq 0 ]; then
+            # Trigger package sync to apply updates
+            print_info "Triggering package configuration sync..."
+            ssh -o BatchMode=yes $PFSENSE_USER@$PFSENSE_IP "sudo -n /usr/local/bin/php -r \"require_once('/usr/local/pkg/parental_control.inc'); parental_control_sync();\"" 2>/dev/null || \
+            ssh -t $PFSENSE_USER@$PFSENSE_IP "sudo /usr/local/bin/php -r \"require_once('/usr/local/pkg/parental_control.inc'); parental_control_sync();\""
+            
+            if [ $? -eq 0 ]; then
+                print_success "Package configuration synced"
+                print_info "New service-specific blocking tables and rules will be created"
+            else
+                print_warning "Could not trigger sync - may need manual sync"
+                echo "  Navigate to Services > Keekar's Parental Control > Settings"
+                echo "  Click 'Save' to trigger configuration sync"
+            fi
+            
+            echo ""
             verify_installation
         fi
         ;;
@@ -1178,6 +1212,14 @@ case "$MODE" in
         echo "============================================"
         echo ""
         echo "Target: $PFSENSE_IP"
+        echo ""
+        
+        # Ensure authentication for verification
+        print_info "Ensuring passwordless authentication..."
+        setup_ssh_keys
+        setup_sudo
+        
+        echo ""
         verify_installation
         ;;
     debug)
@@ -1186,6 +1228,14 @@ case "$MODE" in
         echo "============================================"
         echo ""
         echo "Target: $PFSENSE_IP"
+        echo ""
+        
+        # Ensure authentication for debug
+        print_info "Ensuring passwordless authentication..."
+        setup_ssh_keys
+        setup_sudo
+        
+        echo ""
         run_debug
         ;;
 esac

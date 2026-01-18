@@ -4,8 +4,8 @@
 		<name>KACI-Parental_Control</name>
 		<descr><![CDATA[Keekar's Parental Control - Advanced time-based access control and content filtering for children's devices. Manage screen time, set daily/weekly limits, and block access during specific hours.]]></descr>
 		<website>https://github.com/keekar/KACI-Parental-Control</website>
-		<version>1.4.10
-		<required_version>2.7.0</required_version>
+	<version>1.4.32</version>
+	<required_version>2.7.0</required_version>
 		<maximum_version></maximum_version>
 		<maintainer>Mukesh Kesharwani (Keekar)</maintainer>
 		<category>Services</category>
@@ -15,6 +15,11 @@
 			<name>Keekar's Parental Control</name>
 			<section>Services</section>
 			<configfile>parental_control.xml</configfile>
+		</menu>
+		<menu>
+			<name>Parental Control</name>
+			<section>Status</section>
+			<url>/parental_control_status.php</url>
 		</menu>
 		<service>
 			<name>parental_control</name>

@@ -106,8 +106,22 @@ config_set_path('installedpackages/parentalcontrol', null);
 config_set_path('installedpackages/parentalcontrolprofiles', null);
 config_set_path('installedpackages/parentalcontrolschedules', null);
 
-write_config("Removed all parental control configuration");
-echo "   ✓ Configuration removed from config.xml\n";
+// Remove menu entries
+$config = parse_config(true);
+if (isset($config['installedpackages']['menu'])) {
+    $config['installedpackages']['menu'] = array_filter(
+        $config['installedpackages']['menu'],
+        function($item) {
+            return !isset($item['name']) || 
+                   (strpos($item['name'], 'Parental Control') === false && 
+                    strpos($item['name'], 'Keekar') === false);
+        }
+    );
+    $config['installedpackages']['menu'] = array_values($config['installedpackages']['menu']);
+}
+
+write_config("Removed all parental control configuration and menu entries");
+echo "   ✓ Configuration and menu entries removed from config.xml\n";
 ?>
 EOF
 

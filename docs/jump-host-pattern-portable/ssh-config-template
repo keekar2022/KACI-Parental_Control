@@ -1,0 +1,43 @@
+# SSH Configuration Template for Jump Host Setup
+# Add this to ~/.ssh/config on your MacBook
+# 
+# Usage: Copy the content below and append to ~/.ssh/config
+#   cat ssh-config-template >> ~/.ssh/config
+#   OR manually edit ~/.ssh/config
+
+# ============================================
+# Jump Host Configuration (Firewall Management)
+# ============================================
+
+# Jump host - Primary management server (NAS)
+Host jumphost jump
+    HostName nas.keekar.com
+    User mkesharw
+    IdentityFile ~/.ssh/id_rsa_truenas
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+    # Optional: Keep connection alive
+    # ControlMaster auto
+    # ControlPath ~/.ssh/sockets/%r@%h-%p
+    # ControlPersist 10m
+
+# pfSense Firewall - Always route via jump host (NAS)
+Host firewall fw pfsense 192.168.1.1
+    HostName 192.168.1.1
+    User admin
+    ProxyJump nas.keekar.com
+    IdentityFile ~/.ssh/id_ed25519
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+
+# Alternative hostname for firewall
+Host fw.keekar.com
+    HostName fw.keekar.com
+    User admin
+    ProxyJump nas.keekar.com
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+
+# ============================================
+# End Jump Host Configuration
+# ============================================

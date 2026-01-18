@@ -2,7 +2,7 @@
 <packagegui>
 	<title>Services/Keekar's Parental Control</title>
 	<name>KACI-Parental_Control</name>
-	<version>1.4.10</version>
+	<version>1.4.32</version>
 	<include_file>/usr/local/pkg/parental_control.inc</include_file>
 	<configpath>installedpackages/parentalcontrol/config/0</configpath>
 	
@@ -12,6 +12,12 @@
 		<tooltiptext>Configure parental control and time limits</tooltiptext>
 		<section>Services</section>
 		<url>/pkg_edit.php?xml=parental_control.xml&amp;id=0</url>
+	</menu>
+	<menu>
+		<name>Parental Control</name>
+		<tooltiptext>View parental control status and device usage</tooltiptext>
+		<section>Status</section>
+		<url>/parental_control_status.php</url>
 	</menu>
 	
 	<!-- Tabs for navigation -->

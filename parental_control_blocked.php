@@ -12,6 +12,19 @@
 require_once("guiconfig.inc");
 require_once("/usr/local/pkg/parental_control.inc");
 
+// PERFORMANCE OPTIMIZATION v1.4.30: Load all config once at the top
+// WHY: Multiple config_get_path calls are expensive, load once and cache
+$pc_config_cache = [
+	'main' => config_get_path('installedpackages/parentalcontrol/config/0', []),
+	'profiles' => config_get_path('installedpackages/parentalcontrolprofiles/config', [])
+];
+
+// Extract commonly used config values
+$blocked_message = $pc_config_cache['main']['blocked_message'] ?? 'Your internet time is up! Time to take a break and do other activities.';
+$override_password = $pc_config_cache['main']['override_password'] ?? '';
+$override_duration = intval($pc_config_cache['main']['override_duration'] ?? 30);
+$reset_time = $pc_config_cache['main']['reset_time'] ?? '00:00';
+
 // Get client information
 $client_ip = $_SERVER['REMOTE_ADDR'];
 $client_mac = null;
@@ -20,18 +33,18 @@ $client_mac = null;
 $is_redirect = isset($_SERVER['HTTP_HOST']) && $_SERVER['HTTP_HOST'] !== $_SERVER['SERVER_NAME'];
 $original_url = $is_redirect ? 'http://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'] : '';
 
-// Try to find MAC address from ARP table
-exec("arp -an | grep " . escapeshellarg($client_ip), $arp_output);
-if (!empty($arp_output)) {
-	if (preg_match('/([0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2})/i', $arp_output[0], $matches)) {
-		$client_mac = strtolower($matches[1]);
+// PERFORMANCE OPTIMIZATION v1.4.30: Use cached ARP/DHCP lookup instead of exec
+// WHY: pc_get_dhcp_leases() uses global cache (30s TTL), much faster than exec("arp -an")
+$leases = pc_get_dhcp_leases();
+foreach ($leases as $lease) {
+	if ($lease['ip'] === $client_ip) {
+		$client_mac = pc_normalize_mac($lease['mac']);
+		break;
 	}
 }
 
-// Load state and configuration
+// Load state
 $state = pc_load_state();
-$pc_config = config_get_path('installedpackages/parentalcontrol/config/0', []);
-$blocked_message = isset($pc_config['blocked_message']) ? $pc_config['blocked_message'] : 'Your internet time is up! Time to take a break and do other activities.';
 
 // Find device information
 $device_info = null;
@@ -40,12 +53,35 @@ $block_reason = 'Access Restricted';
 $usage_today = 0;
 $usage_limit = 0;
 
+// PERFORMANCE OPTIMIZATION v1.4.30: Use cached profiles for device lookup
+// WHY: Avoids reloading profiles via pc_get_devices() which calls config_get_path again
 if ($client_mac) {
-	$devices = pc_get_devices();
-	foreach ($devices as $device) {
-		if (pc_normalize_mac($device['mac_address']) === $client_mac) {
-			$device_info = $device;
-			break;
+	// Parse devices directly from cached profiles
+	foreach ($pc_config_cache['profiles'] as $profile) {
+		// Skip disabled profiles
+		if (empty($profile['enabled']) || $profile['enabled'] !== 'on') {
+			continue;
+		}
+		
+		// Get devices from profile (normalize row to devices)
+		$profile_devices = [];
+		if (isset($profile['devices']) && is_array($profile['devices'])) {
+			$profile_devices = $profile['devices'];
+		} elseif (isset($profile['row']) && is_array($profile['row'])) {
+			$profile_devices = $profile['row'];
+		}
+		
+		// Search for matching device
+		foreach ($profile_devices as $device) {
+			if (isset($device['mac_address']) && pc_normalize_mac($device['mac_address']) === $client_mac) {
+				// Add profile context to device
+				$device_info = $device;
+				$device_info['child_name'] = $profile['name'];
+				$device_info['profile_enabled'] = ($profile['enabled'] === 'on');
+				$profile_info = $profile;
+				$usage_limit = isset($profile['daily_limit']) ? intval($profile['daily_limit']) : 0;
+				break 2; // Break out of both loops
+			}
 		}
 	}
 	
@@ -54,18 +90,8 @@ if ($client_mac) {
 		$usage_today = $state['devices_by_ip'][$client_ip]['usage_today'];
 	}
 	
-	// Get profile information
+	// Determine block reason
 	if ($device_info) {
-		$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', []);
-		foreach ($profiles as $profile) {
-			if ($profile['name'] === $device_info['child_name']) {
-				$profile_info = $profile;
-				$usage_limit = isset($profile['daily_limit']) ? intval($profile['daily_limit']) : 0;
-				break;
-			}
-		}
-		
-		// Determine block reason
 		if (pc_is_in_blocked_schedule($device_info)) {
 			$block_reason = 'Scheduled Block Time';
 		} elseif (pc_is_time_limit_exceeded($device_info, $state)) {
@@ -80,11 +106,10 @@ $override_success = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['override_password'])) {
 	$submitted_password = $_POST['override_password'];
-	$configured_password = config_get_path('installedpackages/parentalcontrol/config/0/override_password', '');
 	
-	if (!empty($configured_password) && $submitted_password === $configured_password) {
-		// Grant temporary override
-		$override_duration = config_get_path('installedpackages/parentalcontrol/config/0/override_duration', 30);
+	// Use cached config value
+	if (!empty($override_password) && $submitted_password === $override_password) {
+		// Grant temporary override (using cached override_duration)
 		$override_until = time() + ($override_duration * 60);
 		
 		// Store override in state
@@ -132,8 +157,7 @@ if ($client_mac && isset($state['overrides'][$client_mac])) {
 	}
 }
 
-// Calculate next reset time
-$reset_time = config_get_path('installedpackages/parentalcontrol/config/0/reset_time', '00:00');
+// Calculate next reset time (using cached reset_time)
 $next_reset = strtotime("today " . $reset_time);
 if ($next_reset <= time()) {
 	$next_reset = strtotime("tomorrow " . $reset_time);
@@ -424,7 +448,7 @@ body {
 			<?php endif; ?>
 			
 			<!-- Parent Override Section -->
-			<?php if (!empty(config_get_path('installedpackages/parentalcontrol/config/0/override_password'))): ?>
+			<?php if (!empty($override_password)): ?>
 			<div class="override-section">
 				<h3><i class="fa fa-key"></i> Parent Override</h3>
 				<p style="margin: 0 0 15px 0; color: #856404;">Parents can enter the override password to grant temporary access.</p>
@@ -441,7 +465,7 @@ body {
 						<input type="password" id="override_password" name="override_password" required autofocus>
 					</div>
 					<button type="submit" class="btn-override">
-						<i class="fa fa-unlock"></i> Grant Access (<?= config_get_path('installedpackages/parentalcontrol/config/0/override_duration', 30) ?> minutes)
+						<i class="fa fa-unlock"></i> Grant Access (<?= $override_duration ?> minutes)
 					</button>
 				</form>
 			</div>
