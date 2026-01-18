@@ -1244,9 +1244,9 @@ Found a new best practice? Add it! This is a living document.
 
 ---
 
-**Last Updated:** December 29, 2025  
+**Last Updated:** January 18, 2026  
 **Project:** KACI Parental Control  
-**Version:** 1.1.3
+**Version:** 1.4.x
 
 ---
 

@@ -18,7 +18,7 @@
 
 ## Professional-Grade Internet Time Management for Families
 
-**Version 1.4.10+** | January 2026 | Open Source | Free
+**Version 1.4.x** | January 2026 | Open Source | Free
 
 ---
 

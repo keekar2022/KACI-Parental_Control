@@ -299,7 +299,7 @@ The built-in validation function in `bump_version.sh` enforces this principle au
 
 ---
 
-**Version**: 1.4.10+  
-**Date**: 2026-01-01  
+**Version**: 1.4.x  
+**Date**: 2026-01-18  
 **Type**: Development Documentation
 
