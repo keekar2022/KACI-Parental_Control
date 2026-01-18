@@ -722,8 +722,8 @@ For issues, feature requests, or contributions:
 
 ---
 
-**Last Updated:** 2026-01-01
-**Package Version:** 1.4.10+ (Development)
+**Last Updated:** 2026-01-18
+**Package Version:** 1.4.x (Production)
 
 
 ---
@@ -1178,8 +1178,8 @@ function pc_migrate_state_to_v0_2_1($old_state) {
 
 ---
 
-**Architecture Version**: 1.4.2  
-**Last Updated**: January 1, 2026  
+**Architecture Version**: 1.4.x  
+**Last Updated**: January 18, 2026  
 **Status**: Production Ready
 
 
@@ -1830,7 +1830,7 @@ keekar2022/KACI-Parental_Control
   - ✅ Must be tagged with version numbers
   - ❌ No direct commits (except hotfixes)
   - ❌ No experimental features
-- **Current Version**: v1.4.2
+- **Current Version**: v1.4.x
 
 #### `develop` Branch
 - **Purpose**: Integration branch for new features
@@ -4738,8 +4738,8 @@ All functionality is preserved, just moved:
 
 ## Version Information
 
-**Version**: 1.4.10+  
-**Date**: 2026-01-01  
+**Version**: 1.4.x  
+**Date**: 2026-01-18  
 **Type**: Enhancement (Script Consolidation)  
 **Status**: Production Ready  
 
@@ -4992,9 +4992,9 @@ ssh root@pfsense 'find /usr/local -name "*parental*"'
 
 ## Version Information
 
-**Version**: 1.4.10+  
+**Version**: 1.4.x  
 **Build**: 0.3.5  
-**Release Date**: 2026-01-01  
+**Release Date**: 2026-01-18  
 **Type**: Enhancement  
 **Status**: Production Ready  
 
@@ -5184,8 +5184,8 @@ ssh root@pfsense 'test -x /usr/local/etc/rc.d/parental_control_captive && echo "
 
 ---
 
-**Consolidation Date**: 2026-01-01  
-**Version**: 1.4.10+  
+**Consolidation Date**: 2026-01-18  
+**Version**: 1.4.x  
 **Status**: ✅ Complete and Production Ready
 
 

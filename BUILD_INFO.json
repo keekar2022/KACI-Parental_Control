@@ -35,7 +35,7 @@
     "name": "KACI-Parental_Control",
     "full_name": "Keekar's Parental Control",
     "author": "Mukesh Kesharwani",
-    "license": "Apache-2.0",
+    "license": "GPL-3.0-or-later",
     "repository": "https://github.com/keekar2022/KACI-Parental_Control"
   },
   "features": [

@@ -18,9 +18,9 @@
 # Configuration Guide
 ## KACI Parental Control - Advanced Configuration Options
 
-**Version:** 1.4.10+ (Development)  
+**Version:** 1.4.x  
 **Author:** Mukesh Kesharwani  
-**Last Updated:** January 1, 2026
+**Last Updated:** January 18, 2026
 
 ---
 
@@ -597,9 +597,9 @@ vi /var/db/parental_control_state.json
 # Troubleshooting Guide
 ## KACI Parental Control - Common Issues & Solutions
 
-**Version:** 1.4.10+ (Development)  
+**Version:** 1.4.x  
 **Author:** Mukesh Kesharwani  
-**Last Updated:** January 1, 2026
+**Last Updated:** January 18, 2026
 
 ---
 
@@ -1264,7 +1264,7 @@ Please collect this information:
 
 **Built with Passion by Mukesh Kesharwani**  
 **© 2026 Keekar**  
-**Version 1.4.2**
+**Version 1.4.x**
 
 
 ---
@@ -1675,8 +1675,8 @@ ssh mkesharw@fw.keekar.com "tail -f /var/log/system.log | grep parental"
 ---
 
 **Author**: Mukesh Kesharwani  
-**Version**: 1.4.2  
-**Date**: January 1, 2026  
+**Version**: 1.4.x  
+**Date**: January 18, 2026  
 **Status**: Production Ready
 
 

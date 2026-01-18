@@ -1,6 +1,6 @@
 # Merge Strategy: Develop → Main
 
-**Version:** 1.4.10+  
+**Version:** 1.4.x  
 **Purpose:** Safe merging of experimental features to production while excluding development tools
 
 ---
