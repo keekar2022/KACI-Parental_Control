@@ -2451,6 +2451,66 @@ function pc_init_service_block_tables() {
 }
 
 /**
+ * Delete service alias and associated blocking table
+ * 
+ * Removes both the PC_Service_<name> alias and the pc_blocked_<name> alias
+ * from the pfSense configuration. This should be called when a service is
+ * deleted to clean up firewall aliases.
+ * 
+ * @param string $service_name Service name (e.g., "TikTok", "Facebook")
+ * @return bool True if successful
+ */
+function pc_delete_service_alias($service_name) {
+	global $config;
+	
+	$alias_name = 'PC_Service_' . preg_replace('/[^a-zA-Z0-9_]/', '_', $service_name);
+	$block_alias_name = 'pc_blocked_' . strtolower(preg_replace('/[^a-zA-Z0-9_]/', '_', $service_name));
+	
+	$aliases = config_get_path('aliases/alias', array());
+	if (!is_array($aliases)) {
+		pc_log("No aliases found, nothing to delete for: {$service_name}", 'debug');
+		return false;
+	}
+	
+	$deleted_count = 0;
+	
+	// Remove both aliases
+	foreach ($aliases as $idx => $alias) {
+		if ($alias['name'] === $alias_name || $alias['name'] === $block_alias_name) {
+			unset($aliases[$idx]);
+			$deleted_count++;
+			pc_log("Deleted alias: {$alias['name']}", 'info', array(
+				'event.action' => 'service_alias_deleted',
+				'alias.name' => $alias['name'],
+				'service' => $service_name
+			));
+		}
+	}
+	
+	if ($deleted_count > 0) {
+		// Reindex array
+		$aliases = array_values($aliases);
+		config_set_path('aliases/alias', $aliases);
+		
+		// NOTE: Do NOT write_config() here - let caller do it in single transaction
+		// This prevents dual-write corruption issues
+		
+		mark_subsystem_dirty('aliases');
+		
+		pc_log("Deleted {$deleted_count} alias(es) for service: {$service_name}", 'info', array(
+			'event.action' => 'service_aliases_deleted',
+			'service' => $service_name,
+			'deleted_count' => $deleted_count
+		));
+		
+		return true;
+	}
+	
+	pc_log("No aliases found to delete for service: {$service_name}", 'debug');
+	return false;
+}
+
+/**
  * Inject anchor reference into live pfSense firewall configuration
  * 
  * CRITICAL WORKAROUND: Since pfSense's filter generation hooks aren't being called
@@ -3062,10 +3122,14 @@ function pc_create_service_monitoring_rules() {
 	array_splice($rules, $blocking_rule_index, 0, $new_rules);
 	
 	config_set_path('filter/rule', $rules);
-	write_config('Parental Control: Updated service monitoring rules');
 	
-	pc_log("Created " . count($new_rules) . " service monitoring rules", 'info', array(
-		'event.action' => 'service_rules_created',
+	// BUGFIX v1.4.42: Do NOT write_config() here - let caller handle it
+	// PROBLEM: Dual-write with delete_service causes rules to persist
+	// SOLUTION: Caller writes config after all changes prepared
+	// write_config('Parental Control: Updated service monitoring rules');
+	
+	pc_log("Prepared " . count($new_rules) . " service monitoring rules (config not written yet)", 'info', array(
+		'event.action' => 'service_rules_prepared',
 		'rule.count' => count($new_rules),
 		'services' => implode(', ', array_map(function($a) { return str_replace('PC_Service_', '', $a); }, $service_aliases))
 	));
@@ -4347,6 +4411,10 @@ function parental_control_cron_job() {
 		pc_reset_daily_counters($state);
 		$state['last_reset'] = $current_time;
 		
+		// NEW v1.4.45: Cleanup old logs (90-day retention policy)
+		// Runs once per day during daily reset to prevent disk space issues
+		pc_cleanup_old_logs(90);
+		
 		// CRITICAL: After usage reset, only unblock TIME-LIMIT-based blocks
 		// WHY: Schedule-based blocks should remain active (e.g., bedtime 20:00-06:30)
 		// If we clear ALL blocks, devices in active schedules will be unblocked briefly
@@ -4394,6 +4462,12 @@ function parental_control_cron_job() {
 	// NEW v1.4.31: Check and enforce service-specific limits
 	// Blocks devices from specific services when profile service limits are exceeded
 	pc_check_profile_service_limits($state);
+	
+	// NEW v1.4.43: Detect and handle bot/background traffic
+	// Analyzes connection patterns to identify automated traffic (iOS background refresh,
+	// smart TV telemetry, etc.) that shouldn't count toward parental control limits.
+	// If bot behavior is sustained for 15+ minutes, service tracking is reset for that device+service.
+	pc_detect_bot_behavior($state);
 	
 	// SMART BLOCKING: Calculate which devices should be blocked NOW
 	// Then compare with previous state and only update changed devices
@@ -4650,6 +4724,119 @@ function pc_reset_daily_counters(&$state) {
 		'services.cleared' => $services_cleared,
 		'reset.type' => 'daily'
 	));
+}
+
+/**
+ * Cleanup old log files (90-day retention policy)
+ * 
+ * Removes log files older than the specified retention period to prevent disk
+ * space issues. Runs automatically as part of the daily reset process.
+ * 
+ * Logs cleaned up:
+ * - parental_control-*.jsonl (daily logs older than 90 days)
+ * - parental_control_captive.log.*.gz (rotated captive logs older than 90 days)
+ * - multi_service_limiter*.jsonl (old experimental logs)
+ * 
+ * NEW v1.4.45: Automatic log rotation and cleanup
+ * 
+ * @param int $retention_days Number of days to retain logs (default: 90)
+ * @return array Statistics about cleaned files
+ * @since 1.4.45
+ * 
+ * @example
+ * // Called automatically during daily reset
+ * $stats = pc_cleanup_old_logs(90);
+ * 
+ * @see pc_reset_daily_counters() For daily reset integration
+ */
+function pc_cleanup_old_logs($retention_days = 90) {
+	$log_dir = '/var/log';
+	$cutoff_time = time() - ($retention_days * 86400); // 90 days in seconds
+	$stats = array(
+		'files_deleted' => 0,
+		'space_freed' => 0,
+		'errors' => 0
+	);
+	
+	// Pattern 1: Daily parental control logs (parental_control-YYYY-MM-DD.jsonl)
+	$daily_logs = glob("{$log_dir}/parental_control-*.jsonl");
+	if (is_array($daily_logs)) {
+		foreach ($daily_logs as $log_file) {
+			$mtime = @filemtime($log_file);
+			if ($mtime && $mtime < $cutoff_time) {
+				$size = @filesize($log_file);
+				if (@unlink($log_file)) {
+					$stats['files_deleted']++;
+					$stats['space_freed'] += $size;
+					pc_log("Deleted old log: " . basename($log_file), 'info', array(
+						'event.action' => 'log_cleanup',
+						'file' => basename($log_file),
+						'age_days' => round((time() - $mtime) / 86400),
+						'size' => $size
+					));
+				} else {
+					$stats['errors']++;
+				}
+			}
+		}
+	}
+	
+	// Pattern 2: Rotated captive portal logs (parental_control_captive.log.TIMESTAMP.gz)
+	$captive_logs = glob("{$log_dir}/parental_control_captive.log.*.gz");
+	if (is_array($captive_logs)) {
+		foreach ($captive_logs as $log_file) {
+			$mtime = @filemtime($log_file);
+			if ($mtime && $mtime < $cutoff_time) {
+				$size = @filesize($log_file);
+				if (@unlink($log_file)) {
+					$stats['files_deleted']++;
+					$stats['space_freed'] += $size;
+					pc_log("Deleted old captive log: " . basename($log_file), 'info', array(
+						'event.action' => 'log_cleanup',
+						'file' => basename($log_file),
+						'age_days' => round((time() - $mtime) / 86400),
+						'size' => $size
+					));
+				} else {
+					$stats['errors']++;
+				}
+			}
+		}
+	}
+	
+	// Pattern 3: Old multi-service limiter logs (can be cleaned immediately - obsolete)
+	$msl_logs = glob("{$log_dir}/multi_service_limiter*.jsonl");
+	if (is_array($msl_logs)) {
+		foreach ($msl_logs as $log_file) {
+			$size = @filesize($log_file);
+			if (@unlink($log_file)) {
+				$stats['files_deleted']++;
+				$stats['space_freed'] += $size;
+				pc_log("Deleted obsolete multi-service limiter log: " . basename($log_file), 'info', array(
+					'event.action' => 'log_cleanup',
+					'file' => basename($log_file),
+					'reason' => 'obsolete',
+					'size' => $size
+				));
+			} else {
+				$stats['errors']++;
+			}
+		}
+	}
+	
+	if ($stats['files_deleted'] > 0) {
+		$space_freed_mb = round($stats['space_freed'] / 1024 / 1024, 2);
+		pc_log("Log cleanup completed", 'info', array(
+			'event.action' => 'log_cleanup_complete',
+			'files.deleted' => $stats['files_deleted'],
+			'space.freed.bytes' => $stats['space_freed'],
+			'space.freed.mb' => $space_freed_mb,
+			'retention.days' => $retention_days,
+			'errors' => $stats['errors']
+		));
+	}
+	
+	return $stats;
 }
 
 /**
@@ -5517,13 +5704,44 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 							'usage_today' => 0,
 							'usage_week' => 0,
 							'last_seen' => 0,
-							'connections' => 0
+							'connections' => 0,
+							// NEW v1.4.43: Bot detection tracking
+							'connection_history' => array(), // Last 15 samples of connection counts
+							'bot_score' => 0, // 0-15: number of consecutive bot-like samples
+							'bot_detected_at' => 0, // Timestamp when bot first detected
+							'is_bot' => false // Whether currently flagged as bot traffic
 						);
 					}
 					
-					// Add interval minutes to service usage
-					$state['devices_by_ip'][$ip]['service_usage'][$service_name]['usage_today'] += $interval_minutes;
-					$state['devices_by_ip'][$ip]['service_usage'][$service_name]['usage_week'] += $interval_minutes;
+					// NEW v1.4.43: Bot detection - track connection history
+					// Store last 15 minutes of connection counts (sliding window)
+					if (!isset($state['devices_by_ip'][$ip]['service_usage'][$service_name]['connection_history'])) {
+						$state['devices_by_ip'][$ip]['service_usage'][$service_name]['connection_history'] = array();
+					}
+					$state['devices_by_ip'][$ip]['service_usage'][$service_name]['connection_history'][] = $conn_count;
+					
+					// Keep only last 15 samples (15 minutes with 1-minute interval)
+					if (count($state['devices_by_ip'][$ip]['service_usage'][$service_name]['connection_history']) > 15) {
+						array_shift($state['devices_by_ip'][$ip]['service_usage'][$service_name]['connection_history']);
+					}
+					
+					// Add interval minutes to service usage (ONLY if not flagged as bot)
+					$is_bot = isset($state['devices_by_ip'][$ip]['service_usage'][$service_name]['is_bot']) && 
+					          $state['devices_by_ip'][$ip]['service_usage'][$service_name]['is_bot'];
+					
+					if (!$is_bot) {
+						$state['devices_by_ip'][$ip]['service_usage'][$service_name]['usage_today'] += $interval_minutes;
+						$state['devices_by_ip'][$ip]['service_usage'][$service_name]['usage_week'] += $interval_minutes;
+					} else {
+						pc_log("Skipping usage tracking for $device_name @ $ip - $service_name (bot traffic detected)", 'debug', array(
+							'event.action' => 'bot_traffic_skipped',
+							'device.name' => $device_name,
+							'client.address' => $ip,
+							'service.name' => $service_name,
+							'connections' => $conn_count
+						));
+					}
+					
 					$state['devices_by_ip'][$ip]['service_usage'][$service_name]['last_seen'] = time();
 					$state['devices_by_ip'][$ip]['service_usage'][$service_name]['connections'] = $conn_count;
 				}
@@ -5631,6 +5849,223 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 		'devices.total' => count($devices),
 		'devices_by_ip' => count($state['devices_by_ip'])
 	));
+}
+
+/**
+ * Detect bot-like behavior in service connections
+ * 
+ * Analyzes connection patterns for each device+service combination to identify
+ * automated/background traffic vs. human usage. Background processes (iOS app refresh,
+ * smart TV telemetry, etc.) often maintain persistent low-level connections that
+ * inflate usage time inappropriately.
+ * 
+ * Detection criteria:
+ * - Low connection count (1-5 connections sustained over time)
+ * - Low variance (consistent pattern, not varied like human browsing)
+ * - Sustained duration (15+ consecutive minutes of bot-like pattern)
+ * 
+ * When bot behavior is detected for 15 consecutive minutes, the service tracking
+ * is reset for that specific device+service combination only.
+ * 
+ * @param array &$state State array with device and service tracking (modified by reference)
+ * @return void State is modified in-place with bot detection flags
+ * @since 1.4.43
+ * 
+ * @example
+ * // Called from cron job after usage update
+ * pc_update_device_usage($state);
+ * pc_detect_bot_behavior($state); // Analyzes patterns and resets if needed
+ * pc_save_state($state);
+ */
+function pc_detect_bot_behavior(&$state) {
+	// Configuration thresholds
+	$BOT_MAX_CONNECTIONS = 5;         // Max connections to be considered "low activity"
+	$BOT_MIN_SAMPLES = 15;            // Minimum samples needed (15 minutes)
+	$BOT_CONSECUTIVE_THRESHOLD = 15;  // Consecutive bot-like samples before action
+	$BOT_MAX_VARIANCE = 2.0;          // Max variance in connection count (very consistent = bot)
+	
+	$bot_detected_count = 0;
+	$bot_reset_count = 0;
+	
+	if (!isset($state['devices_by_ip'])) {
+		return; // No devices to check
+	}
+	
+	foreach ($state['devices_by_ip'] as $ip => &$device_state) {
+		if (!isset($device_state['service_usage']) || empty($device_state['service_usage'])) {
+			continue; // No service usage to analyze
+		}
+		
+		foreach ($device_state['service_usage'] as $service_name => &$service_state) {
+			// Need enough samples to make a determination
+			if (!isset($service_state['connection_history']) || 
+			    count($service_state['connection_history']) < $BOT_MIN_SAMPLES) {
+				continue; // Not enough data yet
+			}
+			
+			$history = $service_state['connection_history'];
+			$sample_count = count($history);
+			
+			// Calculate statistics
+			$avg = array_sum($history) / $sample_count;
+			$variance = 0;
+			foreach ($history as $val) {
+				$variance += pow($val - $avg, 2);
+			}
+			$variance = $variance / $sample_count;
+			$std_dev = sqrt($variance);
+			
+			// Determine if pattern is bot-like
+			$is_low_activity = ($avg <= $BOT_MAX_CONNECTIONS);
+			$is_consistent = ($variance <= $BOT_MAX_VARIANCE);
+			$is_sustained = ($sample_count >= $BOT_MIN_SAMPLES);
+			
+			$is_bot_pattern = ($is_low_activity && $is_consistent && $is_sustained);
+			
+			// Update bot score (consecutive count of bot-like behavior)
+			if ($is_bot_pattern) {
+				if (!isset($service_state['bot_score'])) {
+					$service_state['bot_score'] = 0;
+				}
+				$service_state['bot_score']++;
+				
+				// Mark timestamp when first detected
+				if ($service_state['bot_score'] == 1) {
+					$service_state['bot_detected_at'] = time();
+				}
+				
+				// If sustained for threshold duration, take action
+				if ($service_state['bot_score'] >= $BOT_CONSECUTIVE_THRESHOLD) {
+					if (!isset($service_state['is_bot']) || !$service_state['is_bot']) {
+						// First time flagging as bot - PAUSE tracking (preserve accumulated usage)
+						// CRITICAL v1.4.44: Usage accumulated BEFORE bot detection is preserved!
+						$device_name = isset($device_state['name']) ? $device_state['name'] : $ip;
+						
+						pc_log("Bot behavior detected for {$device_name} @ {$ip} - {$service_name}", 'notice', array(
+							'event.action' => 'bot_detected',
+							'device.name' => $device_name,
+							'client.address' => $ip,
+							'service.name' => $service_name,
+							'avg_connections' => round($avg, 2),
+							'variance' => round($variance, 2),
+							'samples' => $sample_count,
+							'duration_minutes' => $service_state['bot_score'],
+							'note' => 'Tracking paused, existing usage preserved'
+						));
+						
+						// Pause service tracking for this device+service (preserves existing usage)
+						pc_reset_service_tracking($state, $ip, $service_name, 'bot_detected');
+						
+						$service_state['is_bot'] = true;
+						$bot_detected_count++;
+						$bot_reset_count++;
+					}
+				}
+			} else {
+				// Pattern is NOT bot-like - reset score if it was previously flagged
+				if (isset($service_state['bot_score']) && $service_state['bot_score'] > 0) {
+					$device_name = isset($device_state['name']) ? $device_state['name'] : $ip;
+					
+					pc_log("Human activity resumed for {$device_name} @ {$ip} - {$service_name}", 'info', array(
+						'event.action' => 'human_activity_resumed',
+						'device.name' => $device_name,
+						'client.address' => $ip,
+						'service.name' => $service_name,
+						'previous_bot_score' => $service_state['bot_score'],
+						'current_avg_connections' => round($avg, 2)
+					));
+					
+					$service_state['bot_score'] = 0;
+					$service_state['is_bot'] = false;
+					$service_state['bot_detected_at'] = 0;
+				}
+			}
+		}
+	}
+	
+	if ($bot_detected_count > 0 || $bot_reset_count > 0) {
+		pc_log("Bot detection completed: {$bot_detected_count} new detections, {$bot_reset_count} paused", 'info', array(
+			'event.action' => 'bot_detection_complete',
+			'bot.new_detections' => $bot_detected_count,
+			'bot.paused' => $bot_reset_count,
+			'note' => 'Tracking paused (usage preserved), will resume when human activity detected'
+		));
+	}
+}
+
+/**
+ * Pause service tracking for a specific device and service (bot detected)
+ * 
+ * CRITICAL v1.4.44: This function does NOT reset usage counters!
+ * It only PAUSES tracking by clearing connection history and keeping is_bot flag.
+ * 
+ * WHY: When bot traffic is detected AFTER legitimate human usage, we must preserve
+ * the usage that was already accumulated. Only future tracking is paused.
+ * 
+ * BEHAVIOR:
+ * - User watches YouTube for 60 minutes → usage_today = 60
+ * - User leaves, bot detected after 15 minutes → is_bot = true
+ * - Bot traffic continues: usage_today STAYS at 60 (tracking paused)
+ * - User returns and watches 30 more minutes → usage_today = 90 (tracking resumed)
+ * 
+ * IMPORTANT: Only pauses the specific service for the specific device - does NOT
+ * affect other services or other devices.
+ * 
+ * @param array &$state State array with tracking data (modified by reference)
+ * @param string $ip Device IP address
+ * @param string $service_name Service name (e.g., "YouTube", "Facebook")
+ * @param string $reason Reason for pause (e.g., "bot_detected", "manual")
+ * @return bool True if pause was performed, false otherwise
+ * @since 1.4.43
+ * @updated 1.4.44 Changed from "reset" to "pause" - preserves accumulated usage
+ * 
+ * @example
+ * // Pause YouTube tracking for a specific device (preserves existing usage)
+ * pc_reset_service_tracking($state, '192.168.1.110', 'YouTube', 'bot_detected');
+ */
+function pc_reset_service_tracking(&$state, $ip, $service_name, $reason = 'manual') {
+	$device_name = isset($state['devices_by_ip'][$ip]['name']) ? 
+	               $state['devices_by_ip'][$ip]['name'] : $ip;
+	
+	// CRITICAL v1.4.44: PAUSE tracking, do NOT reset usage counters
+	// WHY: Legitimate usage before bot detection must be preserved
+	if (isset($state['devices_by_ip'][$ip]['service_usage'][$service_name])) {
+		$current_usage = $state['devices_by_ip'][$ip]['service_usage'][$service_name]['usage_today'];
+		
+		// ONLY clear connection history and metadata (not usage!)
+		// usage_today and usage_week are PRESERVED
+		$state['devices_by_ip'][$ip]['service_usage'][$service_name]['connections'] = 0;
+		$state['devices_by_ip'][$ip]['service_usage'][$service_name]['connection_history'] = array();
+		// Keep: usage_today, usage_week, bot_score, bot_detected_at, is_bot
+		
+		pc_log("Paused service tracking (bot): {$device_name} @ {$ip} - {$service_name} (reason: {$reason})", 'notice', array(
+			'event.action' => 'service_tracking_paused',
+			'device.name' => $device_name,
+			'client.address' => $ip,
+			'service.name' => $service_name,
+			'pause.reason' => $reason,
+			'usage.preserved' => $current_usage,
+			'note' => 'Usage counters preserved, tracking paused until human activity resumes'
+		));
+	}
+	
+	// Remove IP from service-specific blocking table if present
+	// This ensures the device can continue to access the service while bot traffic is ignored
+	$service_alias_name = 'pc_blocked_' . strtolower(preg_replace('/[^a-zA-Z0-9_]/', '_', $service_name));
+	$blocked_ips = pc_get_service_blocked_ips($service_alias_name);
+	
+	if (in_array($ip, $blocked_ips)) {
+		pc_remove_ip_from_service_table($service_alias_name, $ip);
+		
+		pc_log("Removed {$ip} from {$service_alias_name} table (bot traffic)", 'debug', array(
+			'event.action' => 'ip_removed_from_service_table',
+			'client.address' => $ip,
+			'service.name' => $service_name,
+			'table.name' => $service_alias_name
+		));
+	}
+	
+	return true;
 }
 
 /**

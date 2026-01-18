@@ -563,19 +563,18 @@ $default_services = array(
 	array(
 		'name' => 'Discord',
 		'urls' => array(
-			// Placeholder - Discord requires DNS-based blocking, not IP-based
-			// Add your own IP list URL here if available
+			'https://raw.githubusercontent.com/v2fly/domain-list-community/refs/heads/master/data/discord'
 		),
-		'description' => '⚠️ Voice, video, and text communication platform (IP-based blocking not recommended - use DNS filtering instead)',
+		'description' => '⚠️ Voice, video, and text communication platform (domain list from v2fly community)',
 		'icon' => 'fa-comments',
-		'note' => 'Discord does not publish official IP lists and uses Cloudflare CDN. For effective Discord blocking, use pfSense DNS Resolver with domain blocking instead of IP-based firewall rules.'
+		'note' => 'Discord domain list includes core domains (discord.com, discord.gg, etc.) and related services. Note: Discord uses Cloudflare CDN which may affect IP-based blocking effectiveness.'
 	),
 	array(
 		'name' => 'TikTok',
 		'urls' => array(
-			'https://raw.githubusercontent.com/PeterDaveHello/threat-hostlist/master/hosts'
+			'https://raw.githubusercontent.com/v2fly/domain-list-community/refs/heads/master/data/tiktok'
 		),
-		'description' => 'Short-form video platform',
+		'description' => 'Short-form video platform (domain list from v2fly community)',
 		'icon' => 'fa-video-camera'
 	),
 	array(
@@ -615,14 +614,44 @@ if (!isset($_SESSION['pc_service_urls'])) {
 	$_SESSION['pc_service_urls'] = array();
 }
 
+// BUGFIX v1.4.34: Initialize session storage for new services
+if (!isset($_SESSION['pc_new_services'])) {
+	$_SESSION['pc_new_services'] = array();
+}
+
+// BUGFIX v1.4.34: Restore session-based new services (not yet saved to config)
+// These are services added via "Add New Service" but not yet made permanent via "Monitor & Block"
+if (!empty($_SESSION['pc_new_services'])) {
+	foreach ($_SESSION['pc_new_services'] as $session_service) {
+		// Check if service already exists in config (avoid duplicates)
+		$existing = pc_find_service_by_name($services_config, $session_service['name']);
+		if ($existing === null) {
+			// Add session service to $services_config for display
+			$services_config[] = $session_service;
+		}
+	}
+}
+
 // Merge session URLs into loaded services
 foreach ($services_config as $idx => $service) {
 	$service_name = $service['name'];
-	if (isset($_SESSION['pc_service_urls'][$service_name])) {
-		// Merge session URLs with config URLs
+	if (isset($_SESSION['pc_service_urls'][$service_name]) && !empty($_SESSION['pc_service_urls'][$service_name])) {
+		// Merge session URLs with config URLs (avoid duplicates)
 		$config_urls = isset($service['urls']) ? (array)$service['urls'] : array();
-		$session_urls = $_SESSION['pc_service_urls'][$service_name];
-		$services_config[$idx]['urls'] = array_unique(array_merge($config_urls, $session_urls));
+		$session_urls = (array)$_SESSION['pc_service_urls'][$service_name];
+		$merged = array_unique(array_merge($config_urls, $session_urls));
+		$services_config[$idx]['urls'] = array_values($merged); // Reindex array
+		
+		// BUGFIX v1.4.33: Also restore session URL statuses if they exist
+		if (isset($_SESSION['pc_service_url_status'][$service_name])) {
+			if (!isset($services_config[$idx]['url_status'])) {
+				$services_config[$idx]['url_status'] = array();
+			}
+			$services_config[$idx]['url_status'] = array_merge(
+				$services_config[$idx]['url_status'],
+				$_SESSION['pc_service_url_status'][$service_name]
+			);
+		}
 	}
 }
 
@@ -635,31 +664,118 @@ if ($_POST) {
 				if (!empty($service_name)) {
 					$existing = pc_find_service_by_name($services_config, $service_name);
 					if ($existing === null) {
-						add_or_update_service($services_config, $service_name, array(
-							'urls' => array($_POST['service_url']),
+						// BUGFIX v1.4.34: Store new service in session instead of config
+						// PROBLEM: Writing to config.xml corrupts the file, causing pfSense to restore from backup
+						// SOLUTION: Store in session until "Monitor & Block" is clicked (same as URLs)
+						$new_service = array(
+							'name' => $service_name,
+							'urls' => array(trim($_POST['service_url'])),
 							'description' => trim($_POST['service_description']),
 							'icon' => 'fa-globe',
 							'enabled' => 'on',
 							'last_update' => 0,
 							'ip_count' => 0
-						));
-					config_set_path('installedpackages/parentalcontrolservices/config', $services_config);
-					safe_write_config("Added new service: {$service_name}");
-						pc_log("Added new online service: {$service_name}", 'info');
-						$savemsg = "Service '{$service_name}' added successfully.";
+						);
+						
+						// Add to session storage
+						$_SESSION['pc_new_services'][] = $new_service;
+						
+						// Also add to in-memory $services_config for current request
+						$services_config[] = $new_service;
+						
+						// Explicitly save session
+						session_write_close();
+						session_start();
+						
+						pc_log("Added new online service to session: {$service_name}", 'info');
+						$savemsg = "Service '{$service_name}' added for this session. Click [Verify] to test URLs, then [Monitor&Block] to make it permanent.";
+					} else {
+						$savemsg = "Service '{$service_name}' already exists.";
 					}
 				}
 				break;
 			
 			case 'delete_service':
 				$service_name = $_POST['service_name'];
-				if (remove_service_by_name($services_config, $service_name)) {
-					// Delete associated pfSense alias
-					pc_delete_service_alias($service_name);
-				config_set_path('installedpackages/parentalcontrolservices/config', $services_config);
-				safe_write_config("Deleted service: {$service_name}");
-					pc_log("Deleted online service: {$service_name}", 'info');
-					$savemsg = "Service '{$service_name}' deleted successfully.";
+				
+				// BUGFIX v1.4.34: Check if service is in session storage first
+				$deleted_from_session = false;
+				if (!empty($_SESSION['pc_new_services'])) {
+					foreach ($_SESSION['pc_new_services'] as $idx => $session_service) {
+						if ($session_service['name'] === $service_name) {
+							unset($_SESSION['pc_new_services'][$idx]);
+							$_SESSION['pc_new_services'] = array_values($_SESSION['pc_new_services']); // Reindex
+							$deleted_from_session = true;
+							session_write_close();
+							session_start();
+							error_log("Deleted service '{$service_name}' from session");
+							break;
+						}
+					}
+				}
+				
+				// Also clean up session URLs and statuses for this service
+				if (isset($_SESSION['pc_service_urls'][$service_name])) {
+					unset($_SESSION['pc_service_urls'][$service_name]);
+				}
+				if (isset($_SESSION['pc_service_url_status'][$service_name])) {
+					unset($_SESSION['pc_service_url_status'][$service_name]);
+				}
+				
+				// Try to delete from config (if it exists there)
+				$config_services = config_get_path('installedpackages/parentalcontrolservices/config', array());
+				$found_in_config = false;
+				foreach ($config_services as $idx => $cfg_service) {
+					if ($cfg_service['name'] === $service_name) {
+						$found_in_config = true;
+						break;
+					}
+				}
+				
+				if ($found_in_config && remove_service_by_name($services_config, $service_name)) {
+					// BUGFIX v1.4.42: TRUE atomic service deletion with single config write
+					// PROBLEM: v1.4.41 had TWO writes - delete aliases, then recreate rules
+					// SOLUTION: Prepare ALL changes in memory, then ONE write saves everything
+					// Step 1: Remove service from config (in memory)
+					// Step 2: Delete aliases (in memory)
+					// Step 3: Rebuild rules WITHOUT deleted service (in memory)
+					// Step 4: Write config ONCE (atomic transaction saves all 3 changes)
+					// Step 5: Reload filter
+					
+					// Delete associated pfSense aliases (prepares deletion in memory, doesn't write)
+					$aliases_deleted = pc_delete_service_alias($service_name);
+					error_log("Prepared alias deletion for: {$service_name} (deleted: " . ($aliases_deleted ? 'yes' : 'no') . ")");
+					
+					// Update service config in memory
+					config_set_path('installedpackages/parentalcontrolservices/config', $services_config);
+					error_log("Prepared service config update (service removed from array)");
+					
+					// Rebuild service monitoring rules WITHOUT deleted service (in memory, doesn't write)
+					require_once("/usr/local/pkg/parental_control.inc");
+					if (function_exists('pc_create_service_monitoring_rules')) {
+						pc_create_service_monitoring_rules();
+						error_log("Prepared service monitoring rules (rules rebuilt without {$service_name})");
+					}
+					
+					// Single atomic write for service + aliases + rules
+					if (safe_write_config("Deleted service, aliases, and rules for: {$service_name}")) {
+						error_log("Config written successfully - all changes persisted atomically");
+						
+						// Reload filter to apply rule changes
+						require_once("/etc/inc/filter.inc");
+						filter_configure();
+						error_log("Filter reloaded after service deletion: {$service_name}");
+						
+						pc_log("Deleted online service from config: {$service_name}", 'info');
+						$savemsg = "Service '{$service_name}' deleted successfully. Service, aliases, and rules removed.";
+					} else {
+						$input_errors[] = "Failed to save config after deleting service '{$service_name}'.";
+						error_log("ERROR: Failed to write config after service deletion: {$service_name}");
+					}
+				} elseif ($deleted_from_session) {
+					$savemsg = "Service '{$service_name}' removed from session (was not yet saved to config).";
+				} else {
+					$input_errors[] = "Service '{$service_name}' not found.";
 				}
 				break;
 			
@@ -682,6 +798,10 @@ if ($_POST) {
 					if (!in_array($new_url, $all_urls)) {
 						// Add to session storage
 						$_SESSION['pc_service_urls'][$service_name][] = $new_url;
+						
+						// BUGFIX v1.4.33: Explicitly save session to ensure persistence
+						session_write_close();
+						session_start(); // Restart session for subsequent operations
 						
 						// Also update in-memory config for current request
 						if (!isset($services_config[$found['index']]['urls'])) {
@@ -713,6 +833,10 @@ if ($_POST) {
 					if ($key !== false) {
 						unset($_SESSION['pc_service_urls'][$service_name][$key]);
 						$_SESSION['pc_service_urls'][$service_name] = array_values($_SESSION['pc_service_urls'][$service_name]); // Reindex
+						
+						// BUGFIX v1.4.33: Explicitly save session
+						session_write_close();
+						session_start();
 					}
 				}
 				
@@ -764,6 +888,14 @@ if ($_POST) {
 					// Update individual URL statuses in memory
 					if (isset($result['url_statuses'])) {
 						$services_config[$found['index']]['url_status'] = $result['url_statuses'];
+						
+						// BUGFIX v1.4.33: Store URL statuses in session for persistence
+						if (!isset($_SESSION['pc_service_url_status'])) {
+							$_SESSION['pc_service_url_status'] = array();
+						}
+						$_SESSION['pc_service_url_status'][$service_name] = $result['url_statuses'];
+						session_write_close();
+						session_start();
 					}
 					
 					// Don't write verification results to config - causes write failures
@@ -799,12 +931,90 @@ if ($_POST) {
 				break;
 			}
 			
-			// Create the URL alias using pfSense's native URL Table format
+			// CRITICAL FIX v1.4.36: Save service to config BEFORE creating alias
+			// PROBLEM: Two write_config() calls in succession caused corruption
+			// SOLUTION: Save service data first, then create alias in single transaction
+			try {
+				// Load current config services
+				$config_services = config_get_path('installedpackages/parentalcontrolservices/config', array());
+				$config_services = convert_to_numeric_array($config_services);
+				$config_modified = false;
+				
+				// Check if this service is a new session service (not yet in config)
+				$service_in_config = false;
+				$service_config_idx = -1;
+				foreach ($config_services as $idx => $cfg_service) {
+					if ($cfg_service['name'] === $service_name) {
+						$service_in_config = true;
+						$service_config_idx = $idx;
+						break;
+					}
+				}
+				
+				// If service not in config, add it from session
+				if (!$service_in_config && !empty($_SESSION['pc_new_services'])) {
+					foreach ($_SESSION['pc_new_services'] as $idx => $session_service) {
+						if ($session_service['name'] === $service_name) {
+							// Sanitize service structure for XML safety
+							$safe_service = array(
+								'name' => $service_name,
+								'urls' => isset($session_service['urls']) ? (array)$session_service['urls'] : array(),
+								'description' => isset($session_service['description']) ? $session_service['description'] : '',
+								'icon' => isset($session_service['icon']) ? $session_service['icon'] : 'fa-globe',
+								'enabled' => 'on',
+								'last_update' => time(),
+								'ip_count' => 0
+							);
+							$config_services[] = $safe_service;
+							$service_config_idx = count($config_services) - 1;
+							$config_modified = true;
+							
+							// Remove from session
+							unset($_SESSION['pc_new_services'][$idx]);
+							$_SESSION['pc_new_services'] = array_values($_SESSION['pc_new_services']);
+							
+							error_log("Saved new service '{$service_name}' from session to config (sanitized)");
+							break;
+						}
+					}
+				}
+				
+				// Merge session URLs into config service
+				if (isset($_SESSION['pc_service_urls'][$service_name]) && !empty($_SESSION['pc_service_urls'][$service_name])) {
+					if ($service_config_idx >= 0) {
+						$existing_urls = isset($config_services[$service_config_idx]['urls']) ? (array)$config_services[$service_config_idx]['urls'] : array();
+						$all_urls = array_unique(array_merge($existing_urls, $_SESSION['pc_service_urls'][$service_name]));
+						$config_services[$service_config_idx]['urls'] = array_values($all_urls);
+						$config_modified = true;
+						
+						error_log("Merged " . count($_SESSION['pc_service_urls'][$service_name]) . " session URL(s) into config for: {$service_name}");
+					}
+					
+					// Clear session URLs
+					unset($_SESSION['pc_service_urls'][$service_name]);
+				}
+				
+				// Save service to config BEFORE creating alias
+				if ($config_modified) {
+					config_set_path('installedpackages/parentalcontrolservices/config', $config_services);
+					error_log("Saved service config for: {$service_name} (before alias creation)");
+					
+					// Explicitly save session
+					session_write_close();
+					session_start();
+				}
+			} catch (Exception $e) {
+				$input_errors[] = "Failed to save service config: " . $e->getMessage();
+				error_log("Failed to save service config: " . $e->getMessage());
+				break;
+			}
+			
+			// Now create the URL alias using pfSense's native URL Table format
 			// pfSense will automatically download and manage the IP lists
 			if (pc_create_service_url_alias($service_name, $service)) {
-				// Write config to persist the alias
+				// Write config to persist the alias (SINGLE WRITE)
 				try {
-					write_config("Created URL Table alias for service: {$service_name}");
+					write_config("Created URL Table alias and saved service: {$service_name}");
 					
 					// Get the alias name that was created
 					$alias_name = 'PC_Service_' . preg_replace('/[^a-zA-Z0-9_]/', '_', $service_name);
@@ -823,7 +1033,13 @@ if ($_POST) {
 					// Create service monitoring rules for this alias
 					if (function_exists('pc_create_service_monitoring_rules')) {
 						pc_create_service_monitoring_rules();
-						error_log("Created service monitoring rules for: {$alias_name}");
+						error_log("Prepared service monitoring rules for: {$alias_name}");
+						
+						// BUGFIX v1.4.42: Write config to persist rules before filter reload
+						// PROBLEM: Rules prepared in memory but not saved before filter_configure()
+						// SOLUTION: Write config so filter reload sees the new rules
+						write_config("Added service monitoring rules for: {$service_name}");
+						error_log("Saved service monitoring rules to config");
 					}
 					
 					// Reload filter - table files already exist, so no "Unresolvable" errors
@@ -843,32 +1059,8 @@ if ($_POST) {
 						'alias_name' => $alias_name
 					));
 					
-					// CRITICAL FIX v1.4.10+: Save session URLs to config and clear session
-					// BUG: Session URLs were not persisted to config after alias creation
-					// SOLUTION: Save URLs to config and clear session after successful alias creation
-					if (isset($_SESSION['pc_service_urls'][$service_name]) && !empty($_SESSION['pc_service_urls'][$service_name])) {
-						// Update config with session URLs
-						$config_services = config_get_path('installedpackages/parentalcontrolservices/config', array());
-						$config_services = convert_to_numeric_array($config_services);
-						
-						foreach ($config_services as $idx => $cfg_service) {
-							if ($cfg_service['name'] === $service_name) {
-								// Merge session URLs with existing config URLs
-								$existing_urls = isset($cfg_service['urls']) ? (array)$cfg_service['urls'] : array();
-								$all_urls = array_unique(array_merge($existing_urls, $_SESSION['pc_service_urls'][$service_name]));
-								$config_services[$idx]['urls'] = $all_urls;
-								break;
-							}
-						}
-						
-						// Save updated config
-						config_set_path('installedpackages/parentalcontrolservices/config', $config_services);
-						write_config("Saved session URLs for service: {$service_name}");
-						error_log("Saved " . count($_SESSION['pc_service_urls'][$service_name]) . " session URL(s) to config for: {$service_name}");
-						
-						// Clear session URLs for this service (they're now in config)
-						unset($_SESSION['pc_service_urls'][$service_name]);
-					}
+					// NOTE: Service and URLs already saved to config BEFORE alias creation
+					// This prevents config corruption from multiple writes
 				} catch (Exception $e) {
 					$input_errors[] = "Failed to save URL alias for '{$service_name}': " . $e->getMessage();
 					error_log("Failed to write config for alias: " . $e->getMessage());

@@ -56,6 +56,29 @@ parental_control_captive_start()
 	
 	echo "Starting ${name}..."
 	
+	# NEW v1.4.45: Rotate log if it exceeds 10MB (prevents indefinite growth)
+	if [ -f "${logfile}" ]; then
+		log_size=$(stat -f%z "${logfile}" 2>/dev/null || echo 0)
+		max_size=$((10 * 1024 * 1024))  # 10MB in bytes
+		
+		if [ "$log_size" -gt "$max_size" ]; then
+			echo "Log file exceeds 10MB, rotating..."
+			timestamp=$(date +%Y%m%d_%H%M%S)
+			rotated_log="${logfile}.${timestamp}"
+			
+			# Move current log to rotated file
+			mv "${logfile}" "${rotated_log}"
+			
+			# Compress rotated log in background
+			gzip "${rotated_log}" &
+			
+			echo "Log rotated to: ${rotated_log}.gz"
+			
+			# Keep only last 5 rotated logs
+			ls -t ${logfile}.*.gz 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null
+		fi
+	fi
+	
 	# Verify PHP is available
 	if [ ! -x "${php_bin}" ]; then
 		echo "ERROR: PHP not found at ${php_bin}"

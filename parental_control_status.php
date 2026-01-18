@@ -37,6 +37,57 @@ $pglinks = array("", "@self", "@self");
 
 include("head.inc");
 
+// Custom CSS for compact, readable layout
+?>
+<style>
+.panel-body {
+	padding: 12px 15px !important;
+}
+.panel-heading {
+	padding: 8px 15px !important;
+}
+.panel-title {
+	font-size: 16px !important;
+	font-weight: 600 !important;
+}
+.alert {
+	padding: 8px 12px !important;
+	margin-bottom: 10px !important;
+	font-size: 13px !important;
+}
+.table {
+	margin-bottom: 10px !important;
+	font-size: 13px !important;
+}
+.table th {
+	font-size: 13px !important;
+	font-weight: 600 !important;
+	padding: 6px 8px !important;
+}
+.table td {
+	padding: 6px 8px !important;
+}
+.dl-horizontal dt {
+	font-size: 13px !important;
+	font-weight: 600 !important;
+}
+.dl-horizontal dd {
+	font-size: 13px !important;
+}
+.badge {
+	font-size: 12px !important;
+	padding: 4px 8px !important;
+}
+.label {
+	font-size: 12px !important;
+	padding: 3px 6px !important;
+}
+h2.panel-title {
+	margin: 0 !important;
+}
+</style>
+<?php
+
 $tab_array = array();
 $tab_array[] = array(gettext("Settings"), false, "/pkg_edit.php?xml=parental_control.xml&id=0");
 $tab_array[] = array(gettext("Profiles"), false, "/parental_control_profiles.php");
@@ -152,11 +203,11 @@ if (is_array($profiles)) {
 		
 		<form method="post" action="<?=$_SERVER['PHP_SELF']?>" onsubmit="return confirm('Are you sure you want to reset all usage counters? This will set all profile and device usage to zero.');">
 			<input type="hidden" name="action" value="manual_reset">
-			<button type="submit" class="btn btn-warning" name="reset">
+			<button type="submit" class="btn btn-warning btn-sm" name="reset">
 				<i class="fa-solid fa-undo"></i> <?=gettext("Reset All Usage Counters")?>
 			</button>
-			<p class="text-muted" style="margin: 5px 0 0 0; padding: 3px 0; font-size: 7px; line-height: 1.3;">
-				<strong><?=gettext("Note:")?>:</strong> <?=gettext("This will immediately reset all usage counters to zero for all profiles and devices. The automatic midnight reset will continue to run as scheduled.")?>
+			<p class="text-muted" style="margin: 3px 0 0 0; padding: 0; font-size: 12px;">
+				<strong><?=gettext("Note:")?>:</strong> <?=gettext("This will immediately reset all usage counters to zero for all profiles and devices.")?>
 			</p>
 		</form>
 	</div>
@@ -554,13 +605,13 @@ if (is_array($profiles)) {
 				</table>
 			</div>
 			
-		<div class="alert alert-info" style="margin-top: 5px; padding: 5px 10px; font-size: 7px;">
-			<h4 style="font-size: 8px; margin-bottom: 5px;"><i class="fa-solid fa-question-circle" style="font-size: 7px;"></i> <?=gettext("How Table-Based Blocking Works:")?></h4>
-			<ul style="margin-bottom: 0; line-height: 1.3;">
-				<li style="margin-bottom: 2px;"><strong>Alias/Table:</strong> <code>parental_control_blocked</code> contains list of blocked IPs</li>
-				<li style="margin-bottom: 2px;"><strong>Floating Rule:</strong> Blocks traffic from IPs in the table (visible in GUI)</li>
-				<li style="margin-bottom: 2px;"><strong>Dynamic Updates:</strong> IPs added/removed instantly without filter reload</li>
-				<li style="margin-bottom: 2px;"><strong>Rule Ordering:</strong> Floating rules are evaluated BEFORE interface rules (correct order)</li>
+		<div class="alert alert-info" style="margin: 10px 0; padding: 8px 12px;">
+			<h5 style="font-size: 13px; margin: 0 0 6px 0; font-weight: bold;"><i class="fa-solid fa-question-circle"></i> <?=gettext("How Table-Based Blocking Works")?></h5>
+			<ul style="margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.6;">
+				<li><strong>Alias/Table:</strong> <code>parental_control_blocked</code> contains list of blocked IPs</li>
+				<li><strong>Floating Rule:</strong> Blocks traffic from IPs in the table (visible in GUI)</li>
+				<li><strong>Dynamic Updates:</strong> IPs added/removed instantly without filter reload</li>
+				<li><strong>Rule Ordering:</strong> Floating rules are evaluated BEFORE interface rules</li>
 			</ul>
 		</div>
 			
@@ -575,16 +626,16 @@ if (is_array($profiles)) {
 				<i class="fa-solid fa-check-circle"></i>
 				<strong><?=gettext("No Blocking Active")?></strong> - All devices currently have access.
 			</div>
-			<div style="font-size: 7px; line-height: 1.3; margin: 5px 0; padding: 5px 0;">
-				<p style="margin: 2px 0;">
-					<i class="fa-solid fa-info-circle" style="font-size: 7px;"></i>
+			<div style="font-size: 12px; margin: 8px 0; padding: 0;">
+				<p style="margin: 4px 0;">
+					<i class="fa-solid fa-info-circle"></i>
 					<strong>Devices will be blocked automatically when:</strong>
 				</p>
-				<ul style="margin: 2px 0; padding-left: 15px; column-count: 2; column-gap: 10px;">
-					<li style="margin-bottom: 2px;">Profile time limit exceeded</li>
-					<li style="margin-bottom: 2px;">Currently in blocked schedule time (e.g., bedtime)</li>
+				<ul style="margin: 4px 0; padding-left: 25px;">
+					<li>Profile time limit exceeded</li>
+					<li>Currently in blocked schedule time (e.g., bedtime)</li>
 				</ul>
-				<p style="margin: 2px 0;">
+				<p style="margin: 4px 0; font-size: 11px;">
 					<strong>Note:</strong> IPs are added to the <code>parental_control_blocked</code> table dynamically.
 				</p>
 			</div>
@@ -596,12 +647,20 @@ if (is_array($profiles)) {
 			</script>
 		<?php } ?>
 		
-		<hr>
-		<p class="text-muted" style="font-size: 11px; margin-bottom: 0;">
-			<strong>Alias/Table:</strong> <code>parental_control_blocked</code> (Firewall → Firewall → Aliases) | 
-			<strong>Floating Rule:</strong> <code>Parental Control - Dynamic Blocking</code> (Firewall → Rules → Floating) | 
-			<strong>CLI Command:</strong> <code>pfctl -t parental_control_blocked -T show</code>
-		</p>
+		<hr style="margin: 12px 0;">
+		<div style="font-size: 12px; color: #777; margin: 8px 0; padding: 8px; background: #f9f9f9; border-left: 3px solid #d9534f; border-radius: 3px;">
+			<p style="margin: 0; line-height: 1.4;">
+				<strong>Alias/Table:</strong> <code style="font-size: 11px;">parental_control_blocked</code> 
+				<span style="color: #999;">(Firewall → Firewall → Aliases)</span>
+			</p>
+			<p style="margin: 2px 0 0 0; line-height: 1.4;">
+				<strong>Floating Rule:</strong> <code style="font-size: 11px;">Parental Control - Dynamic Blocking</code> 
+				<span style="color: #999;">(Firewall → Rules → Floating)</span>
+			</p>
+			<p style="margin: 2px 0 0 0; line-height: 1.4;">
+				<strong>CLI Command:</strong> <code style="font-size: 11px; background: #fff; padding: 2px 6px; border: 1px solid #ddd; border-radius: 3px;">pfctl -t parental_control_blocked -T show</code>
+			</p>
+		</div>
 	</div>
 </div>
 
@@ -775,14 +834,14 @@ if (is_array($profiles)) {
 				</tbody>
 			</table>
 			
-			<div class="alert alert-info" style="margin: 5px 0; padding: 5px 10px; font-size: 7px; line-height: 1.3;">
-				<h4 style="font-size: 8px; margin: 2px 0 4px 0;"><i class="fa-solid fa-info-circle" style="font-size: 7px;"></i> <?=gettext("About Service Tracking")?></h4>
-				<ul style="margin: 0; padding-left: 15px; column-count: 2; column-gap: 10px;">
-					<li style="margin-bottom: 2px;"><strong>Tracked Services:</strong> Only services configured in <em>Online-Service</em> tab are tracked</li>
-					<li style="margin-bottom: 2px;"><strong>Update Frequency:</strong> Service usage updates every <?=PC_CRON_INTERVAL_SECONDS / 60?> minutes</li>
-					<li style="margin-bottom: 2px;"><strong>Accuracy:</strong> Based on actual TCP connections to service IP ranges</li>
-					<li style="margin-bottom: 2px;"><strong>Active Connections:</strong> Number of current connections to this service</li>
-					<li style="margin-bottom: 2px;"><strong>Reset:</strong> Daily usage resets at midnight (weekly usage preserved)</li>
+			<div class="alert alert-info" style="margin: 10px 0; padding: 8px 12px;">
+				<h5 style="font-size: 13px; margin: 0 0 6px 0; font-weight: bold;"><i class="fa-solid fa-info-circle"></i> <?=gettext("About Service Tracking")?></h5>
+				<ul style="margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.6;">
+					<li><strong>Tracked Services:</strong> Only services configured in <em>Online-Service</em> tab are tracked</li>
+					<li><strong>Update Frequency:</strong> Service usage updates every <?=PC_CRON_INTERVAL_SECONDS / 60?> minutes</li>
+					<li><strong>Accuracy:</strong> Based on actual TCP connections to service IP ranges</li>
+					<li><strong>Active Connections:</strong> Number of current connections to this service</li>
+					<li><strong>Reset:</strong> Daily usage resets at midnight (weekly usage preserved)</li>
 				</ul>
 			</div>
 		<?php endif; ?>
@@ -946,14 +1005,14 @@ if (is_array($profiles)) {
 				</table>
 			</div>
 			
-			<div class="alert alert-info" style="margin: 5px 0; padding: 5px 10px; font-size: 7px; line-height: 1.3;">
-				<h4 style="font-size: 8px; margin: 2px 0 4px 0;"><i class="fa-solid fa-question-circle" style="font-size: 7px;"></i> <?=gettext("How Device Monitoring Works:")?></h4>
-				<ul style="margin: 0; padding-left: 15px; column-count: 2; column-gap: 10px;">
-					<li style="margin-bottom: 2px;"><strong>Alias/Table:</strong> <code>parental_control_monitor</code> contains list of monitored device IPs</li>
-					<li style="margin-bottom: 2px;"><strong>Floating Rules:</strong> Log and track traffic from monitored devices (visible in GUI)</li>
-					<li style="margin-bottom: 2px;"><strong>Dynamic Updates:</strong> IPs added/removed instantly without filter reload</li>
-					<li style="margin-bottom: 2px;"><strong>Purpose:</strong> Track usage time and enforce daily limits for profiles</li>
-					<li style="margin-bottom: 2px;"><strong>Access:</strong> Monitored devices have internet access (unless blocked by time limit)</li>
+			<div class="alert alert-info" style="margin: 10px 0; padding: 8px 12px;">
+				<h5 style="font-size: 13px; margin: 0 0 6px 0; font-weight: bold;"><i class="fa-solid fa-question-circle"></i> <?=gettext("How Device Monitoring Works")?></h5>
+				<ul style="margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.6;">
+					<li><strong>Alias/Table:</strong> <code>parental_control_monitor</code> contains list of monitored device IPs</li>
+					<li><strong>Floating Rules:</strong> Log and track traffic from monitored devices (visible in GUI)</li>
+					<li><strong>Dynamic Updates:</strong> IPs added/removed instantly without filter reload</li>
+					<li><strong>Purpose:</strong> Track usage time and enforce daily limits for profiles</li>
+					<li><strong>Access:</strong> Monitored devices have internet access (unless blocked by time limit)</li>
 				</ul>
 			</div>
 			
@@ -968,18 +1027,20 @@ if (is_array($profiles)) {
 				<i class="fa-solid fa-exclamation-circle"></i>
 				<strong><?=gettext("No Monitoring Active")?></strong> - No devices currently being monitored.
 			</div>
-			<p class="text-muted">
-				<i class="fa-solid fa-info-circle"></i>
-				Devices are added to monitoring when:
-			</p>
-			<ul class="text-muted">
-				<li>They are part of an enabled profile</li>
-				<li>They have internet access (not blocked)</li>
-				<li>Their usage time is being tracked</li>
-			</ul>
-			<p class="text-muted">
-				<strong>Note:</strong> IPs are added to the <code>parental_control_monitor</code> table dynamically by the cron job.
-			</p>
+			<div style="font-size: 12px; margin: 8px 0; padding: 0;">
+				<p style="margin: 4px 0;">
+					<i class="fa-solid fa-info-circle"></i>
+					<strong>Devices are added to monitoring when:</strong>
+				</p>
+				<ul style="margin: 4px 0; padding-left: 25px;">
+					<li>They are part of an enabled profile</li>
+					<li>They have internet access (not blocked)</li>
+					<li>Their usage time is being tracked</li>
+				</ul>
+				<p style="margin: 4px 0; font-size: 11px; color: #666;">
+					<strong>Note:</strong> IPs are added to the <code>parental_control_monitor</code> table dynamically by the cron job.
+				</p>
+			</div>
 			
 			<script>
 				// Update badge
@@ -988,12 +1049,20 @@ if (is_array($profiles)) {
 			</script>
 		<?php } ?>
 		
-		<hr>
-		<p class="text-muted" style="font-size: 5.5px; margin-bottom: 0;">
-			<strong>Alias/Table:</strong> <code>parental_control_monitor</code> (Firewall → Firewall → Aliases) | 
-			<strong>Floating Rules:</strong> Service-specific monitoring rules (Firewall → Rules → Floating) | 
-			<strong>CLI Command:</strong> <code>pfctl -t parental_control_monitor -T show</code>
-		</p>
+		<hr style="margin: 12px 0;">
+		<div style="font-size: 12px; color: #777; margin: 8px 0; padding: 8px; background: #f9f9f9; border-left: 3px solid #5bc0de; border-radius: 3px;">
+			<p style="margin: 0; line-height: 1.4;">
+				<strong>Alias/Table:</strong> <code style="font-size: 11px;">parental_control_monitor</code> 
+				<span style="color: #999;">(Firewall → Firewall → Aliases)</span>
+			</p>
+			<p style="margin: 2px 0 0 0; line-height: 1.4;">
+				<strong>Floating Rules:</strong> Service-specific monitoring rules 
+				<span style="color: #999;">(Firewall → Rules → Floating)</span>
+			</p>
+			<p style="margin: 2px 0 0 0; line-height: 1.4;">
+				<strong>CLI Command:</strong> <code style="font-size: 11px; background: #fff; padding: 2px 6px; border: 1px solid #ddd; border-radius: 3px;">pfctl -t parental_control_monitor -T show</code>
+			</p>
+		</div>
 	</div>
 </div>
 
