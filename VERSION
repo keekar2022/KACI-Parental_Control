@@ -1,4 +1,4 @@
-VERSION=1.4.47
+VERSION=1.4.48
 BUILD_DATE=2026-01-20
-RELEASE_TYPE=critical_bugfix
+RELEASE_TYPE=bugfix
 STATUS=production-ready

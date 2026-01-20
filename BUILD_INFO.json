@@ -89,6 +89,33 @@
   },
   "changelog": [
     {
+      "version": "1.4.48",
+      "date": "2026-01-20",
+      "type": "bugfix",
+      "changes": [
+        "BUGFIX: WhatsApp service not showing in Services UI despite active alias and rules",
+        "PROBLEM: parentalcontrolservices config section was empty",
+        "PROBLEM: UI fell back to default services list which didn't include WhatsApp",
+        "ROOT CAUSE: WhatsApp was created as alias manually but never added to services config",
+        "FIX: Added WhatsApp to default services list with official IP CIDR URL",
+        "FIX: Also added Instagram as separate service (previously bundled with Facebook)",
+        "ENHANCEMENT: Services now include: YouTube, Facebook, WhatsApp, Instagram, Discord, TikTok, Netflix, Twitch",
+        "WhatsApp URL: https://raw.githubusercontent.com/HybridNetworks/whatsapp-cidr/main/WhatsApp/whatsapp_cidr_ipv4.txt",
+        "Instagram URL: Uses SecOps-Institute Facebook IPs (Instagram shares Meta infrastructure)",
+        "FILES MODIFIED:",
+        "  - parental_control_services.php: Added WhatsApp and Instagram to default_services array",
+        "  - VERSION: Bumped to 1.4.48"
+      ],
+      "impact": "low",
+      "breaking_changes": false,
+      "requires_reboot": false,
+      "deployment_notes": [
+        "WhatsApp and Instagram now visible in Services UI",
+        "Existing WhatsApp alias will be recognized and displayed",
+        "No config migration needed"
+      ]
+    },
+    {
       "version": "1.4.47",
       "date": "2026-01-20",
       "type": "critical_bugfix",
