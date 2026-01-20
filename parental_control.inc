@@ -6064,6 +6064,39 @@ function pc_detect_bot_behavior(&$state) {
 		}
 		
 		foreach ($device_state['service_usage'] as $service_name => &$service_state) {
+			// CRITICAL SAFETY CHECK v1.4.55: Prevent stale/corrupted bot flags
+			// PROBLEM: Found bot_score=15 with only 1 sample in connection_history
+			// CAUSE: State corruption or connection_history cleared without resetting bot flags
+			// IMPACT: Legitimate usage blocked indefinitely (user can't track usage)
+			// FIX: If bot is flagged but history too short, reset the flag
+			$history_count = isset($service_state['connection_history']) ? count($service_state['connection_history']) : 0;
+			$bot_score = isset($service_state['bot_score']) ? $service_state['bot_score'] : 0;
+			$is_bot = isset($service_state['is_bot']) ? $service_state['is_bot'] : false;
+			
+			if ($is_bot && $history_count < $BOT_MIN_SAMPLES) {
+				// Bot flag is set but not enough history to justify it - RESET
+				$device_name = isset($device_state['name']) ? $device_state['name'] : $ip;
+				
+				pc_log("SAFETY: Resetting stale bot flag for {$device_name} @ {$ip} - {$service_name}", 'warning', array(
+					'event.action' => 'bot_flag_safety_reset',
+					'device.name' => $device_name,
+					'client.address' => $ip,
+					'service.name' => $service_name,
+					'is_bot' => $is_bot,
+					'bot_score' => $bot_score,
+					'history_samples' => $history_count,
+					'min_required' => $BOT_MIN_SAMPLES,
+					'reason' => 'Bot flagged but insufficient history - possible state corruption',
+					'action' => 'Resetting bot flag to allow usage tracking'
+				));
+				
+				// Clear bot flag and allow tracking to resume
+				$service_state['is_bot'] = false;
+				$service_state['bot_score'] = 0;
+				$service_state['bot_detected_at'] = 0;
+				$service_state['connection_history'] = array();
+			}
+			
 			// Need enough samples to make a determination
 			if (!isset($service_state['connection_history']) || 
 			    count($service_state['connection_history']) < $BOT_MIN_SAMPLES) {
