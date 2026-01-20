@@ -3912,12 +3912,26 @@ function pc_add_ip_to_service_table($ip, $service_name) {
 	exec("/sbin/pfctl -t {$table_name} -T add {$ip} 2>&1", $output, $return_code);
 	
 	if ($return_code === 0) {
+		// CRITICAL FIX v1.4.50: Kill existing connections to enforce block immediately
+		// WHY: Established connections bypass block rules (stateful firewall)
+		// Without this, already-playing videos continue until connection naturally closes
+		exec("/sbin/pfctl -k {$ip} 2>&1", $kill_output, $kill_return);
+		$states_killed = 0;
+		if ($kill_return === 0 && !empty($kill_output[0])) {
+			// Parse output: "killed 4 states from 1 sources and 0 destinations"
+			if (preg_match('/killed (\d+) states/', $kill_output[0], $matches)) {
+				$states_killed = intval($matches[1]);
+			}
+		}
+		
 		pc_log("Blocked {$ip} from {$service_name} service", 'info', array(
 			'event.action' => 'service_blocked',
 			'device.ip' => $ip,
 			'service.name' => $service_name,
 			'method' => 'pf_table',
-			'table.name' => $table_name
+			'table.name' => $table_name,
+			'states.killed' => $states_killed,
+			'immediate.enforcement' => true
 		));
 		return true;
 	} else {

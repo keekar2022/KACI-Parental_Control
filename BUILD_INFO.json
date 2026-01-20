@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "1.4.49",
-    "build_date": "2026-01-20T19:00:00Z",
+    "version": "1.4.50",
+    "build_date": "2026-01-20T19:15:00Z",
     "git_commit": "pending",
     "git_branch": "develop",
     "built_by": "development",
@@ -88,6 +88,35 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.4.50",
+      "date": "2026-01-20",
+      "type": "enhancement",
+      "changes": [
+        "ENHANCEMENT: Kill established connections when adding IP to service block table",
+        "PROBLEM: Videos continued playing after blocking due to established connections",
+        "PROBLEM: pfSense stateful firewall allows existing connections to continue",
+        "ROOT CAUSE: Block rules only apply to NEW connections (SYN packets)",
+        "ROOT CAUSE: Already-established connections bypass the block table",
+        "FIX: Added 'pfctl -k <ip>' after adding IP to block table",
+        "FIX: Automatically kills all existing state entries for blocked IP",
+        "IMPACT: Blocking now takes effect IMMEDIATELY (videos stop within seconds)",
+        "DISCOVERED BY: User reported YouTube still playing despite block logs",
+        "EVIDENCE: 'pfctl -ss' showed ESTABLISHED connections to YouTube IPs",
+        "FILES MODIFIED:",
+        "  - parental_control.inc: Added state killing to pc_add_ip_to_service_table()",
+        "  - VERSION: Bumped to 1.4.50",
+        "  - BUILD_INFO.json: Added v1.4.50 changelog"
+      ],
+      "impact": "medium",
+      "breaking_changes": false,
+      "requires_reboot": false,
+      "deployment_notes": [
+        "Service blocking now enforces immediately (no delay)",
+        "Videos will stop playing within seconds of limit being exceeded",
+        "No configuration changes needed"
+      ]
+    },
     {
       "version": "1.4.49",
       "date": "2026-01-20",
