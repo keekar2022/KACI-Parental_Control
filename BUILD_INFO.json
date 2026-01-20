@@ -1,6 +1,6 @@
 {
   "build_info": {
-    "version": "1.4.52",
+    "version": "1.4.53",
     "build_date": "2026-01-20T19:30:00Z",
     "git_commit": "pending",
     "git_branch": "develop",
@@ -88,6 +88,61 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.4.53",
+      "date": "2026-01-20",
+      "type": "critical_architecture",
+      "changes": [
+        "🏗️ CRITICAL ARCHITECTURE FIX: Reordered firewall rules with proper priorities",
+        "PROBLEM: General profile time limits could be bypassed via monitor table",
+        "PROBLEM: Monitor pass rules evaluated BEFORE general block rules",
+        "ROOT CAUSE: Rules inserted before general block instead of after",
+        "ROOT CAUSE: No priority system - relied only on insertion order",
+        "SCENARIO: User exceeds 4hr limit → in parental_control_blocked table",
+        "SCENARIO: User also in parental_control_monitor table (for tracking)",
+        "SCENARIO: Monitor pass rule matched FIRST → bypassed general block!",
+        "FIX: Reorganized rule insertion to create proper priority order",
+        "FIX: General block now comes FIRST (after DNS/pfSense access)",
+        "FIX: Service blocks come SECOND (after general block)",
+        "FIX: Service monitors come LAST (only match if not blocked above)",
+        "PRIORITY SYSTEM IMPLEMENTED:",
+        "  - PRIORITY 0: DNS + pfSense access (always allowed for blocked devices)",
+        "  - PRIORITY 1: General profile blocking (blocks ALL when time limit hit)",
+        "  - PRIORITY 2: Service-specific blocking (blocks ONE service when service limit hit)",
+        "  - PRIORITY 3: Service monitoring (tracks usage for non-blocked devices)",
+        "PFCTL RULES: Updated userrules anchor with same priority order",
+        "PFCTL RULES: Added comments explaining each priority level",
+        "PFSENSE CONFIG: Changed array_splice to insert AFTER general block (+1 offset)",
+        "PFSENSE CONFIG: Split rules into separate arrays then merged in correct order",
+        "FILES MODIFIED:",
+        "  - parental_control.inc: Lines 3077-3147 (pfSense config rules)",
+        "  - parental_control.inc: Lines 3173-3242 (pfctl backup rules)",
+        "  - VERSION: Bumped to 1.4.53",
+        "  - BUILD_INFO.json: Added v1.4.53 changelog"
+      ],
+      "impact": "critical",
+      "breaking_changes": false,
+      "requires_reboot": false,
+      "deployment_notes": [
+        "Deploy IMMEDIATELY - profile time limits can be bypassed",
+        "After deployment, filter_configure() will reorder all rules",
+        "Verify rule order: pfctl -sr | grep -E 'parental|USER_RULE'",
+        "Correct order: General block → Service blocks → Service monitors",
+        "Test both profile limits AND service limits to verify"
+      ],
+      "verification": {
+        "commands": [
+          "pfctl -sr | grep -n 'parental_control_blocked.*any' # Should be BEFORE monitor rules",
+          "pfctl -sr | grep -n 'parental_control_monitor' # Should be AFTER general block",
+          "pfctl -sr | grep -n 'pc_blocked_youtube' # Should be AFTER general, BEFORE monitor"
+        ],
+        "expected_order": [
+          "1. block from <parental_control_blocked> to any (GENERAL)",
+          "2. block from <pc_blocked_youtube> to <PC_Service_YouTube> (SERVICE)",
+          "3. pass from <parental_control_monitor> to <PC_Service_YouTube> (MONITOR)"
+        ]
+      }
+    },
     {
       "version": "1.4.52",
       "date": "2026-01-20",

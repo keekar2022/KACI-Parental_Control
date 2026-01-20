@@ -3074,32 +3074,37 @@ function pc_create_service_monitoring_rules() {
 		}
 	}
 	
-	// Create new service monitoring AND blocking rules
+	// CRITICAL FIX v1.4.53: Reorganize rules with proper priority order
 	// For each service, we create TWO rules:
-	// 1. BLOCK rule: blocks devices in parental_control_blocked from accessing service
-	// 2. MONITOR rule: allows/tracks devices in parental_control_monitor accessing service
+	// 1. BLOCK rule: blocks devices that exceeded service-specific limits
+	// 2. MONITOR rule: allows/tracks devices in parental_control_monitor
 	// 
-	// Rule sequence (evaluated top to bottom):
+	// CORRECT Rule sequence (evaluated top to bottom - PRIORITY ORDER):
 	// - DNS/pfSense access (allow blocked devices to see captive portal)
-	// - Service BLOCK rules (block violators from specific services)  ← These rules
-	// - Service MONITOR rules (allow/track everyone else)             ← These rules
-	// - General BLOCK rule (catch-all for blocked devices)
+	// - **General BLOCK rule** (PRIORITY 1: blocks ALL when time limit exceeded) ← Existing rule
+	// - Service BLOCK rules (PRIORITY 2: blocks specific services)              ← These rules (first)
+	// - Service MONITOR rules (PRIORITY 3: tracks usage)                        ← These rules (last)
+	//
+	// WHY THIS ORDER:
+	// - General block must come FIRST to catch profile time limit violations
+	// - Service blocks come SECOND to catch service-specific limit violations
+	// - Monitors come LAST (only match if not blocked by above rules)
 	
-	$new_rules = array();
+	$service_block_rules = array();
+	$service_monitor_rules = array();
+	
 	foreach ($service_aliases as $alias_name) {
 		$service_name = str_replace('PC_Service_', '', $alias_name);
 		$service_name_lower = strtolower($service_name);
 		// CRITICAL: Use shortened prefix to stay within 31 char limit
 		$service_block_alias = 'pc_blocked_' . $service_name_lower;
 		
-		// RULE 1: BLOCK rule for devices that exceeded service-specific limits
-		// v1.4.31: Now uses per-service block tables instead of general block table
-		// This allows blocking specific services while allowing others
+		// PRIORITY 2: Service-specific BLOCK rule
 		$block_rule = array(
 			'type' => 'block',
 			'interface' => 'lan',
-			'ipprotocol' => 'inet',  // IPv4 + IPv6
-			'direction' => 'any',  // Both directions - simpler and more reliable
+			'ipprotocol' => 'inet',
+			'direction' => 'any',
 			'floating' => 'yes',
 			'quick' => 'yes',
 			'source' => array(
@@ -3113,15 +3118,15 @@ function pc_create_service_monitoring_rules() {
 				'time' => time(),
 				'username' => 'system@parentalcontrol'
 			),
-			'log' => 'yes'  // Enable logging for enforcement tracking
+			'log' => 'yes'
 		);
 		
-		// RULE 2: MONITOR rule for all profile devices (usage tracking)
+		// PRIORITY 3: Service MONITOR rule (tracks usage for non-blocked devices)
 		$monitor_rule = array(
 			'type' => 'pass',
 			'interface' => 'lan',
-			'ipprotocol' => 'inet',  // IPv4 + IPv6
-			'direction' => 'any',  // Both directions - simpler and more reliable
+			'ipprotocol' => 'inet',
+			'direction' => 'any',
 			'floating' => 'yes',
 			'quick' => 'yes',
 			'source' => array(
@@ -3135,16 +3140,18 @@ function pc_create_service_monitoring_rules() {
 				'time' => time(),
 				'username' => 'system@parentalcontrol'
 			),
-			'log' => 'yes'  // Enable logging for usage tracking
+			'log' => 'yes'
 		);
 		
-		// Add block rule first, then monitor rule (order matters!)
-		$new_rules[] = $block_rule;
-		$new_rules[] = $monitor_rule;
+		$service_block_rules[] = $block_rule;
+		$service_monitor_rules[] = $monitor_rule;
 	}
 	
-	// Insert new rules just before the blocking rule
-	array_splice($rules, $blocking_rule_index, 0, $new_rules);
+	// CRITICAL: Insert rules AFTER general block rule in correct priority order
+	// Position: After "Parental Control - Dynamic Blocking" rule
+	// Order: Service blocks first, then service monitors
+	$all_service_rules = array_merge($service_block_rules, $service_monitor_rules);
+	array_splice($rules, $blocking_rule_index + 1, 0, $all_service_rules);
 	
 	config_set_path('filter/rule', $rules);
 	
@@ -3153,9 +3160,9 @@ function pc_create_service_monitoring_rules() {
 	// SOLUTION: Caller writes config after all changes prepared
 	// write_config('Parental Control: Updated service monitoring rules');
 	
-	pc_log("Prepared " . count($new_rules) . " service monitoring rules (config not written yet)", 'info', array(
+	pc_log("Prepared " . count($all_service_rules) . " service monitoring rules (config not written yet)", 'info', array(
 		'event.action' => 'service_rules_prepared',
-		'rule.count' => count($new_rules),
+		'rule.count' => count($all_service_rules),
 		'services' => implode(', ', array_map(function($a) { return str_replace('PC_Service_', '', $a); }, $service_aliases))
 	));
 	
@@ -3170,9 +3177,31 @@ function pc_create_service_monitoring_rules() {
 		$lan_if = 'lan';  // Fallback
 	}
 	
+	// CRITICAL FIX v1.4.53: Reorder rules with proper priorities
+	// WHY: Rule order matters in pfSense - first match wins
+	// PROBLEM: Monitor pass rules were evaluated before general block rules
+	// RESULT: Devices in monitor table bypassed general time limit blocks
+	// 
+	// CORRECT ORDER (by priority):
+	// 1. GENERAL PROFILE BLOCKING (highest priority) - blocks ALL traffic when time limit exceeded
+	// 2. SERVICE-SPECIFIC BLOCKING (medium priority) - blocks only specific services
+	// 3. SERVICE MONITORING (lowest priority) - tracks usage for non-blocked devices
+	
 	$pf_rules = array();
+	
+	// PRIORITY 1: General profile blocking (MUST come FIRST)
+	// Blocks ALL internet access when profile exceeds overall daily time limit
+	// Example: 4-hour daily limit exceeded → block everything
+	$pf_rules[] = "# PRIORITY 1: General Profile Time Limit Blocking";
+	$pf_rules[] = "block drop log quick on {$lan_if} inet from <parental_control_blocked> to any label \"USER_RULE: Parental Control - Dynamic Blocking\"";
+	$pf_rules[] = "";
+	
+	// PRIORITY 2 & 3: Service-specific rules (block then monitor)
+	$pf_rules[] = "# PRIORITY 2: Service-Specific Blocking (checked after general block)";
 	foreach ($service_aliases as $alias_name) {
 		$service_name = str_replace('PC_Service_', '', $alias_name);
+		$service_name_lower = strtolower($service_name);
+		$block_table = "pc_blocked_{$service_name_lower}";
 		$table_file = "/var/db/aliastables/{$alias_name}.txt";
 		
 		// Load table into pf if file exists
@@ -3189,13 +3218,20 @@ function pc_create_service_monitoring_rules() {
 				pc_log("Failed to load pf table: {$alias_name} - " . implode(' ', $output), 'warning');
 			}
 			
-			// Add TWO rules to userrules anchor as backup
-			// RULE 1: Block rule for devices that exceeded limits (evaluated first)
-			// RULE 2: Monitor rule for all profile devices (evaluated second, tracks usage)
-			// This ensures the rules work even if filter_configure() doesn't generate them
-			// NOTE: Using dynamically detected LAN interface ({$lan_if})
-			$pf_rules[] = "block in log quick on {$lan_if} inet from <parental_control_blocked> to <{$alias_name}> label \"USER_RULE: PC - {$service_name} Service Block\"";
-			$pf_rules[] = "pass in log quick on {$lan_if} inet from <parental_control_monitor> to <{$alias_name}> keep state label \"USER_RULE: PC - {$service_name} Service Monitor\"";
+			// Service-specific block rule (from pc_blocked_youtube, not general parental_control_blocked)
+			$pf_rules[] = "block drop log quick on {$lan_if} inet from <{$block_table}> to <{$alias_name}> label \"USER_RULE: Parental Control - {$service_name} Service Block\"";
+		}
+	}
+	
+	$pf_rules[] = "";
+	$pf_rules[] = "# PRIORITY 3: Service Monitoring (LAST - only if not blocked above)";
+	foreach ($service_aliases as $alias_name) {
+		$service_name = str_replace('PC_Service_', '', $alias_name);
+		$table_file = "/var/db/aliastables/{$alias_name}.txt";
+		
+		if (file_exists($table_file) && filesize($table_file) > 0) {
+			// Monitor rule (tracks usage for devices that passed block checks)
+			$pf_rules[] = "pass log quick on {$lan_if} inet from <parental_control_monitor> to <{$alias_name}> flags S/SA keep state label \"USER_RULE: Parental Control - {$service_name} Service Monitor\"";
 		}
 	}
 	
