@@ -6048,6 +6048,9 @@ function pc_detect_bot_behavior(&$state) {
 	$BOT_CONSECUTIVE_THRESHOLD = 15;  // Consecutive bot-like samples before action
 	$BOT_MAX_VARIANCE = 2.0;          // Max variance in connection count (very consistent = bot)
 	
+	// NEW v1.4.54: Ultra-stable connection detection for smart TVs/devices
+	$BOT_ULTRA_STABLE_VARIANCE = 1.5; // Very low variance = persistent background connections
+	
 	$bot_detected_count = 0;
 	$bot_reset_count = 0;
 	
@@ -6079,12 +6082,35 @@ function pc_detect_bot_behavior(&$state) {
 			$variance = $variance / $sample_count;
 			$std_dev = sqrt($variance);
 			
-			// Determine if pattern is bot-like
+			// ENHANCED v1.4.54: Smarter bot detection using variance analysis
+			// WHY: Smart TVs (Google TV, etc.) maintain 6-10 idle connections
+			// PROBLEM: Old logic only caught ≤5 connections, missing smart TV idle traffic
+			// SOLUTION: Detect ultra-stable patterns at ANY connection level
+			//
+			// Detection Criteria (TWO METHODS):
+			// METHOD 1: Low activity (≤5 connections) + consistent (variance ≤2.0) - ORIGINAL
+			//           Example: iPhone background refresh with 2-3 stable connections
+			// METHOD 2: Ultra-stable (variance ≤1.5) for 15+ minutes - NEW v1.4.54
+			//           Example: Google TV with 8 connections that never vary (idle telemetry)
+			//
+			// Real Usage Patterns (NOT bot):
+			// - Active iPhone: 18 connections, variance ~5.2 (constantly changing)
+			// - Active MacBook: 18 connections, variance ~4.8 (loading pages, videos)
+			// - YouTube playing: 27 connections, variance ~6.3 (streaming, buffering)
+			//
+			// Bot Traffic Patterns (DETECTED):
+			// - Google TV idle: 8 connections, variance ~1.5 (telemetry, no variation)
+			// - iPhone idle: 3 connections, variance ~0.8 (background refresh)
 			$is_low_activity = ($avg <= $BOT_MAX_CONNECTIONS);
 			$is_consistent = ($variance <= $BOT_MAX_VARIANCE);
+			$is_ultra_stable = ($variance <= $BOT_ULTRA_STABLE_VARIANCE);
 			$is_sustained = ($sample_count >= $BOT_MIN_SAMPLES);
 			
-			$is_bot_pattern = ($is_low_activity && $is_consistent && $is_sustained);
+			// Bot pattern if EITHER condition is true:
+			$is_bot_pattern = (
+				($is_low_activity && $is_consistent && $is_sustained) ||  // Original: Low + stable
+				($is_ultra_stable && $is_sustained)                       // NEW: Ultra-stable at any level
+			);
 			
 			// Update bot score (consecutive count of bot-like behavior)
 			if ($is_bot_pattern) {
@@ -6105,6 +6131,12 @@ function pc_detect_bot_behavior(&$state) {
 						// CRITICAL v1.4.44: Usage accumulated BEFORE bot detection is preserved!
 						$device_name = isset($device_state['name']) ? $device_state['name'] : $ip;
 						
+						// Determine which detection method triggered
+						$detection_method = ($is_low_activity && $is_consistent) ? 'low_activity' : 'ultra_stable';
+						$detection_reason = ($detection_method === 'low_activity') 
+							? "Low activity (avg={$avg}) + consistent (var={$variance})"
+							: "Ultra-stable pattern (var={$variance}) at any connection level";
+						
 						pc_log("Bot behavior detected for {$device_name} @ {$ip} - {$service_name}", 'notice', array(
 							'event.action' => 'bot_detected',
 							'device.name' => $device_name,
@@ -6112,8 +6144,11 @@ function pc_detect_bot_behavior(&$state) {
 							'service.name' => $service_name,
 							'avg_connections' => round($avg, 2),
 							'variance' => round($variance, 2),
+							'std_dev' => round($std_dev, 2),
 							'samples' => $sample_count,
 							'duration_minutes' => $service_state['bot_score'],
+							'detection_method' => $detection_method,
+							'detection_reason' => $detection_reason,
 							'note' => 'Tracking paused, existing usage preserved'
 						));
 						
