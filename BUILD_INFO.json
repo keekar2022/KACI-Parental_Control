@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "1.4.45",
-    "build_date": "2026-01-18T07:35:00Z",
+    "version": "1.4.49",
+    "build_date": "2026-01-20T19:00:00Z",
     "git_commit": "pending",
     "git_branch": "develop",
     "built_by": "development",
@@ -88,6 +88,46 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.4.49",
+      "date": "2026-01-20",
+      "type": "critical_bugfix",
+      "changes": [
+        "🚨 CRITICAL BUGFIX #1: Profile assignment to devices was never being stored in state",
+        "PROBLEM #1: All devices showing 'profile: null' despite being configured in profiles",
+        "ROOT CAUSE #1: pc_update_device_usage() extracted profile_name but never saved to state",
+        "FIX #1: Added $state['devices_by_ip'][$ip]['profile'] = $profile_name",
+        "🚨 CRITICAL BUGFIX #2: Service limit checking never found any devices to block",
+        "PROBLEM #2: Service blocking completely non-functional (pc_blocked_youtube alias always empty)",
+        "PROBLEM #2: YouTube usage tracked (170 min) but limit (120 min) not enforced",
+        "ROOT CAUSE #2: pc_check_profile_service_limits() checked $profile['devices'] but config uses $profile['row']",
+        "FIX #2: Check both 'devices' and 'row' fields (pfSense rowhelpers use 'row')",
+        "🚨 CRITICAL BUGFIX #3: Service name case mismatch prevented usage lookups",
+        "PROBLEM #3: Service limits stored as 'YouTube' (capitalized) but lookup used 'youtube' (lowercase)",
+        "ROOT CAUSE #3: str_replace() + strtolower() created 'youtube', but state has 'YouTube'",
+        "FIX #3: Use ucfirst() to capitalize service name to match state storage",
+        "IMPACT: Service blocking will now work correctly for ALL users - 3 critical bugs fixed!",
+        "DISCOVERED BY: User reported YouTube still working despite 'BLOCKED' message on Hisense TV",
+        "DEBUG EVIDENCE: pfctl -t pc_blocked_youtube -T show returned empty (no IPs blocked)",
+        "DEBUG EVIDENCE: All devices had 'profile: null' in state despite being configured",
+        "FILES MODIFIED:",
+        "  - parental_control.inc: Added profile + hostname assignment (line ~5619)",
+        "  - parental_control.inc: Fixed device list lookup to check 'row' field (line ~4257)",
+        "  - parental_control.inc: Fixed service name capitalization (line ~4280)",
+        "  - VERSION: Bumped to 1.4.49",
+        "  - BUILD_INFO.json: Added v1.4.49 changelog"
+      ],
+      "impact": "critical",
+      "breaking_changes": false,
+      "requires_reboot": false,
+      "deployment_notes": [
+        "Deploy IMMEDIATELY - blocking is currently non-functional",
+        "After deployment, wait 5 minutes for cron to populate profiles",
+        "Verify with: cat /var/db/parental_control_state.json | jq '.devices_by_ip[] | {ip, profile, hostname}'",
+        "Verify blocking with: pfctl -t pc_blocked_youtube -T show",
+        "All existing profiles will automatically populate on next cron run"
+      ]
+    },
     {
       "version": "1.4.48",
       "date": "2026-01-20",

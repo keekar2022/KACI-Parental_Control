@@ -4251,11 +4251,21 @@ function pc_check_profile_service_limits(&$state) {
 		}
 		
 		// Get all devices in this profile
+		// CRITICAL FIX v1.4.49: Check both 'devices' and 'row' (pfSense rowhelpers use 'row')
+		// WHY: Config stores devices in 'row' field, not 'devices' field
+		// BUG: Service blocking never worked because $profile_device_ips was always empty
 		$profile_devices = array();
 		$profile_device_ips = array();
 		
+		$devices_list = array();
 		if (isset($profile['devices']) && is_array($profile['devices'])) {
-			foreach ($profile['devices'] as $device) {
+			$devices_list = $profile['devices'];
+		} elseif (isset($profile['row']) && is_array($profile['row'])) {
+			$devices_list = $profile['row'];
+		}
+		
+		if (!empty($devices_list)) {
+			foreach ($devices_list as $device) {
 				$mac = pc_normalize_mac($device['mac_address']);
 				$profile_devices[] = $mac;
 				
@@ -4276,8 +4286,27 @@ function pc_check_profile_service_limits(&$state) {
 		
 		// Check each service limit
 		foreach ($profile['service_limits'] as $service_alias => $limit_config) {
-			// Extract service name from alias (e.g., 'pc_service_youtube' -> 'youtube')
-			$service_name = str_replace('pc_service_', '', strtolower($service_alias));
+			// Extract service name from alias (e.g., 'pc_service_youtube' -> 'YouTube')
+			// CRITICAL FIX v1.4.49: Use proper service name mapping
+			// WHY: State stores services with specific capitalization (YouTube, TikTok, WhatsApp)
+			// BUG: ucfirst() created 'Youtube' but state has 'YouTube', so usage lookup failed
+			$service_name_lower = str_replace('pc_service_', '', strtolower($service_alias));
+			
+			// Map service aliases to proper service names (match parental_control_services.php)
+			$service_name_map = array(
+				'youtube' => 'YouTube',
+				'facebook' => 'Facebook',
+				'whatsapp' => 'WhatsApp',
+				'instagram' => 'Instagram',
+				'discord' => 'Discord',
+				'tiktok' => 'TikTok',
+				'netflix' => 'Netflix',
+				'twitch' => 'Twitch'
+			);
+			
+			$service_name = isset($service_name_map[$service_name_lower]) ? 
+			                $service_name_map[$service_name_lower] : 
+			                ucfirst($service_name_lower);
 			
 			// Get the daily limit
 			$daily_limit = isset($limit_config['daily_limit']) ? intval($limit_config['daily_limit']) : 0;
@@ -5597,25 +5626,33 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 		// Update MAC → IP cache
 		$state['mac_to_ip_cache'][$mac] = $ip;
 		
-		// CRITICAL: Initialize device state BY IP (Layer 3)
-		if (!isset($state['devices_by_ip'][$ip])) {
-			$state['devices_by_ip'][$ip] = array(
-				'mac' => $mac,
-				'name' => $device_name,
-				'ip' => $ip,
-				'usage_today' => 0,
-				'usage_week' => 0,
-				'last_seen' => 0,
-				'connections_last_check' => 0,
-				'first_seen' => time()
-			);
-		}
-		
-		// Update device info (may have changed in config)
-		$state['devices_by_ip'][$ip]['mac'] = $mac;
-		$state['devices_by_ip'][$ip]['name'] = $device_name;
-		$state['devices_by_ip'][$ip]['ip'] = $ip;
-		unset($state['devices_by_ip'][$ip]['offline_since']); // Clear offline flag
+	// CRITICAL: Initialize device state BY IP (Layer 3)
+	if (!isset($state['devices_by_ip'][$ip])) {
+		$state['devices_by_ip'][$ip] = array(
+			'mac' => $mac,
+			'name' => $device_name,
+			'ip' => $ip,
+			'usage_today' => 0,
+			'usage_week' => 0,
+			'last_seen' => 0,
+			'connections_last_check' => 0,
+			'first_seen' => time()
+		);
+	}
+	
+	// CRITICAL v1.4.49: Store profile name in device state
+	// WHY: Blocking requires profile to be stored so pc_check_profile_service_limits()
+	// can identify which devices belong to which profile. Without this, blocking fails.
+	// BUG: Profile was used but never stored, causing all devices to show "profile": null
+	$profile_name = isset($device['profile_name']) ? $device['profile_name'] : null;
+	
+	// Update device info (may have changed in config)
+	$state['devices_by_ip'][$ip]['mac'] = $mac;
+	$state['devices_by_ip'][$ip]['name'] = $device_name;
+	$state['devices_by_ip'][$ip]['ip'] = $ip;
+	$state['devices_by_ip'][$ip]['profile'] = $profile_name; // BUGFIX v1.4.49
+	$state['devices_by_ip'][$ip]['hostname'] = isset($device['hostname']) ? $device['hostname'] : $device_name;
+	unset($state['devices_by_ip'][$ip]['offline_since']); // Clear offline flag
 		
 		// CRITICAL: Check if device should be blocked (for devices coming online)
 		// WHY: When offline devices come back online, they need to be blocked immediately
@@ -5776,7 +5813,7 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 		// WHY: Time limits are per PROFILE, not per device
 		// All devices in a profile share the same time budget
 		// Example: 4 hour limit = 4 hours TOTAL across ALL devices
-		$profile_name = isset($device['profile_name']) ? $device['profile_name'] : null;
+		// NOTE: $profile_name already extracted earlier (line ~5618)
 		if ($profile_name) {
 		// Initialize profile tracking if needed
 		// CRITICAL FIX v1.4.17: Set last_reset to today's midnight for proper alignment
