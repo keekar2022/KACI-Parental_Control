@@ -6307,53 +6307,6 @@ function pc_get_current_log_file() {
  * 
  * Removes old log files keeping only the most recent PC_MAX_LOG_FILES.
  * Called periodically (1% chance on each log write) to avoid overhead.
- * 
- * This function sorts log files by modification time and deletes the oldest
- * ones, ensuring we don't accumulate too many log files over time.
- * 
- * @return int Number of files deleted
- * @since 0.1.3
- */
-function pc_cleanup_old_logs() {
-	$log_dir = dirname(PC_LOG_FILE);
-	$log_pattern = $log_dir . '/' . PC_LOG_PREFIX . '-*.jsonl';
-	$log_files = glob($log_pattern);
-	
-	if (!is_array($log_files) || count($log_files) <= PC_MAX_LOG_FILES) {
-		return 0; // Nothing to clean up
-	}
-	
-	// Sort by modification time (oldest first)
-	// We use a custom sort to handle the case where filemtime might fail
-	usort($log_files, function($a, $b) {
-		$time_a = @filemtime($a);
-		$time_b = @filemtime($b);
-		if ($time_a === false) return 1;  // Move failed files to end
-		if ($time_b === false) return -1;
-		return $time_a - $time_b;
-	});
-	
-	// Calculate how many files to delete
-	$files_to_delete_count = count($log_files) - PC_MAX_LOG_FILES;
-	$files_to_delete = array_slice($log_files, 0, $files_to_delete_count);
-	
-	$deleted = 0;
-	foreach ($files_to_delete as $file) {
-		if (@unlink($file)) {
-			$deleted++;
-		}
-	}
-	
-	if ($deleted > 0) {
-		pc_log("Cleaned up {$deleted} old log files", 'debug', array(
-			'event.action' => 'log_cleanup',
-			'files_deleted' => $deleted,
-			'files_remaining' => count($log_files) - $deleted
-		));
-	}
-	
-	return $deleted;
-}
 
 /**
  * Logging function - OpenTelemetry compliant format with automatic rotation

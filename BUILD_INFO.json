@@ -89,6 +89,35 @@
   },
   "changelog": [
     {
+      "version": "1.4.47",
+      "date": "2026-01-20",
+      "type": "critical_bugfix",
+      "changes": [
+        "CRITICAL BUGFIX: Removed duplicate pc_cleanup_old_logs() function declaration",
+        "ERROR: 'Cannot redeclare pc_cleanup_old_logs() (previously declared in line:4752)'",
+        "PROBLEM: Function declared twice at lines 4752 and 6317",
+        "PROBLEM: PHP fatal error preventing parental control from working",
+        "ROOT CAUSE: Old cleanup function (line 6317) not removed when v1.4.45 added new version",
+        "LINE 4752: pc_cleanup_old_logs($retention_days = 90) - CORRECT (v1.4.45)",
+        "LINE 6317: pc_cleanup_old_logs() - DUPLICATE/OLD version (removed)",
+        "FIX: Removed duplicate function declaration (lines 6310-6356)",
+        "FIX: Only line 4752 version remains (retention-based cleanup)",
+        "IMPACT: Critical - system was crashing on every cron run",
+        "DEPLOY: Immediate - PHP syntax error blocking all operations",
+        "FILES MODIFIED:",
+        "  - parental_control.inc: Removed lines 6310-6356 (duplicate function)",
+        "  - VERSION: Bumped to 1.4.47"
+      ],
+      "impact": "critical",
+      "breaking_changes": false,
+      "requires_reboot": false,
+      "deployment_notes": [
+        "CRITICAL - Fixes PHP fatal error from v1.4.46",
+        "Deployed immediately to production",
+        "System now working correctly"
+      ]
+    },
+    {
       "version": "1.4.46",
       "date": "2026-01-20",
       "type": "critical_bugfix",
