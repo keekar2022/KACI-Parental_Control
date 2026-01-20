@@ -5681,11 +5681,35 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 				continue; // Skip to next device
 			}
 			
-		// Device has active connections and NOT in blocked schedule - increment usage
-		$state['devices_by_ip'][$ip]['usage_today'] += $interval_minutes;
-		$state['devices_by_ip'][$ip]['usage_week'] += $interval_minutes;
-		$state['devices_by_ip'][$ip]['last_seen'] = time();
-		$tracked_count++;
+		// CRITICAL v1.4.46: Check if device has bot-flagged services
+		// WHY: Bot traffic (background connections) should NOT count toward usage
+		// If ANY service on device is flagged as bot, skip ALL usage tracking
+		$is_device_bot = false;
+		if (isset($state['devices_by_ip'][$ip]['service_usage'])) {
+			foreach ($state['devices_by_ip'][$ip]['service_usage'] as $service_name => $service_state) {
+				if (isset($service_state['is_bot']) && $service_state['is_bot']) {
+					$is_device_bot = true;
+					pc_log("Device $device_name @ $ip flagged as bot (service: $service_name) - skipping general usage tracking", 'debug', array(
+						'event.action' => 'device_bot_usage_skipped',
+						'device.name' => $device_name,
+						'client.address' => $ip,
+						'bot_service' => $service_name
+					));
+					break;
+				}
+			}
+		}
+		
+		// Device has active connections and NOT in blocked schedule - increment usage (ONLY if not bot)
+		if (!$is_device_bot) {
+			$state['devices_by_ip'][$ip]['usage_today'] += $interval_minutes;
+			$state['devices_by_ip'][$ip]['usage_week'] += $interval_minutes;
+			$state['devices_by_ip'][$ip]['last_seen'] = time();
+			$tracked_count++;
+		} else {
+			// Device is bot - update last_seen but don't track usage
+			$state['devices_by_ip'][$ip]['last_seen'] = time();
+		}
 		
 		// NEW v1.4.22: Track per-service usage
 		// v1.4.28: Pass pre-loaded caches for performance
@@ -5796,22 +5820,34 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 		}
 				
 				// Add usage to PROFILE counter (shared across all devices)
-				$state['profiles'][$profile_name]['usage_today'] += $interval_minutes;
-				$state['profiles'][$profile_name]['usage_week'] += $interval_minutes;
-				$state['profiles'][$profile_name]['last_update'] = time();
+				// CRITICAL v1.4.46: Only add if device is NOT flagged as bot
+				if (!$is_device_bot) {
+					$state['profiles'][$profile_name]['usage_today'] += $interval_minutes;
+					$state['profiles'][$profile_name]['usage_week'] += $interval_minutes;
+					$state['profiles'][$profile_name]['last_update'] = time();
+				} else {
+					// Device is bot - just update timestamp, don't add usage
+					$state['profiles'][$profile_name]['last_update'] = time();
+				}
 				
 				$profile_usage_today = $state['profiles'][$profile_name]['usage_today'];
 			} else {
 				$profile_usage_today = 0;
 			}
 			
-			pc_log("Device $device_name ($mac @ $ip) using internet: added $interval_minutes minutes", 'info', array(
-				'event.action' => 'usage_tracked',
+			// CRITICAL v1.4.46: Log message reflects whether usage was actually added
+			$log_message = $is_device_bot ? 
+				"Device $device_name ($mac @ $ip) active but bot-flagged: usage NOT counted" :
+				"Device $device_name ($mac @ $ip) using internet: added $interval_minutes minutes";
+			$log_action = $is_device_bot ? 'usage_skipped_bot' : 'usage_tracked';
+			
+			pc_log($log_message, 'info', array(
+				'event.action' => $log_action,
 				'device.mac' => $mac,
 				'device.name' => $device_name,
 				'client.address' => $ip,
 				'profile.name' => $profile_name,
-				'usage.minutes' => $interval_minutes,
+				'usage.minutes' => $is_device_bot ? 0 : $interval_minutes,
 				'usage.device_today' => $state['devices_by_ip'][$ip]['usage_today'],
 				'usage.profile_today' => $profile_usage_today,
 				'internet_connections' => $internet_connection_count,
