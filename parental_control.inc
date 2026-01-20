@@ -2752,6 +2752,31 @@ function pc_update_monitor_table($state) {
 		return false;
 	}
 	
+	// CRITICAL FIX v1.4.52: Exclude IPs that are in service block tables
+	// WHY: Monitor pass rules come BEFORE block rules in pfSense rule order
+	// BUG: IPs in both monitor AND block tables were allowed (first match wins)
+	// FIX: Check all service block tables and remove those IPs from monitoring
+	$service_names = array('youtube', 'facebook', 'discord', 'tiktok', 'whatsapp', 'instagram', 'netflix', 'twitch');
+	$blocked_ips = array();
+	
+	foreach ($service_names as $service) {
+		$table_name = "pc_blocked_{$service}";
+		exec("/sbin/pfctl -t {$table_name} -T show 2>&1", $blocked_list, $ret);
+		if ($ret === 0 && !empty($blocked_list)) {
+			$blocked_ips = array_merge($blocked_ips, $blocked_list);
+		}
+	}
+	
+	$blocked_ips = array_unique(array_map('trim', $blocked_ips));
+	
+	// Remove blocked IPs from monitor list
+	if (!empty($blocked_ips)) {
+		$monitor_ips = array_diff($monitor_ips, $blocked_ips);
+		pc_log("Excluded " . count($blocked_ips) . " blocked IPs from monitoring", 'debug', array(
+			'blocked_ips' => $blocked_ips
+		));
+	}
+	
 	// Get current IPs in the monitoring table
 	exec("/sbin/pfctl -t parental_control_monitor -T show 2>&1", $current_ips, $ret);
 	if ($ret !== 0) {
@@ -4348,6 +4373,20 @@ function pc_check_profile_service_limits(&$state) {
 					pc_add_ip_to_service_table($ip, $service_name);
 				}
 				
+				// CRITICAL FIX v1.4.51: Kill connections EVERY cron cycle, not just when adding
+				// WHY: Smart TVs aggressively re-establish connections within seconds
+				// Previous bug: State killing only happened on first add (when IP wasn't in table)
+				// Now: Kill connections every 5 minutes to prevent persistent reconnection
+				$total_states_killed = 0;
+				foreach ($profile_device_ips as $ip) {
+					exec("/sbin/pfctl -k {$ip} 2>&1", $kill_output, $kill_return);
+					if ($kill_return === 0 && !empty($kill_output[0])) {
+						if (preg_match('/killed (\d+) states/', $kill_output[0], $matches)) {
+							$total_states_killed += intval($matches[1]);
+						}
+					}
+				}
+				
 				pc_log("Profile {$profile_name} exceeded {$service_name} limit - blocked all devices", 'info', array(
 					'event.action' => 'profile_service_limit_exceeded',
 					'profile.name' => $profile_name,
@@ -4355,6 +4394,8 @@ function pc_check_profile_service_limits(&$state) {
 					'usage.today' => $service_usage,
 					'usage.limit' => $effective_limit,
 					'devices.blocked' => count($profile_device_ips),
+					'connections.killed' => $total_states_killed,
+					'enforcement.continuous' => true,
 					'weekend.bonus' => $is_weekend ? ($effective_limit - $daily_limit) : 0
 				));
 			} else {

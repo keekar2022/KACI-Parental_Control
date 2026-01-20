@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "1.4.50",
-    "build_date": "2026-01-20T19:15:00Z",
+    "version": "1.4.52",
+    "build_date": "2026-01-20T19:30:00Z",
     "git_commit": "pending",
     "git_branch": "develop",
     "built_by": "development",
@@ -88,6 +88,71 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.4.52",
+      "date": "2026-01-20",
+      "type": "critical_bugfix",
+      "changes": [
+        "🚨 CRITICAL: Remove blocked IPs from monitor table to prevent bypass",
+        "PROBLEM: YouTube still playing despite blocking (1.7 GB of data passed)",
+        "ROOT CAUSE: Blocked IPs were in BOTH monitor AND block tables",
+        "ROOT CAUSE: pfSense 'first match wins' - pass rule evaluated before block rule",
+        "ROOT CAUSE: Monitor pass rules come BEFORE block rules in rule order",
+        "EVIDENCE: pass from parental_control_monitor: 1.7 GB, 1.6M packets",
+        "EVIDENCE: block from pc_blocked_youtube: 676 KB, 1360 packets (never matched)",
+        "FIX: Check all service block tables in pc_update_monitor_table()",
+        "FIX: Exclude blocked IPs from monitor table using array_diff()",
+        "FIX: Now monitor table only contains non-blocked devices",
+        "IMPACT: Blocking ACTUALLY works now - traffic is truly blocked",
+        "ALTERNATIVE CONSIDERED: Reorder rules (risky, would break existing setups)",
+        "CHOSEN SOLUTION: Exclude blocked IPs from monitor table (safer, cleaner)",
+        "FILES MODIFIED:",
+        "  - parental_control.inc: Added blocked IP exclusion to pc_update_monitor_table()",
+        "  - VERSION: Bumped to 1.4.52",
+        "  - BUILD_INFO.json: Added v1.4.52 changelog"
+      ],
+      "impact": "critical",
+      "breaking_changes": false,
+      "requires_reboot": false,
+      "deployment_notes": [
+        "Deploy IMMEDIATELY - current blocking is completely bypassed",
+        "Blocked IPs will be removed from monitor table on next cron run",
+        "Videos will stop playing within 5 minutes",
+        "Verify with: pfctl -t parental_control_monitor -T show (should NOT show blocked IPs)"
+      ]
+    },
+    {
+      "version": "1.4.51",
+      "date": "2026-01-20",
+      "type": "critical_bugfix",
+      "changes": [
+        "🚨 CRITICAL: Kill connections continuously, not just once",
+        "PROBLEM: YouTube still playing despite blocking (smart TVs reconnect within seconds)",
+        "PROBLEM: v1.4.50 only killed connections when ADDING IP to table",
+        "ROOT CAUSE: pfctl -t table -T add <existing_ip> does nothing (returns success but no-op)",
+        "ROOT CAUSE: State killing code only ran on first add, never again",
+        "ROOT CAUSE: Smart TVs re-establish 4-12 connections within seconds of being killed",
+        "FIX: Move connection killing to pc_check_profile_service_limits()",
+        "FIX: Kill connections EVERY cron cycle (every 5 minutes) for blocked IPs",
+        "FIX: Aggressive enforcement prevents persistent reconnection",
+        "IMPACT: Blocking now STAYS enforced despite aggressive reconnection attempts",
+        "EVIDENCE: Hisense TV had 12 connections killed, but 4 re-established within 3 seconds",
+        "LOGS: Now shows 'connections.killed' count in every enforcement log entry",
+        "FILES MODIFIED:",
+        "  - parental_control.inc: Added continuous connection killing to service limit check",
+        "  - VERSION: Bumped to 1.4.51",
+        "  - BUILD_INFO.json: Added v1.4.51 changelog"
+      ],
+      "impact": "critical",
+      "breaking_changes": false,
+      "requires_reboot": false,
+      "deployment_notes": [
+        "Deploy IMMEDIATELY - blocking is still bypassable by persistent reconnection",
+        "After deployment, cron will kill connections every 5 minutes",
+        "Smart TVs will be unable to maintain YouTube connections",
+        "Verify with: pfctl -ss | grep <blocked_ip> (should show 0-4 connections max)"
+      ]
+    },
     {
       "version": "1.4.50",
       "date": "2026-01-20",
