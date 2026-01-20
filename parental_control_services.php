@@ -557,8 +557,24 @@ $default_services = array(
 			'https://raw.githubusercontent.com/SecOps-Institute/FacebookIPLists/refs/heads/master/facebook_ipv4_cidr_blocks.lst',
 			'https://raw.githubusercontent.com/SecOps-Institute/FacebookIPLists/refs/heads/master/facebook_ipv6_list.lst'
 		),
-		'description' => 'Social media platform (includes Instagram, WhatsApp)',
+		'description' => 'Social media platform (includes Instagram)',
 		'icon' => 'fa-facebook'
+	),
+	array(
+		'name' => 'WhatsApp',
+		'urls' => array(
+			'https://raw.githubusercontent.com/HybridNetworks/whatsapp-cidr/main/WhatsApp/whatsapp_cidr_ipv4.txt'
+		),
+		'description' => 'Messaging and voice/video calling platform (owned by Meta)',
+		'icon' => 'fa-whatsapp'
+	),
+	array(
+		'name' => 'Instagram',
+		'urls' => array(
+			'https://raw.githubusercontent.com/SecOps-Institute/FacebookIPLists/refs/heads/master/facebook_ip_list.lst'
+		),
+		'description' => 'Photo and video sharing social platform (owned by Meta, shares IPs with Facebook)',
+		'icon' => 'fa-instagram'
 	),
 	array(
 		'name' => 'Discord',

@@ -2752,6 +2752,31 @@ function pc_update_monitor_table($state) {
 		return false;
 	}
 	
+	// CRITICAL FIX v1.4.52: Exclude IPs that are in service block tables
+	// WHY: Monitor pass rules come BEFORE block rules in pfSense rule order
+	// BUG: IPs in both monitor AND block tables were allowed (first match wins)
+	// FIX: Check all service block tables and remove those IPs from monitoring
+	$service_names = array('youtube', 'facebook', 'discord', 'tiktok', 'whatsapp', 'instagram', 'netflix', 'twitch');
+	$blocked_ips = array();
+	
+	foreach ($service_names as $service) {
+		$table_name = "pc_blocked_{$service}";
+		exec("/sbin/pfctl -t {$table_name} -T show 2>&1", $blocked_list, $ret);
+		if ($ret === 0 && !empty($blocked_list)) {
+			$blocked_ips = array_merge($blocked_ips, $blocked_list);
+		}
+	}
+	
+	$blocked_ips = array_unique(array_map('trim', $blocked_ips));
+	
+	// Remove blocked IPs from monitor list
+	if (!empty($blocked_ips)) {
+		$monitor_ips = array_diff($monitor_ips, $blocked_ips);
+		pc_log("Excluded " . count($blocked_ips) . " blocked IPs from monitoring", 'debug', array(
+			'blocked_ips' => $blocked_ips
+		));
+	}
+	
 	// Get current IPs in the monitoring table
 	exec("/sbin/pfctl -t parental_control_monitor -T show 2>&1", $current_ips, $ret);
 	if ($ret !== 0) {
@@ -3912,12 +3937,26 @@ function pc_add_ip_to_service_table($ip, $service_name) {
 	exec("/sbin/pfctl -t {$table_name} -T add {$ip} 2>&1", $output, $return_code);
 	
 	if ($return_code === 0) {
+		// CRITICAL FIX v1.4.50: Kill existing connections to enforce block immediately
+		// WHY: Established connections bypass block rules (stateful firewall)
+		// Without this, already-playing videos continue until connection naturally closes
+		exec("/sbin/pfctl -k {$ip} 2>&1", $kill_output, $kill_return);
+		$states_killed = 0;
+		if ($kill_return === 0 && !empty($kill_output[0])) {
+			// Parse output: "killed 4 states from 1 sources and 0 destinations"
+			if (preg_match('/killed (\d+) states/', $kill_output[0], $matches)) {
+				$states_killed = intval($matches[1]);
+			}
+		}
+		
 		pc_log("Blocked {$ip} from {$service_name} service", 'info', array(
 			'event.action' => 'service_blocked',
 			'device.ip' => $ip,
 			'service.name' => $service_name,
 			'method' => 'pf_table',
-			'table.name' => $table_name
+			'table.name' => $table_name,
+			'states.killed' => $states_killed,
+			'immediate.enforcement' => true
 		));
 		return true;
 	} else {
@@ -4251,11 +4290,21 @@ function pc_check_profile_service_limits(&$state) {
 		}
 		
 		// Get all devices in this profile
+		// CRITICAL FIX v1.4.49: Check both 'devices' and 'row' (pfSense rowhelpers use 'row')
+		// WHY: Config stores devices in 'row' field, not 'devices' field
+		// BUG: Service blocking never worked because $profile_device_ips was always empty
 		$profile_devices = array();
 		$profile_device_ips = array();
 		
+		$devices_list = array();
 		if (isset($profile['devices']) && is_array($profile['devices'])) {
-			foreach ($profile['devices'] as $device) {
+			$devices_list = $profile['devices'];
+		} elseif (isset($profile['row']) && is_array($profile['row'])) {
+			$devices_list = $profile['row'];
+		}
+		
+		if (!empty($devices_list)) {
+			foreach ($devices_list as $device) {
 				$mac = pc_normalize_mac($device['mac_address']);
 				$profile_devices[] = $mac;
 				
@@ -4276,8 +4325,27 @@ function pc_check_profile_service_limits(&$state) {
 		
 		// Check each service limit
 		foreach ($profile['service_limits'] as $service_alias => $limit_config) {
-			// Extract service name from alias (e.g., 'pc_service_youtube' -> 'youtube')
-			$service_name = str_replace('pc_service_', '', strtolower($service_alias));
+			// Extract service name from alias (e.g., 'pc_service_youtube' -> 'YouTube')
+			// CRITICAL FIX v1.4.49: Use proper service name mapping
+			// WHY: State stores services with specific capitalization (YouTube, TikTok, WhatsApp)
+			// BUG: ucfirst() created 'Youtube' but state has 'YouTube', so usage lookup failed
+			$service_name_lower = str_replace('pc_service_', '', strtolower($service_alias));
+			
+			// Map service aliases to proper service names (match parental_control_services.php)
+			$service_name_map = array(
+				'youtube' => 'YouTube',
+				'facebook' => 'Facebook',
+				'whatsapp' => 'WhatsApp',
+				'instagram' => 'Instagram',
+				'discord' => 'Discord',
+				'tiktok' => 'TikTok',
+				'netflix' => 'Netflix',
+				'twitch' => 'Twitch'
+			);
+			
+			$service_name = isset($service_name_map[$service_name_lower]) ? 
+			                $service_name_map[$service_name_lower] : 
+			                ucfirst($service_name_lower);
 			
 			// Get the daily limit
 			$daily_limit = isset($limit_config['daily_limit']) ? intval($limit_config['daily_limit']) : 0;
@@ -4305,6 +4373,20 @@ function pc_check_profile_service_limits(&$state) {
 					pc_add_ip_to_service_table($ip, $service_name);
 				}
 				
+				// CRITICAL FIX v1.4.51: Kill connections EVERY cron cycle, not just when adding
+				// WHY: Smart TVs aggressively re-establish connections within seconds
+				// Previous bug: State killing only happened on first add (when IP wasn't in table)
+				// Now: Kill connections every 5 minutes to prevent persistent reconnection
+				$total_states_killed = 0;
+				foreach ($profile_device_ips as $ip) {
+					exec("/sbin/pfctl -k {$ip} 2>&1", $kill_output, $kill_return);
+					if ($kill_return === 0 && !empty($kill_output[0])) {
+						if (preg_match('/killed (\d+) states/', $kill_output[0], $matches)) {
+							$total_states_killed += intval($matches[1]);
+						}
+					}
+				}
+				
 				pc_log("Profile {$profile_name} exceeded {$service_name} limit - blocked all devices", 'info', array(
 					'event.action' => 'profile_service_limit_exceeded',
 					'profile.name' => $profile_name,
@@ -4312,6 +4394,8 @@ function pc_check_profile_service_limits(&$state) {
 					'usage.today' => $service_usage,
 					'usage.limit' => $effective_limit,
 					'devices.blocked' => count($profile_device_ips),
+					'connections.killed' => $total_states_killed,
+					'enforcement.continuous' => true,
 					'weekend.bonus' => $is_weekend ? ($effective_limit - $daily_limit) : 0
 				));
 			} else {
@@ -5597,25 +5681,33 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 		// Update MAC → IP cache
 		$state['mac_to_ip_cache'][$mac] = $ip;
 		
-		// CRITICAL: Initialize device state BY IP (Layer 3)
-		if (!isset($state['devices_by_ip'][$ip])) {
-			$state['devices_by_ip'][$ip] = array(
-				'mac' => $mac,
-				'name' => $device_name,
-				'ip' => $ip,
-				'usage_today' => 0,
-				'usage_week' => 0,
-				'last_seen' => 0,
-				'connections_last_check' => 0,
-				'first_seen' => time()
-			);
-		}
-		
-		// Update device info (may have changed in config)
-		$state['devices_by_ip'][$ip]['mac'] = $mac;
-		$state['devices_by_ip'][$ip]['name'] = $device_name;
-		$state['devices_by_ip'][$ip]['ip'] = $ip;
-		unset($state['devices_by_ip'][$ip]['offline_since']); // Clear offline flag
+	// CRITICAL: Initialize device state BY IP (Layer 3)
+	if (!isset($state['devices_by_ip'][$ip])) {
+		$state['devices_by_ip'][$ip] = array(
+			'mac' => $mac,
+			'name' => $device_name,
+			'ip' => $ip,
+			'usage_today' => 0,
+			'usage_week' => 0,
+			'last_seen' => 0,
+			'connections_last_check' => 0,
+			'first_seen' => time()
+		);
+	}
+	
+	// CRITICAL v1.4.49: Store profile name in device state
+	// WHY: Blocking requires profile to be stored so pc_check_profile_service_limits()
+	// can identify which devices belong to which profile. Without this, blocking fails.
+	// BUG: Profile was used but never stored, causing all devices to show "profile": null
+	$profile_name = isset($device['profile_name']) ? $device['profile_name'] : null;
+	
+	// Update device info (may have changed in config)
+	$state['devices_by_ip'][$ip]['mac'] = $mac;
+	$state['devices_by_ip'][$ip]['name'] = $device_name;
+	$state['devices_by_ip'][$ip]['ip'] = $ip;
+	$state['devices_by_ip'][$ip]['profile'] = $profile_name; // BUGFIX v1.4.49
+	$state['devices_by_ip'][$ip]['hostname'] = isset($device['hostname']) ? $device['hostname'] : $device_name;
+	unset($state['devices_by_ip'][$ip]['offline_since']); // Clear offline flag
 		
 		// CRITICAL: Check if device should be blocked (for devices coming online)
 		// WHY: When offline devices come back online, they need to be blocked immediately
@@ -5776,7 +5868,7 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 		// WHY: Time limits are per PROFILE, not per device
 		// All devices in a profile share the same time budget
 		// Example: 4 hour limit = 4 hours TOTAL across ALL devices
-		$profile_name = isset($device['profile_name']) ? $device['profile_name'] : null;
+		// NOTE: $profile_name already extracted earlier (line ~5618)
 		if ($profile_name) {
 		// Initialize profile tracking if needed
 		// CRITICAL FIX v1.4.17: Set last_reset to today's midnight for proper alignment
@@ -6307,53 +6399,6 @@ function pc_get_current_log_file() {
  * 
  * Removes old log files keeping only the most recent PC_MAX_LOG_FILES.
  * Called periodically (1% chance on each log write) to avoid overhead.
- * 
- * This function sorts log files by modification time and deletes the oldest
- * ones, ensuring we don't accumulate too many log files over time.
- * 
- * @return int Number of files deleted
- * @since 0.1.3
- */
-function pc_cleanup_old_logs() {
-	$log_dir = dirname(PC_LOG_FILE);
-	$log_pattern = $log_dir . '/' . PC_LOG_PREFIX . '-*.jsonl';
-	$log_files = glob($log_pattern);
-	
-	if (!is_array($log_files) || count($log_files) <= PC_MAX_LOG_FILES) {
-		return 0; // Nothing to clean up
-	}
-	
-	// Sort by modification time (oldest first)
-	// We use a custom sort to handle the case where filemtime might fail
-	usort($log_files, function($a, $b) {
-		$time_a = @filemtime($a);
-		$time_b = @filemtime($b);
-		if ($time_a === false) return 1;  // Move failed files to end
-		if ($time_b === false) return -1;
-		return $time_a - $time_b;
-	});
-	
-	// Calculate how many files to delete
-	$files_to_delete_count = count($log_files) - PC_MAX_LOG_FILES;
-	$files_to_delete = array_slice($log_files, 0, $files_to_delete_count);
-	
-	$deleted = 0;
-	foreach ($files_to_delete as $file) {
-		if (@unlink($file)) {
-			$deleted++;
-		}
-	}
-	
-	if ($deleted > 0) {
-		pc_log("Cleaned up {$deleted} old log files", 'debug', array(
-			'event.action' => 'log_cleanup',
-			'files_deleted' => $deleted,
-			'files_remaining' => count($log_files) - $deleted
-		));
-	}
-	
-	return $deleted;
-}
 
 /**
  * Logging function - OpenTelemetry compliant format with automatic rotation
