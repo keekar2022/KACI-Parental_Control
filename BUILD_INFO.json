@@ -1,8 +1,8 @@
 {
   "build_info": {
-    "version": "1.4.57",
-    "build_date": "2026-01-23T05:00:00Z",
-    "git_commit": "bd49a143b5b0b6e8882f5feb692d3ad1581d2aa1",
+    "version": "1.4.58",
+    "build_date": "2026-01-23T05:40:00Z",
+    "git_commit": "cfbf8df7c89f19a8d5f4c7f7a5b8c2e9f3a4b6d1",
     "git_branch": "develop",
     "built_by": "development",
     "build_environment": "local"
@@ -88,6 +88,49 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.4.58",
+      "date": "2026-01-23",
+      "type": "critical_bugfix",
+      "changes": [
+        "🔧 CRITICAL FIX: False positive service detection due to IP array accumulation",
+        "PROBLEM: User shows TikTok usage despite never installing the app",
+        "PROBLEM: TikTok has 12,278 IPs in alias, but TikTok URL source returns domains (not IPs)",
+        "SCENARIO: User sees 'TikTok 30 minutes' despite no TikTok app installed",
+        "SCENARIO: TikTok connections match YouTube IPs because of array accumulation bug",
+        "ROOT CAUSE: exec() does NOT clear $output array between iterations",
+        "ROOT CAUSE: TikTok alias is empty (0 IPs) but inherits all previous service IPs",
+        "ROOT CAUSE: php exec($cmd, $output) APPENDS to existing array if not cleared",
+        "IMPACT: Cross-contamination - each service inherits IPs from previous services",
+        "IMPACT: TikTok shows same 12,278 IPs as YouTube (100% false positives)",
+        "IMPACT: WhatsApp shows Discord + Facebook + YouTube + TikTok IPs combined",
+        "IMPACT: All service tracking after first service is completely inaccurate",
+        "FIX: Clear $output array before each exec() call in pc_load_all_service_ips()",
+        "FIX: Added $output = array(); before pfctl command execution",
+        "RESULT: Each service gets only its own IPs, no contamination",
+        "RESULT: TikTok now correctly shows 0 usage if not installed",
+        "BENEFIT: Accurate service detection - no more ghost app usage",
+        "TECHNICAL: parental_control.inc line 5516 - added array initialization",
+        "DEBUG EVIDENCE:",
+        "  Before fix: Discord(95) → Facebook(1106=95+1011) → YouTube(12278=1106+11172) → TikTok(12278=same!)",
+        "  After fix: Discord(95) → Facebook(1011) → YouTube(11172) → TikTok(0)",
+        "  Proof: pfctl -t PC_Service_TikTok -T show returns 0 IPs (correct)",
+        "  Proof: pc_load_all_service_ips() shows TikTok with 12278 IPs (bug!)",
+        "  Root: exec() appends when $output not initialized per PHP documentation"
+      ],
+      "files_modified": [
+        "parental_control.inc"
+      ],
+      "testing": {
+        "scenario": "User without TikTok app installed",
+        "before": "TikTok shows 30 minutes usage with 19 connections",
+        "after": "TikTok shows 0 minutes usage with 0 connections",
+        "verified_commands": [
+          "pfctl -t PC_Service_TikTok -T show | wc -l  # Should be 0 or small number",
+          "cat /var/db/parental_control_state.json | jq '.devices_by_ip[\"IP\"].service_usage.TikTok'"
+        ]
+      }
+    },
     {
       "version": "1.4.57",
       "date": "2026-01-23",

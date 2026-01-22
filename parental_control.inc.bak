@@ -2752,31 +2752,6 @@ function pc_update_monitor_table($state) {
 		return false;
 	}
 	
-	// CRITICAL FIX v1.4.52: Exclude IPs that are in service block tables
-	// WHY: Monitor pass rules come BEFORE block rules in pfSense rule order
-	// BUG: IPs in both monitor AND block tables were allowed (first match wins)
-	// FIX: Check all service block tables and remove those IPs from monitoring
-	$service_names = array('youtube', 'facebook', 'discord', 'tiktok', 'whatsapp', 'instagram', 'netflix', 'twitch');
-	$blocked_ips = array();
-	
-	foreach ($service_names as $service) {
-		$table_name = "pc_blocked_{$service}";
-		exec("/sbin/pfctl -t {$table_name} -T show 2>&1", $blocked_list, $ret);
-		if ($ret === 0 && !empty($blocked_list)) {
-			$blocked_ips = array_merge($blocked_ips, $blocked_list);
-		}
-	}
-	
-	$blocked_ips = array_unique(array_map('trim', $blocked_ips));
-	
-	// Remove blocked IPs from monitor list
-	if (!empty($blocked_ips)) {
-		$monitor_ips = array_diff($monitor_ips, $blocked_ips);
-		pc_log("Excluded " . count($blocked_ips) . " blocked IPs from monitoring", 'debug', array(
-			'blocked_ips' => $blocked_ips
-		));
-	}
-	
 	// Get current IPs in the monitoring table
 	exec("/sbin/pfctl -t parental_control_monitor -T show 2>&1", $current_ips, $ret);
 	if ($ret !== 0) {
@@ -3074,37 +3049,32 @@ function pc_create_service_monitoring_rules() {
 		}
 	}
 	
-	// CRITICAL FIX v1.4.53: Reorganize rules with proper priority order
+	// Create new service monitoring AND blocking rules
 	// For each service, we create TWO rules:
-	// 1. BLOCK rule: blocks devices that exceeded service-specific limits
-	// 2. MONITOR rule: allows/tracks devices in parental_control_monitor
+	// 1. BLOCK rule: blocks devices in parental_control_blocked from accessing service
+	// 2. MONITOR rule: allows/tracks devices in parental_control_monitor accessing service
 	// 
-	// CORRECT Rule sequence (evaluated top to bottom - PRIORITY ORDER):
+	// Rule sequence (evaluated top to bottom):
 	// - DNS/pfSense access (allow blocked devices to see captive portal)
-	// - **General BLOCK rule** (PRIORITY 1: blocks ALL when time limit exceeded) ← Existing rule
-	// - Service BLOCK rules (PRIORITY 2: blocks specific services)              ← These rules (first)
-	// - Service MONITOR rules (PRIORITY 3: tracks usage)                        ← These rules (last)
-	//
-	// WHY THIS ORDER:
-	// - General block must come FIRST to catch profile time limit violations
-	// - Service blocks come SECOND to catch service-specific limit violations
-	// - Monitors come LAST (only match if not blocked by above rules)
+	// - Service BLOCK rules (block violators from specific services)  ← These rules
+	// - Service MONITOR rules (allow/track everyone else)             ← These rules
+	// - General BLOCK rule (catch-all for blocked devices)
 	
-	$service_block_rules = array();
-	$service_monitor_rules = array();
-	
+	$new_rules = array();
 	foreach ($service_aliases as $alias_name) {
 		$service_name = str_replace('PC_Service_', '', $alias_name);
 		$service_name_lower = strtolower($service_name);
 		// CRITICAL: Use shortened prefix to stay within 31 char limit
 		$service_block_alias = 'pc_blocked_' . $service_name_lower;
 		
-		// PRIORITY 2: Service-specific BLOCK rule
+		// RULE 1: BLOCK rule for devices that exceeded service-specific limits
+		// v1.4.31: Now uses per-service block tables instead of general block table
+		// This allows blocking specific services while allowing others
 		$block_rule = array(
 			'type' => 'block',
 			'interface' => 'lan',
-			'ipprotocol' => 'inet',
-			'direction' => 'any',
+			'ipprotocol' => 'inet',  // IPv4 + IPv6
+			'direction' => 'any',  // Both directions - simpler and more reliable
 			'floating' => 'yes',
 			'quick' => 'yes',
 			'source' => array(
@@ -3118,15 +3088,15 @@ function pc_create_service_monitoring_rules() {
 				'time' => time(),
 				'username' => 'system@parentalcontrol'
 			),
-			'log' => 'yes'
+			'log' => 'yes'  // Enable logging for enforcement tracking
 		);
 		
-		// PRIORITY 3: Service MONITOR rule (tracks usage for non-blocked devices)
+		// RULE 2: MONITOR rule for all profile devices (usage tracking)
 		$monitor_rule = array(
 			'type' => 'pass',
 			'interface' => 'lan',
-			'ipprotocol' => 'inet',
-			'direction' => 'any',
+			'ipprotocol' => 'inet',  // IPv4 + IPv6
+			'direction' => 'any',  // Both directions - simpler and more reliable
 			'floating' => 'yes',
 			'quick' => 'yes',
 			'source' => array(
@@ -3140,18 +3110,16 @@ function pc_create_service_monitoring_rules() {
 				'time' => time(),
 				'username' => 'system@parentalcontrol'
 			),
-			'log' => 'yes'
+			'log' => 'yes'  // Enable logging for usage tracking
 		);
 		
-		$service_block_rules[] = $block_rule;
-		$service_monitor_rules[] = $monitor_rule;
+		// Add block rule first, then monitor rule (order matters!)
+		$new_rules[] = $block_rule;
+		$new_rules[] = $monitor_rule;
 	}
 	
-	// CRITICAL: Insert rules AFTER general block rule in correct priority order
-	// Position: After "Parental Control - Dynamic Blocking" rule
-	// Order: Service blocks first, then service monitors
-	$all_service_rules = array_merge($service_block_rules, $service_monitor_rules);
-	array_splice($rules, $blocking_rule_index + 1, 0, $all_service_rules);
+	// Insert new rules just before the blocking rule
+	array_splice($rules, $blocking_rule_index, 0, $new_rules);
 	
 	config_set_path('filter/rule', $rules);
 	
@@ -3160,9 +3128,9 @@ function pc_create_service_monitoring_rules() {
 	// SOLUTION: Caller writes config after all changes prepared
 	// write_config('Parental Control: Updated service monitoring rules');
 	
-	pc_log("Prepared " . count($all_service_rules) . " service monitoring rules (config not written yet)", 'info', array(
+	pc_log("Prepared " . count($new_rules) . " service monitoring rules (config not written yet)", 'info', array(
 		'event.action' => 'service_rules_prepared',
-		'rule.count' => count($all_service_rules),
+		'rule.count' => count($new_rules),
 		'services' => implode(', ', array_map(function($a) { return str_replace('PC_Service_', '', $a); }, $service_aliases))
 	));
 	
@@ -3177,31 +3145,9 @@ function pc_create_service_monitoring_rules() {
 		$lan_if = 'lan';  // Fallback
 	}
 	
-	// CRITICAL FIX v1.4.53: Reorder rules with proper priorities
-	// WHY: Rule order matters in pfSense - first match wins
-	// PROBLEM: Monitor pass rules were evaluated before general block rules
-	// RESULT: Devices in monitor table bypassed general time limit blocks
-	// 
-	// CORRECT ORDER (by priority):
-	// 1. GENERAL PROFILE BLOCKING (highest priority) - blocks ALL traffic when time limit exceeded
-	// 2. SERVICE-SPECIFIC BLOCKING (medium priority) - blocks only specific services
-	// 3. SERVICE MONITORING (lowest priority) - tracks usage for non-blocked devices
-	
 	$pf_rules = array();
-	
-	// PRIORITY 1: General profile blocking (MUST come FIRST)
-	// Blocks ALL internet access when profile exceeds overall daily time limit
-	// Example: 4-hour daily limit exceeded → block everything
-	$pf_rules[] = "# PRIORITY 1: General Profile Time Limit Blocking";
-	$pf_rules[] = "block drop log quick on {$lan_if} inet from <parental_control_blocked> to any label \"USER_RULE: Parental Control - Dynamic Blocking\"";
-	$pf_rules[] = "";
-	
-	// PRIORITY 2 & 3: Service-specific rules (block then monitor)
-	$pf_rules[] = "# PRIORITY 2: Service-Specific Blocking (checked after general block)";
 	foreach ($service_aliases as $alias_name) {
 		$service_name = str_replace('PC_Service_', '', $alias_name);
-		$service_name_lower = strtolower($service_name);
-		$block_table = "pc_blocked_{$service_name_lower}";
 		$table_file = "/var/db/aliastables/{$alias_name}.txt";
 		
 		// Load table into pf if file exists
@@ -3218,20 +3164,13 @@ function pc_create_service_monitoring_rules() {
 				pc_log("Failed to load pf table: {$alias_name} - " . implode(' ', $output), 'warning');
 			}
 			
-			// Service-specific block rule (from pc_blocked_youtube, not general parental_control_blocked)
-			$pf_rules[] = "block drop log quick on {$lan_if} inet from <{$block_table}> to <{$alias_name}> label \"USER_RULE: Parental Control - {$service_name} Service Block\"";
-		}
-	}
-	
-	$pf_rules[] = "";
-	$pf_rules[] = "# PRIORITY 3: Service Monitoring (LAST - only if not blocked above)";
-	foreach ($service_aliases as $alias_name) {
-		$service_name = str_replace('PC_Service_', '', $alias_name);
-		$table_file = "/var/db/aliastables/{$alias_name}.txt";
-		
-		if (file_exists($table_file) && filesize($table_file) > 0) {
-			// Monitor rule (tracks usage for devices that passed block checks)
-			$pf_rules[] = "pass log quick on {$lan_if} inet from <parental_control_monitor> to <{$alias_name}> flags S/SA keep state label \"USER_RULE: Parental Control - {$service_name} Service Monitor\"";
+			// Add TWO rules to userrules anchor as backup
+			// RULE 1: Block rule for devices that exceeded limits (evaluated first)
+			// RULE 2: Monitor rule for all profile devices (evaluated second, tracks usage)
+			// This ensures the rules work even if filter_configure() doesn't generate them
+			// NOTE: Using dynamically detected LAN interface ({$lan_if})
+			$pf_rules[] = "block in log quick on {$lan_if} inet from <parental_control_blocked> to <{$alias_name}> label \"USER_RULE: PC - {$service_name} Service Block\"";
+			$pf_rules[] = "pass in log quick on {$lan_if} inet from <parental_control_monitor> to <{$alias_name}> keep state label \"USER_RULE: PC - {$service_name} Service Monitor\"";
 		}
 	}
 	
@@ -3973,26 +3912,12 @@ function pc_add_ip_to_service_table($ip, $service_name) {
 	exec("/sbin/pfctl -t {$table_name} -T add {$ip} 2>&1", $output, $return_code);
 	
 	if ($return_code === 0) {
-		// CRITICAL FIX v1.4.50: Kill existing connections to enforce block immediately
-		// WHY: Established connections bypass block rules (stateful firewall)
-		// Without this, already-playing videos continue until connection naturally closes
-		exec("/sbin/pfctl -k {$ip} 2>&1", $kill_output, $kill_return);
-		$states_killed = 0;
-		if ($kill_return === 0 && !empty($kill_output[0])) {
-			// Parse output: "killed 4 states from 1 sources and 0 destinations"
-			if (preg_match('/killed (\d+) states/', $kill_output[0], $matches)) {
-				$states_killed = intval($matches[1]);
-			}
-		}
-		
 		pc_log("Blocked {$ip} from {$service_name} service", 'info', array(
 			'event.action' => 'service_blocked',
 			'device.ip' => $ip,
 			'service.name' => $service_name,
 			'method' => 'pf_table',
-			'table.name' => $table_name,
-			'states.killed' => $states_killed,
-			'immediate.enforcement' => true
+			'table.name' => $table_name
 		));
 		return true;
 	} else {
@@ -4326,21 +4251,11 @@ function pc_check_profile_service_limits(&$state) {
 		}
 		
 		// Get all devices in this profile
-		// CRITICAL FIX v1.4.49: Check both 'devices' and 'row' (pfSense rowhelpers use 'row')
-		// WHY: Config stores devices in 'row' field, not 'devices' field
-		// BUG: Service blocking never worked because $profile_device_ips was always empty
 		$profile_devices = array();
 		$profile_device_ips = array();
 		
-		$devices_list = array();
 		if (isset($profile['devices']) && is_array($profile['devices'])) {
-			$devices_list = $profile['devices'];
-		} elseif (isset($profile['row']) && is_array($profile['row'])) {
-			$devices_list = $profile['row'];
-		}
-		
-		if (!empty($devices_list)) {
-			foreach ($devices_list as $device) {
+			foreach ($profile['devices'] as $device) {
 				$mac = pc_normalize_mac($device['mac_address']);
 				$profile_devices[] = $mac;
 				
@@ -4361,27 +4276,8 @@ function pc_check_profile_service_limits(&$state) {
 		
 		// Check each service limit
 		foreach ($profile['service_limits'] as $service_alias => $limit_config) {
-			// Extract service name from alias (e.g., 'pc_service_youtube' -> 'YouTube')
-			// CRITICAL FIX v1.4.49: Use proper service name mapping
-			// WHY: State stores services with specific capitalization (YouTube, TikTok, WhatsApp)
-			// BUG: ucfirst() created 'Youtube' but state has 'YouTube', so usage lookup failed
-			$service_name_lower = str_replace('pc_service_', '', strtolower($service_alias));
-			
-			// Map service aliases to proper service names (match parental_control_services.php)
-			$service_name_map = array(
-				'youtube' => 'YouTube',
-				'facebook' => 'Facebook',
-				'whatsapp' => 'WhatsApp',
-				'instagram' => 'Instagram',
-				'discord' => 'Discord',
-				'tiktok' => 'TikTok',
-				'netflix' => 'Netflix',
-				'twitch' => 'Twitch'
-			);
-			
-			$service_name = isset($service_name_map[$service_name_lower]) ? 
-			                $service_name_map[$service_name_lower] : 
-			                ucfirst($service_name_lower);
+			// Extract service name from alias (e.g., 'pc_service_youtube' -> 'youtube')
+			$service_name = str_replace('pc_service_', '', strtolower($service_alias));
 			
 			// Get the daily limit
 			$daily_limit = isset($limit_config['daily_limit']) ? intval($limit_config['daily_limit']) : 0;
@@ -4409,20 +4305,6 @@ function pc_check_profile_service_limits(&$state) {
 					pc_add_ip_to_service_table($ip, $service_name);
 				}
 				
-				// CRITICAL FIX v1.4.51: Kill connections EVERY cron cycle, not just when adding
-				// WHY: Smart TVs aggressively re-establish connections within seconds
-				// Previous bug: State killing only happened on first add (when IP wasn't in table)
-				// Now: Kill connections every 5 minutes to prevent persistent reconnection
-				$total_states_killed = 0;
-				foreach ($profile_device_ips as $ip) {
-					exec("/sbin/pfctl -k {$ip} 2>&1", $kill_output, $kill_return);
-					if ($kill_return === 0 && !empty($kill_output[0])) {
-						if (preg_match('/killed (\d+) states/', $kill_output[0], $matches)) {
-							$total_states_killed += intval($matches[1]);
-						}
-					}
-				}
-				
 				pc_log("Profile {$profile_name} exceeded {$service_name} limit - blocked all devices", 'info', array(
 					'event.action' => 'profile_service_limit_exceeded',
 					'profile.name' => $profile_name,
@@ -4430,8 +4312,6 @@ function pc_check_profile_service_limits(&$state) {
 					'usage.today' => $service_usage,
 					'usage.limit' => $effective_limit,
 					'devices.blocked' => count($profile_device_ips),
-					'connections.killed' => $total_states_killed,
-					'enforcement.continuous' => true,
 					'weekend.bonus' => $is_weekend ? ($effective_limit - $daily_limit) : 0
 				));
 			} else {
@@ -5513,7 +5393,6 @@ function pc_load_all_service_ips() {
 			$alias_name = $alias['name'];
 			
 			// Query this service's IP table once
-			$output = array(); // CRITICAL FIX v1.4.58: Clear array before exec() to prevent accumulation
 			$cmd = "pfctl -t {$alias_name} -T show 2>&1";
 			exec($cmd, $output, $return_var);
 			
@@ -5611,35 +5490,11 @@ function pc_get_service_connections($device_ip, $service_ips_cache = null, $all_
 		if (preg_match('/\((' . $escaped_ip . '):(\d+)\)\s+(?:\([\d.]+:\d+\)\s+)?(?:->|<->)\s+(\d+\.\d+\.\d+\.\d+):(\d+)/', $line, $matches)) {
 			$device_ip_matched = $matches[1];
 			$dst_ip = $matches[3];
-			$dst_port = $matches[4]; // NEW v1.4.57: Capture destination port
 			
 			// Check which service this destination IP belongs to
 			foreach ($service_ips_cache as $service_name => $ip_list) {
 				foreach ($ip_list as $service_ip_or_range) {
 					if (pc_ip_matches_range($dst_ip, $service_ip_or_range)) {
-						// CRITICAL FIX v1.4.57: Port-based filtering for YouTube
-						// PROBLEM: YouTube alias includes ALL Google IPs (Gmail, Drive, Photos, etc.)
-						// CAUSE: Google shares infrastructure - youtube.com and gmail.com use same IPs
-						// RESULT: Gmail sync (port 993) counted as "YouTube" usage
-						// SOLUTION: For YouTube service, ONLY count video streaming ports
-						if ($service_name === 'YouTube') {
-							// EXCLUDE Gmail and email ports
-							// Port 993 = IMAP (Gmail sync)
-							// Port 995 = POP3 (Email)
-							// Port 465 = SMTP SSL (Email send)
-							// Port 587 = SMTP (Email send)
-							// Port 25  = SMTP (Email)
-							$email_ports = array(25, 465, 587, 993, 995);
-							if (in_array($dst_port, $email_ports)) {
-								// Skip Gmail/email traffic, don't count as YouTube
-								break; // Check next service
-							}
-							// ONLY count YouTube streaming ports:
-							// Port 80  = HTTP (rare, mostly redirects)
-							// Port 443 = HTTPS (primary video streaming)
-							// Any other port on YouTube IPs = count it (QUIC, etc.)
-						}
-						
 						$service_connections[$service_name]++;
 						break 2; // Connection counted, move to next line
 					}
@@ -5742,33 +5597,25 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 		// Update MAC → IP cache
 		$state['mac_to_ip_cache'][$mac] = $ip;
 		
-	// CRITICAL: Initialize device state BY IP (Layer 3)
-	if (!isset($state['devices_by_ip'][$ip])) {
-		$state['devices_by_ip'][$ip] = array(
-			'mac' => $mac,
-			'name' => $device_name,
-			'ip' => $ip,
-			'usage_today' => 0,
-			'usage_week' => 0,
-			'last_seen' => 0,
-			'connections_last_check' => 0,
-			'first_seen' => time()
-		);
-	}
-	
-	// CRITICAL v1.4.49: Store profile name in device state
-	// WHY: Blocking requires profile to be stored so pc_check_profile_service_limits()
-	// can identify which devices belong to which profile. Without this, blocking fails.
-	// BUG: Profile was used but never stored, causing all devices to show "profile": null
-	$profile_name = isset($device['profile_name']) ? $device['profile_name'] : null;
-	
-	// Update device info (may have changed in config)
-	$state['devices_by_ip'][$ip]['mac'] = $mac;
-	$state['devices_by_ip'][$ip]['name'] = $device_name;
-	$state['devices_by_ip'][$ip]['ip'] = $ip;
-	$state['devices_by_ip'][$ip]['profile'] = $profile_name; // BUGFIX v1.4.49
-	$state['devices_by_ip'][$ip]['hostname'] = isset($device['hostname']) ? $device['hostname'] : $device_name;
-	unset($state['devices_by_ip'][$ip]['offline_since']); // Clear offline flag
+		// CRITICAL: Initialize device state BY IP (Layer 3)
+		if (!isset($state['devices_by_ip'][$ip])) {
+			$state['devices_by_ip'][$ip] = array(
+				'mac' => $mac,
+				'name' => $device_name,
+				'ip' => $ip,
+				'usage_today' => 0,
+				'usage_week' => 0,
+				'last_seen' => 0,
+				'connections_last_check' => 0,
+				'first_seen' => time()
+			);
+		}
+		
+		// Update device info (may have changed in config)
+		$state['devices_by_ip'][$ip]['mac'] = $mac;
+		$state['devices_by_ip'][$ip]['name'] = $device_name;
+		$state['devices_by_ip'][$ip]['ip'] = $ip;
+		unset($state['devices_by_ip'][$ip]['offline_since']); // Clear offline flag
 		
 		// CRITICAL: Check if device should be blocked (for devices coming online)
 		// WHY: When offline devices come back online, they need to be blocked immediately
@@ -5929,7 +5776,7 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 		// WHY: Time limits are per PROFILE, not per device
 		// All devices in a profile share the same time budget
 		// Example: 4 hour limit = 4 hours TOTAL across ALL devices
-		// NOTE: $profile_name already extracted earlier (line ~5618)
+		$profile_name = isset($device['profile_name']) ? $device['profile_name'] : null;
 		if ($profile_name) {
 		// Initialize profile tracking if needed
 		// CRITICAL FIX v1.4.17: Set last_reset to today's midnight for proper alignment
@@ -6069,12 +5916,9 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 function pc_detect_bot_behavior(&$state) {
 	// Configuration thresholds
 	$BOT_MAX_CONNECTIONS = 5;         // Max connections to be considered "low activity"
-	$BOT_MIN_SAMPLES = 5;             // Minimum samples needed (25 minutes with 5-min cron) - REDUCED v1.4.56
-	$BOT_CONSECUTIVE_THRESHOLD = 5;   // Consecutive bot-like samples before action - REDUCED v1.4.56
+	$BOT_MIN_SAMPLES = 15;            // Minimum samples needed (15 minutes)
+	$BOT_CONSECUTIVE_THRESHOLD = 15;  // Consecutive bot-like samples before action
 	$BOT_MAX_VARIANCE = 2.0;          // Max variance in connection count (very consistent = bot)
-	
-	// NEW v1.4.54: Ultra-stable connection detection for smart TVs/devices
-	$BOT_ULTRA_STABLE_VARIANCE = 1.5; // Very low variance = persistent background connections
 	
 	$bot_detected_count = 0;
 	$bot_reset_count = 0;
@@ -6089,39 +5933,6 @@ function pc_detect_bot_behavior(&$state) {
 		}
 		
 		foreach ($device_state['service_usage'] as $service_name => &$service_state) {
-			// CRITICAL SAFETY CHECK v1.4.55: Prevent stale/corrupted bot flags
-			// PROBLEM: Found bot_score=15 with only 1 sample in connection_history
-			// CAUSE: State corruption or connection_history cleared without resetting bot flags
-			// IMPACT: Legitimate usage blocked indefinitely (user can't track usage)
-			// FIX: If bot is flagged but history too short, reset the flag
-			$history_count = isset($service_state['connection_history']) ? count($service_state['connection_history']) : 0;
-			$bot_score = isset($service_state['bot_score']) ? $service_state['bot_score'] : 0;
-			$is_bot = isset($service_state['is_bot']) ? $service_state['is_bot'] : false;
-			
-			if ($is_bot && $history_count < $BOT_MIN_SAMPLES) {
-				// Bot flag is set but not enough history to justify it - RESET
-				$device_name = isset($device_state['name']) ? $device_state['name'] : $ip;
-				
-				pc_log("SAFETY: Resetting stale bot flag for {$device_name} @ {$ip} - {$service_name}", 'warning', array(
-					'event.action' => 'bot_flag_safety_reset',
-					'device.name' => $device_name,
-					'client.address' => $ip,
-					'service.name' => $service_name,
-					'is_bot' => $is_bot,
-					'bot_score' => $bot_score,
-					'history_samples' => $history_count,
-					'min_required' => $BOT_MIN_SAMPLES,
-					'reason' => 'Bot flagged but insufficient history - possible state corruption',
-					'action' => 'Resetting bot flag to allow usage tracking'
-				));
-				
-				// Clear bot flag and allow tracking to resume
-				$service_state['is_bot'] = false;
-				$service_state['bot_score'] = 0;
-				$service_state['bot_detected_at'] = 0;
-				$service_state['connection_history'] = array();
-			}
-			
 			// Need enough samples to make a determination
 			if (!isset($service_state['connection_history']) || 
 			    count($service_state['connection_history']) < $BOT_MIN_SAMPLES) {
@@ -6140,35 +5951,12 @@ function pc_detect_bot_behavior(&$state) {
 			$variance = $variance / $sample_count;
 			$std_dev = sqrt($variance);
 			
-			// ENHANCED v1.4.54: Smarter bot detection using variance analysis
-			// WHY: Smart TVs (Google TV, etc.) maintain 6-10 idle connections
-			// PROBLEM: Old logic only caught ≤5 connections, missing smart TV idle traffic
-			// SOLUTION: Detect ultra-stable patterns at ANY connection level
-			//
-			// Detection Criteria (TWO METHODS):
-			// METHOD 1: Low activity (≤5 connections) + consistent (variance ≤2.0) - ORIGINAL
-			//           Example: iPhone background refresh with 2-3 stable connections
-			// METHOD 2: Ultra-stable (variance ≤1.5) for 15+ minutes - NEW v1.4.54
-			//           Example: Google TV with 8 connections that never vary (idle telemetry)
-			//
-			// Real Usage Patterns (NOT bot):
-			// - Active iPhone: 18 connections, variance ~5.2 (constantly changing)
-			// - Active MacBook: 18 connections, variance ~4.8 (loading pages, videos)
-			// - YouTube playing: 27 connections, variance ~6.3 (streaming, buffering)
-			//
-			// Bot Traffic Patterns (DETECTED):
-			// - Google TV idle: 8 connections, variance ~1.5 (telemetry, no variation)
-			// - iPhone idle: 3 connections, variance ~0.8 (background refresh)
+			// Determine if pattern is bot-like
 			$is_low_activity = ($avg <= $BOT_MAX_CONNECTIONS);
 			$is_consistent = ($variance <= $BOT_MAX_VARIANCE);
-			$is_ultra_stable = ($variance <= $BOT_ULTRA_STABLE_VARIANCE);
 			$is_sustained = ($sample_count >= $BOT_MIN_SAMPLES);
 			
-			// Bot pattern if EITHER condition is true:
-			$is_bot_pattern = (
-				($is_low_activity && $is_consistent && $is_sustained) ||  // Original: Low + stable
-				($is_ultra_stable && $is_sustained)                       // NEW: Ultra-stable at any level
-			);
+			$is_bot_pattern = ($is_low_activity && $is_consistent && $is_sustained);
 			
 			// Update bot score (consecutive count of bot-like behavior)
 			if ($is_bot_pattern) {
@@ -6189,12 +5977,6 @@ function pc_detect_bot_behavior(&$state) {
 						// CRITICAL v1.4.44: Usage accumulated BEFORE bot detection is preserved!
 						$device_name = isset($device_state['name']) ? $device_state['name'] : $ip;
 						
-						// Determine which detection method triggered
-						$detection_method = ($is_low_activity && $is_consistent) ? 'low_activity' : 'ultra_stable';
-						$detection_reason = ($detection_method === 'low_activity') 
-							? "Low activity (avg={$avg}) + consistent (var={$variance})"
-							: "Ultra-stable pattern (var={$variance}) at any connection level";
-						
 						pc_log("Bot behavior detected for {$device_name} @ {$ip} - {$service_name}", 'notice', array(
 							'event.action' => 'bot_detected',
 							'device.name' => $device_name,
@@ -6202,11 +5984,8 @@ function pc_detect_bot_behavior(&$state) {
 							'service.name' => $service_name,
 							'avg_connections' => round($avg, 2),
 							'variance' => round($variance, 2),
-							'std_dev' => round($std_dev, 2),
 							'samples' => $sample_count,
 							'duration_minutes' => $service_state['bot_score'],
-							'detection_method' => $detection_method,
-							'detection_reason' => $detection_reason,
 							'note' => 'Tracking paused, existing usage preserved'
 						));
 						
@@ -6528,6 +6307,53 @@ function pc_get_current_log_file() {
  * 
  * Removes old log files keeping only the most recent PC_MAX_LOG_FILES.
  * Called periodically (1% chance on each log write) to avoid overhead.
+ * 
+ * This function sorts log files by modification time and deletes the oldest
+ * ones, ensuring we don't accumulate too many log files over time.
+ * 
+ * @return int Number of files deleted
+ * @since 0.1.3
+ */
+function pc_cleanup_old_logs() {
+	$log_dir = dirname(PC_LOG_FILE);
+	$log_pattern = $log_dir . '/' . PC_LOG_PREFIX . '-*.jsonl';
+	$log_files = glob($log_pattern);
+	
+	if (!is_array($log_files) || count($log_files) <= PC_MAX_LOG_FILES) {
+		return 0; // Nothing to clean up
+	}
+	
+	// Sort by modification time (oldest first)
+	// We use a custom sort to handle the case where filemtime might fail
+	usort($log_files, function($a, $b) {
+		$time_a = @filemtime($a);
+		$time_b = @filemtime($b);
+		if ($time_a === false) return 1;  // Move failed files to end
+		if ($time_b === false) return -1;
+		return $time_a - $time_b;
+	});
+	
+	// Calculate how many files to delete
+	$files_to_delete_count = count($log_files) - PC_MAX_LOG_FILES;
+	$files_to_delete = array_slice($log_files, 0, $files_to_delete_count);
+	
+	$deleted = 0;
+	foreach ($files_to_delete as $file) {
+		if (@unlink($file)) {
+			$deleted++;
+		}
+	}
+	
+	if ($deleted > 0) {
+		pc_log("Cleaned up {$deleted} old log files", 'debug', array(
+			'event.action' => 'log_cleanup',
+			'files_deleted' => $deleted,
+			'files_remaining' => count($log_files) - $deleted
+		));
+	}
+	
+	return $deleted;
+}
 
 /**
  * Logging function - OpenTelemetry compliant format with automatic rotation
