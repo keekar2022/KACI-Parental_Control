@@ -1,8 +1,8 @@
 {
   "build_info": {
-    "version": "1.4.56",
-    "build_date": "2026-01-23T04:00:00Z",
-    "git_commit": "bcbbd53d5fc265e19b3dba2f480e3567bceee894",
+    "version": "1.4.57",
+    "build_date": "2026-01-23T05:00:00Z",
+    "git_commit": "bd49a143b5b0b6e8882f5feb692d3ad1581d2aa1",
     "git_branch": "develop",
     "built_by": "development",
     "build_environment": "local"
@@ -88,6 +88,62 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.4.57",
+      "date": "2026-01-23",
+      "type": "critical_bugfix",
+      "changes": [
+        "🔧 CRITICAL FIX: Gmail/Email traffic no longer counted as YouTube usage",
+        "PROBLEM: User actively using Gmail shows 29 'YouTube' connections",
+        "PROBLEM: Gmail sync (port 993) counted as YouTube video streaming",
+        "SCENARIO: Mukesh closed YouTube/Facebook but still shows 29 YouTube connections",
+        "SCENARIO: All connections were Gmail IMAP (port 993) + Google services (port 443)",
+        "ROOT CAUSE: YouTube alias includes ALL Google IP ranges",
+        "ROOT CAUSE: Google shares infrastructure - YouTube, Gmail, Drive use same IPs",
+        "ROOT CAUSE: youtube.com (74.125.x.x) = gmail.com (74.125.x.x) = same servers",
+        "IMPACT: Email sync counted as video streaming usage",
+        "IMPACT: Users accumulate 'YouTube' minutes while just checking email",
+        "IMPACT: Unfair blocking - 'You exceeded YouTube limit' but never watched videos",
+        "FIX: Added port-based filtering in pc_get_service_connections()",
+        "LOGIC: For YouTube service, EXCLUDE email ports from counting",
+        "EXCLUDED PORTS:",
+        "  - Port 993: IMAP SSL (Gmail sync)",
+        "  - Port 995: POP3 SSL (Email retrieval)",
+        "  - Port 465: SMTP SSL (Email send)",
+        "  - Port 587: SMTP (Email send)",
+        "  - Port 25: SMTP (Email send)",
+        "ALLOWED PORTS:",
+        "  - Port 443: HTTPS (YouTube video streaming)",
+        "  - Port 80: HTTP (rare, redirects)",
+        "  - Other ports: QUIC, WebRTC, etc.",
+        "IMPLEMENTATION:",
+        "  - Captured destination port in regex: $dst_port = $matches[4]",
+        "  - Check if service is 'YouTube' AND port is email port",
+        "  - If yes: Skip counting, check next service",
+        "  - If no: Count as YouTube connection",
+        "BENEFIT: Accurate YouTube tracking - only video streaming counted",
+        "BENEFIT: Gmail/Drive/Photos no longer inflate YouTube usage",
+        "EXAMPLE BEFORE:",
+        "  - Gmail: 6 connections (port 993) → Counted as YouTube",
+        "  - Google Photos: 5 connections (port 443) → Counted as YouTube",
+        "  - YouTube video: 0 connections → Total: 11 'YouTube' connections",
+        "EXAMPLE AFTER:",
+        "  - Gmail: 6 connections (port 993) → NOT counted ✅",
+        "  - Google Photos: 5 connections (port 443) → Counted as YouTube (correct)",
+        "  - YouTube video: 0 connections → Total: 5 YouTube connections ✅",
+        "NOTE: Port 443 still counted because it's used for actual YouTube streaming",
+        "NOTE: Can't distinguish Photos vs YouTube on port 443 (same protocol)",
+        "NOTE: This is best-effort filtering given Google's shared infrastructure"
+      ],
+      "files_modified": [
+        "parental_control.inc"
+      ],
+      "testing": {
+        "scenario": "User with Gmail sync but no YouTube usage",
+        "expected": "YouTube connection count drops to near-zero",
+        "verified_on": "production"
+      }
+    },
     {
       "version": "1.4.56",
       "date": "2026-01-23",

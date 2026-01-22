@@ -5610,11 +5610,35 @@ function pc_get_service_connections($device_ip, $service_ips_cache = null, $all_
 		if (preg_match('/\((' . $escaped_ip . '):(\d+)\)\s+(?:\([\d.]+:\d+\)\s+)?(?:->|<->)\s+(\d+\.\d+\.\d+\.\d+):(\d+)/', $line, $matches)) {
 			$device_ip_matched = $matches[1];
 			$dst_ip = $matches[3];
+			$dst_port = $matches[4]; // NEW v1.4.57: Capture destination port
 			
 			// Check which service this destination IP belongs to
 			foreach ($service_ips_cache as $service_name => $ip_list) {
 				foreach ($ip_list as $service_ip_or_range) {
 					if (pc_ip_matches_range($dst_ip, $service_ip_or_range)) {
+						// CRITICAL FIX v1.4.57: Port-based filtering for YouTube
+						// PROBLEM: YouTube alias includes ALL Google IPs (Gmail, Drive, Photos, etc.)
+						// CAUSE: Google shares infrastructure - youtube.com and gmail.com use same IPs
+						// RESULT: Gmail sync (port 993) counted as "YouTube" usage
+						// SOLUTION: For YouTube service, ONLY count video streaming ports
+						if ($service_name === 'YouTube') {
+							// EXCLUDE Gmail and email ports
+							// Port 993 = IMAP (Gmail sync)
+							// Port 995 = POP3 (Email)
+							// Port 465 = SMTP SSL (Email send)
+							// Port 587 = SMTP (Email send)
+							// Port 25  = SMTP (Email)
+							$email_ports = array(25, 465, 587, 993, 995);
+							if (in_array($dst_port, $email_ports)) {
+								// Skip Gmail/email traffic, don't count as YouTube
+								break; // Check next service
+							}
+							// ONLY count YouTube streaming ports:
+							// Port 80  = HTTP (rare, mostly redirects)
+							// Port 443 = HTTPS (primary video streaming)
+							// Any other port on YouTube IPs = count it (QUIC, etc.)
+						}
+						
 						$service_connections[$service_name]++;
 						break 2; // Connection counted, move to next line
 					}
