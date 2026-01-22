@@ -4589,6 +4589,12 @@ function parental_control_cron_job() {
 	// If bot behavior is sustained for 15+ minutes, service tracking is reset for that device+service.
 	pc_detect_bot_behavior($state);
 	
+	// NEW v1.4.59: Detect bot behavior for GENERAL internet usage (non-service traffic)
+	// CRITICAL: Applies to ALL profiles (Anita, Mukesh, Vishesh, GunGun, John)
+	// WHY: Sleeping devices maintain stable background connections (Apple Push, iCloud, etc.)
+	// that aren't monitored services, causing 60-75 min phantom usage across ALL profiles
+	pc_detect_general_bot_behavior($state);
+	
 	// SMART BLOCKING: Calculate which devices should be blocked NOW
 	// Then compare with previous state and only update changed devices
 	// This avoids calling filter_configure() which causes AQM errors
@@ -5752,7 +5758,12 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 			'usage_week' => 0,
 			'last_seen' => 0,
 			'connections_last_check' => 0,
-			'first_seen' => time()
+			'first_seen' => time(),
+			// NEW v1.4.59: General internet bot detection (non-service traffic)
+			'general_connection_history' => array(),
+			'general_bot_score' => 0,
+			'general_bot_detected_at' => 0,
+			'is_general_bot' => false
 		);
 	}
 	
@@ -5816,6 +5827,20 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 		$state['devices_by_ip'][$ip]['connections_last_check'] = $internet_connection_count;
 		$state['devices_by_ip'][$ip]['internet_connections'] = $internet_connection_count;
 		
+		// NEW v1.4.59: Track general connection history for bot detection
+		// CRITICAL: This applies to ALL profiles (Anita, Mukesh, Vishesh, GunGun, John)
+		// WHY: Sleeping devices maintain stable background connections (Apple Push, iCloud, etc.)
+		// that aren't monitored services, but still accumulate phantom usage
+		if (!isset($state['devices_by_ip'][$ip]['general_connection_history'])) {
+			$state['devices_by_ip'][$ip]['general_connection_history'] = array();
+		}
+		$state['devices_by_ip'][$ip]['general_connection_history'][] = $internet_connection_count;
+		
+		// Keep only last 15 samples (sliding window for bot detection)
+		if (count($state['devices_by_ip'][$ip]['general_connection_history']) > 15) {
+			array_shift($state['devices_by_ip'][$ip]['general_connection_history']);
+		}
+		
 		if ($internet_connection_count > 0) {
 			// CRITICAL: Don't track usage during blocked schedule time!
 			// WHY: If device is in a blocked schedule (e.g., bedtime), usage should not accumulate
@@ -5851,6 +5876,23 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 					break;
 				}
 			}
+		}
+		
+		// NEW v1.4.59: Check GENERAL internet bot flag (non-service traffic)
+		// CRITICAL: Applies to ALL profiles - Anita, Mukesh, Vishesh, GunGun, John
+		// WHY: Sleeping iPhones/devices maintain stable background connections
+		// (Apple Push, iCloud, Google services) that aren't monitored services
+		// IMPACT: Before v1.4.59, these accumulated 5 min every 5 min while sleeping
+		// RESULT: 60-75 minutes phantom usage for sleeping users across ALL profiles
+		if (isset($state['devices_by_ip'][$ip]['is_general_bot']) && $state['devices_by_ip'][$ip]['is_general_bot']) {
+			$is_device_bot = true;
+			pc_log("Device $device_name @ $ip flagged as general bot - skipping usage tracking", 'debug', array(
+				'event.action' => 'general_bot_usage_skipped',
+				'device.name' => $device_name,
+				'client.address' => $ip,
+				'connections' => $internet_connection_count,
+				'applies_to' => 'ALL_PROFILES'
+			));
 		}
 		
 		// Device has active connections and NOT in blocked schedule - increment usage (ONLY if not bot)
@@ -6246,6 +6288,152 @@ function pc_detect_bot_behavior(&$state) {
 			'bot.new_detections' => $bot_detected_count,
 			'bot.paused' => $bot_reset_count,
 			'note' => 'Tracking paused (usage preserved), will resume when human activity detected'
+		));
+	}
+}
+
+/**
+ * Detect bot behavior for GENERAL internet usage (non-service traffic)
+ * NEW v1.4.59: Universal bot detection for ALL profiles
+ * 
+ * CRITICAL: This applies to ALL profiles (Anita, Mukesh, Vishesh, GunGun, John)
+ * 
+ * PURPOSE: Detect stable background connections that aren't monitored services
+ * EXAMPLES: Apple Push Notifications, iCloud sync, Android services, Google telemetry
+ * PROBLEM: Sleeping devices show 60-75 min phantom usage due to these connections
+ * SOLUTION: Analyze general connection patterns using same bot detection logic
+ * 
+ * DETECTION CRITERIA (same as service bot detection):
+ * - Low activity: ≤5 connections + variance ≤2.0 for 25+ minutes
+ * - Ultra-stable: variance ≤1.5 for 25+ minutes (any connection count)
+ * 
+ * @param array &$state The parental control state (passed by reference)
+ * @since 1.4.59
+ */
+function pc_detect_general_bot_behavior(&$state) {
+	// Same thresholds as service bot detection
+	$BOT_MAX_CONNECTIONS = 5;
+	$BOT_MIN_SAMPLES = 5;             // 25 minutes with 5-min cron
+	$BOT_CONSECUTIVE_THRESHOLD = 5;   // 25 minutes sustained
+	$BOT_MAX_VARIANCE = 2.0;
+	$BOT_ULTRA_STABLE_VARIANCE = 1.5; // For smart TVs, stable device traffic
+	
+	$bot_detected_count = 0;
+	
+	if (!isset($state['devices_by_ip'])) {
+		return;
+	}
+	
+	foreach ($state['devices_by_ip'] as $ip => &$device_state) {
+		// Skip if no general connection history
+		if (!isset($device_state['general_connection_history']) || 
+		    empty($device_state['general_connection_history'])) {
+			continue;
+		}
+		
+		$history = $device_state['general_connection_history'];
+		$sample_count = count($history);
+		
+		// Need enough samples
+		if ($sample_count < $BOT_MIN_SAMPLES) {
+			continue;
+		}
+		
+		// Calculate statistics
+		$avg = array_sum($history) / $sample_count;
+		$variance = 0;
+		foreach ($history as $val) {
+			$variance += pow($val - $avg, 2);
+		}
+		$variance = $variance / $sample_count;
+		$std_dev = sqrt($variance);
+		
+		// Same detection logic as service bot detection
+		$is_low_activity = ($avg <= $BOT_MAX_CONNECTIONS);
+		$is_consistent = ($variance <= $BOT_MAX_VARIANCE);
+		$is_ultra_stable = ($variance <= $BOT_ULTRA_STABLE_VARIANCE);
+		$is_sustained = ($sample_count >= $BOT_MIN_SAMPLES);
+		
+		$is_bot_pattern = (
+			($is_low_activity && $is_consistent && $is_sustained) ||
+			($is_ultra_stable && $is_sustained)
+		);
+		
+		// Update bot score
+		if ($is_bot_pattern) {
+			if (!isset($device_state['general_bot_score'])) {
+				$device_state['general_bot_score'] = 0;
+			}
+			$device_state['general_bot_score']++;
+			
+			// Mark timestamp when first detected
+			if ($device_state['general_bot_score'] == 1) {
+				$device_state['general_bot_detected_at'] = time();
+			}
+			
+			// If sustained for threshold duration, flag as bot
+			if ($device_state['general_bot_score'] >= $BOT_CONSECUTIVE_THRESHOLD) {
+				if (!isset($device_state['is_general_bot']) || !$device_state['is_general_bot']) {
+					$device_name = isset($device_state['name']) ? $device_state['name'] : $ip;
+					$profile_name = isset($device_state['profile']) ? $device_state['profile'] : 'Unknown';
+					
+					$detection_method = ($is_low_activity && $is_consistent) ? 'low_activity' : 'ultra_stable';
+					$detection_reason = ($detection_method === 'low_activity') 
+						? "Low activity (avg={$avg}) + consistent (var={$variance})"
+						: "Ultra-stable pattern (var={$variance}) at any connection level";
+					
+					pc_log("General bot behavior detected for {$device_name} @ {$ip} (Profile: {$profile_name})", 'notice', array(
+						'event.action' => 'general_bot_detected',
+						'device.name' => $device_name,
+						'client.address' => $ip,
+						'profile.name' => $profile_name,
+						'avg_connections' => round($avg, 2),
+						'variance' => round($variance, 2),
+						'std_dev' => round($std_dev, 2),
+						'samples' => $sample_count,
+						'duration_minutes' => $device_state['general_bot_score'] * 5,
+						'detection_method' => $detection_method,
+						'detection_reason' => $detection_reason,
+						'traffic_type' => 'non_monitored_services',
+						'examples' => 'Apple Push, iCloud, Google services, Android telemetry',
+						'applies_to' => 'ALL_PROFILES',
+						'note' => 'General usage tracking paused, existing usage preserved'
+					));
+					
+					$device_state['is_general_bot'] = true;
+					$bot_detected_count++;
+				}
+			}
+		} else {
+			// Pattern is NOT bot-like - reset if previously flagged
+			if (isset($device_state['general_bot_score']) && $device_state['general_bot_score'] > 0) {
+				$device_name = isset($device_state['name']) ? $device_state['name'] : $ip;
+				$profile_name = isset($device_state['profile']) ? $device_state['profile'] : 'Unknown';
+				
+				pc_log("Human activity resumed for {$device_name} @ {$ip} (Profile: {$profile_name})", 'info', array(
+					'event.action' => 'general_human_activity_resumed',
+					'device.name' => $device_name,
+					'client.address' => $ip,
+					'profile.name' => $profile_name,
+					'previous_bot_score' => $device_state['general_bot_score'],
+					'current_avg_connections' => round($avg, 2),
+					'applies_to' => 'ALL_PROFILES'
+				));
+				
+				$device_state['general_bot_score'] = 0;
+				$device_state['is_general_bot'] = false;
+				$device_state['general_bot_detected_at'] = 0;
+			}
+		}
+	}
+	
+	if ($bot_detected_count > 0) {
+		pc_log("General bot detection completed: {$bot_detected_count} new detections across ALL profiles", 'info', array(
+			'event.action' => 'general_bot_detection_complete',
+			'bot.new_detections' => $bot_detected_count,
+			'applies_to' => 'ALL_PROFILES',
+			'profiles_affected' => 'Anita, Mukesh, Vishesh, GunGun, John',
+			'note' => 'General usage tracking paused for flagged devices'
 		));
 	}
 }
