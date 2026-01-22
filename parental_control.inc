@@ -5780,6 +5780,21 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 	$state['devices_by_ip'][$ip]['profile'] = $profile_name; // BUGFIX v1.4.49
 	$state['devices_by_ip'][$ip]['hostname'] = isset($device['hostname']) ? $device['hostname'] : $device_name;
 	unset($state['devices_by_ip'][$ip]['offline_since']); // Clear offline flag
+	
+	// CRITICAL v1.4.59: Initialize general bot detection fields for existing devices
+	// WHY: Existing devices in state file don't have these new fields
+	if (!isset($state['devices_by_ip'][$ip]['general_connection_history'])) {
+		$state['devices_by_ip'][$ip]['general_connection_history'] = array();
+	}
+	if (!isset($state['devices_by_ip'][$ip]['general_bot_score'])) {
+		$state['devices_by_ip'][$ip]['general_bot_score'] = 0;
+	}
+	if (!isset($state['devices_by_ip'][$ip]['general_bot_detected_at'])) {
+		$state['devices_by_ip'][$ip]['general_bot_detected_at'] = 0;
+	}
+	if (!isset($state['devices_by_ip'][$ip]['is_general_bot'])) {
+		$state['devices_by_ip'][$ip]['is_general_bot'] = false;
+	}
 		
 		// CRITICAL: Check if device should be blocked (for devices coming online)
 		// WHY: When offline devices come back online, they need to be blocked immediately
