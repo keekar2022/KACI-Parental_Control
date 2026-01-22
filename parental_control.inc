@@ -6044,8 +6044,8 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 function pc_detect_bot_behavior(&$state) {
 	// Configuration thresholds
 	$BOT_MAX_CONNECTIONS = 5;         // Max connections to be considered "low activity"
-	$BOT_MIN_SAMPLES = 15;            // Minimum samples needed (15 minutes)
-	$BOT_CONSECUTIVE_THRESHOLD = 15;  // Consecutive bot-like samples before action
+	$BOT_MIN_SAMPLES = 5;             // Minimum samples needed (25 minutes with 5-min cron) - REDUCED v1.4.56
+	$BOT_CONSECUTIVE_THRESHOLD = 5;   // Consecutive bot-like samples before action - REDUCED v1.4.56
 	$BOT_MAX_VARIANCE = 2.0;          // Max variance in connection count (very consistent = bot)
 	
 	// NEW v1.4.54: Ultra-stable connection detection for smart TVs/devices

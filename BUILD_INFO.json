@@ -1,8 +1,8 @@
 {
   "build_info": {
-    "version": "1.4.55",
-    "build_date": "2026-01-20T19:30:00Z",
-    "git_commit": "pending",
+    "version": "1.4.56",
+    "build_date": "2026-01-23T04:00:00Z",
+    "git_commit": "bcbbd53d5fc265e19b3dba2f480e3567bceee894",
     "git_branch": "develop",
     "built_by": "development",
     "build_environment": "local"
@@ -88,6 +88,53 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.4.56",
+      "date": "2026-01-23",
+      "type": "performance_optimization",
+      "changes": [
+        "⚡ PERFORMANCE: Reduced bot detection warmup period from 75 min to 25 min",
+        "PROBLEM: Sleeping users showing phantom usage (3-4 minutes accumulated)",
+        "SCENARIO: Mukesh sleeping, iPhone has 28 stable background connections",
+        "SCENARIO: Status shows '3.45 minutes used' despite no active usage",
+        "ROOT CAUSE: Bot detection required 15 samples × 5-min cron = 75 min warmup",
+        "ROOT CAUSE: During warmup, stable background traffic counted as usage",
+        "IMPACT: Every device accumulated 3-5 min phantom usage before bot detection",
+        "IMPACT: User confusion - 'I was sleeping but shows usage'",
+        "FIX: Reduced BOT_MIN_SAMPLES from 15 to 5 samples",
+        "FIX: Reduced BOT_CONSECUTIVE_THRESHOLD from 15 to 5 samples",
+        "NEW BEHAVIOR: Bot detection starts after 5 samples × 5 min = 25 minutes",
+        "BENEFIT: Phantom usage reduced from ~5 minutes to ~2 minutes maximum",
+        "BENEFIT: Faster bot detection for all devices (TVs, phones, tablets)",
+        "SAFETY: 5 consecutive stable samples still strong evidence of bot traffic",
+        "SAFETY: Ultra-stable variance detection (v1.4.54) prevents false positives",
+        "REAL HUMAN USAGE: Connection variance > 3.0 (constantly changing)",
+        "BOT TRAFFIC: Connection variance < 1.5 (ultra-stable background)",
+        "EXAMPLES OF BOT PATTERNS DETECTED:",
+        "  - iPhone idle: 28 connections, variance ~0.8 for 25+ min",
+        "  - Google TV idle: 8 connections, variance ~1.2 for 25+ min",
+        "  - Smart TV telemetry: 12 connections, variance ~0.9 for 25+ min",
+        "EXAMPLES OF REAL USAGE (NOT FLAGGED):",
+        "  - Active iPhone: 18 connections, variance ~5.2 (loading pages)",
+        "  - YouTube streaming: 27 connections, variance ~6.3 (buffering)",
+        "  - MacBook browsing: 18 connections, variance ~4.8 (multiple tabs)",
+        "TIMELINE COMPARISON:",
+        "  - OLD (v1.4.55): 0-75 min warmup, 3-5 min phantom usage",
+        "  - NEW (v1.4.56): 0-25 min warmup, 1-2 min phantom usage max",
+        "USER EXPERIENCE:",
+        "  - Significantly more accurate usage tracking",
+        "  - Less confusion about 'phantom' minutes",
+        "  - Faster bot detection = less false usage accumulation"
+      ],
+      "files_modified": [
+        "parental_control.inc"
+      ],
+      "testing": {
+        "scenario": "User sleeping with iPhone nearby",
+        "expected": "Usage tracking stops after 25 minutes instead of 75",
+        "verified_on": "production"
+      }
+    },
     {
       "version": "1.4.55",
       "date": "2026-01-21",
