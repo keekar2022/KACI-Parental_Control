@@ -42,10 +42,10 @@ jobs:
           cat pkg-manifest.ucl
       
       - name: Setup FreeBSD VM
-        uses: cross-platform-actions/action@v0.24.0
+        uses: cross-platform-actions/action@v0.25.0
         with:
           operating_system: freebsd
-          version: '15.0'
+          version: '14.3'
           shell: bash
           run: |
             # Install pkg tools
