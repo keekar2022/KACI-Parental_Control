@@ -1,0 +1,110 @@
+name: Deploy to GitHub Pages
+
+on:
+  workflow_run:
+    workflows: ["Build FreeBSD Package"]
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  deploy-to-pages:
+    name: Deploy Package Repository to GitHub Pages
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: freebsd-package
+          path: ./packages
+      
+      - name: Create repository directory structure
+        run: |
+          mkdir -p gh-pages/packages/freebsd/FreeBSD:14:amd64/latest
+          mkdir -p gh-pages/fingerprints/kaci
+          
+          # Copy packages
+          cp packages/*.pkg gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
+          cp packages/*.pkg.asc gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
+          cp packages/*.sha256 gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
+          cp packages/*.md5 gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
+          
+          # Copy GPG fingerprint
+          cp fingerprint.txt gh-pages/fingerprints/kaci/trusted
+      
+      - name: Generate repository index
+        run: |
+          cat > gh-pages/index.html << 'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>KACI Parental Control Package Repository</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        h1 { color: #2c3e50; }
+        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+        pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔒 KACI Parental Control Package Repository</h1>
+    <p>FreeBSD package repository for Keekar's Parental Control system.</p>
+    
+    <h2>📦 Installation</h2>
+    <p>Configure your pfSense system to use this repository:</p>
+    <pre><code># Configure repository
+mkdir -p /usr/local/etc/pkg/repos
+cat > /usr/local/etc/pkg/repos/kaci.conf << 'REPOEOF'
+kaci: {
+  url: "pkg+https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}",
+  mirror_type: "none",
+  signature_type: "fingerprints",
+  fingerprints: "/usr/local/etc/pkg/fingerprints/kaci",
+  enabled: yes,
+  priority: 10
+}
+REPOEOF
+
+# Download and install GPG fingerprint
+mkdir -p /usr/local/etc/pkg/fingerprints/kaci
+fetch -o /usr/local/etc/pkg/fingerprints/kaci/trusted \
+  https://keekar2022.github.io/KACI-Parental_Control/fingerprints/kaci/trusted
+
+# Install package
+pkg update
+pkg install -y kaci-parental-control</code></pre>
+    
+    <h2>🔗 Links</h2>
+    <ul>
+        <li><a href="packages/freebsd/FreeBSD:14:amd64/latest/">Browse Packages</a></li>
+        <li><a href="https://github.com/keekar2022/KACI-Parental_Control">Source Code (Private)</a></li>
+        <li><a href="https://github.com/keekar2022/KACI-Parental_Control/issues">Support</a></li>
+    </ul>
+</body>
+</html>
+EOF
+      
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./gh-pages
+          publish_branch: gh-pages
+          force_orphan: true
+      
+      - name: Summary
+        run: |
+          echo "✅ Package repository deployed to GitHub Pages!"
+          echo "📦 Packages available at: https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/FreeBSD:14:amd64/latest/"

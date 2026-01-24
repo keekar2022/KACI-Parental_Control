@@ -1,4 +1,4 @@
-VERSION=1.4.55
-BUILD_DATE=2026-01-20
-RELEASE_TYPE=critical_bugfix
+VERSION=1.4.60
+BUILD_DATE=2026-01-24
+RELEASE_TYPE=major_enhancement
 STATUS=production-ready
