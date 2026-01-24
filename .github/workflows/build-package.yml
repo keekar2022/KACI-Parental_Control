@@ -48,6 +48,9 @@ jobs:
           version: '14.1'
           shell: bash
           run: |
+            # Set package name
+            PACKAGE_NAME="kaci-parental-control"
+            
             # Create package staging directory
             mkdir -p /tmp/pkg-stage
             
