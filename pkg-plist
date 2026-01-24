@@ -1,0 +1,17 @@
+usr/local/pkg/parental_control.inc
+usr/local/pkg/parental_control.xml
+usr/local/pkg/parental_control_VERSION
+usr/local/www/parental_control_status.php
+usr/local/www/parental_control_profiles.php
+usr/local/www/parental_control_schedules.php
+usr/local/www/parental_control_services.php
+usr/local/www/parental_control_blocked.php
+usr/local/www/parental_control_captive.php
+usr/local/www/parental_control_health.php
+usr/local/www/parental_control_api.php
+usr/local/etc/rc.d/parental_control_captive.sh
+usr/local/bin/auto_update_parental_control.sh
+usr/local/bin/parental_control_cron.php
+usr/local/share/pfSense-pkg-KACI-Parental_Control/info.xml
+@dir /var/log
+@dir /var/db

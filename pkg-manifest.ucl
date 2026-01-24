@@ -1,0 +1,58 @@
+name = "kaci-parental-control"
+version = "1.4.59"
+origin = "sysutils/kaci-parental-control"
+comment = "Keekar's Parental Control for pfSense - Advanced time-based access control"
+arch = "freebsd:15:*"
+www = "https://github.com/keekar2022/KACI-Parental_Control"
+maintainer = "mkesharw@keekar.com"
+prefix = "/"
+licenselogic = "single"
+licenses = [ "GPL-3.0-or-later" ]
+desc = <<EOD
+Keekar's Parental Control Package for pfSense
+
+A comprehensive parental control package that helps parents manage and limit 
+their children's internet access time.
+
+Features:
+- Profile-based device grouping with shared time accounting
+- Daily and weekly time limits with weekend bonus
+- Flexible scheduling (bedtime, school hours, custom periods)
+- Service-specific monitoring (YouTube, Facebook, TikTok, etc.)
+- Bot detection to prevent phantom usage
+- DHCP/ARP auto-discovery of devices
+- Real-time status dashboard with usage tracking
+- RESTful API for external integrations
+- OpenTelemetry-compliant JSONL logging
+- Bypass-proof enforcement (MAC + IP tracking)
+
+This package provides enterprise-grade parental controls with advanced features
+like per-service time limits, intelligent bot detection, and comprehensive logging.
+EOD
+categories = [ "sysutils" ]
+message = <<EOM
+====================================================================
+Keekar's Parental Control v1.4.59 has been installed successfully!
+====================================================================
+
+To configure the service:
+1. Go to Services > Parental Control in pfSense web interface
+2. Enable Parental Control service
+3. Create child profiles and add devices
+4. Configure time limits and schedules
+5. Set up service-specific monitoring (optional)
+
+The package includes:
+- Automatic cron job for usage tracking (runs every 5 minutes)
+- Real-time monitoring dashboard at Status > Parental Control
+- Health check endpoint at /parental_control_health.php
+- RESTful API at /parental_control_api.php
+- JSONL logs at /var/log/parental_control.jsonl
+
+Documentation: https://github.com/keekar2022/KACI-Parental_Control
+
+For support, visit: https://github.com/keekar2022/KACI-Parental_Control/issues
+
+© 2026 Keekar - Built with Passion
+====================================================================
+EOM

@@ -1,0 +1,194 @@
+name: Build FreeBSD Package
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+env:
+  PACKAGE_NAME: kaci-parental-control
+
+jobs:
+  build:
+    name: Build FreeBSD .txz Package
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Read version from VERSION file
+        id: version
+        run: |
+          VERSION=$(grep "^VERSION=" VERSION | cut -d= -f2)
+          BUILD_DATE=$(grep "^BUILD_DATE=" VERSION | cut -d= -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "build_date=$BUILD_DATE" >> $GITHUB_OUTPUT
+          echo "Package version: $VERSION"
+      
+      - name: Update manifest version
+        run: |
+          sed -i "s/^version = .*/version = \"${{ steps.version.outputs.version }}\"/" pkg-manifest.ucl
+          cat pkg-manifest.ucl
+      
+      - name: Setup FreeBSD VM
+        uses: cross-platform-actions/action@v0.24.0
+        with:
+          operating_system: freebsd
+          version: '15.0'
+          shell: bash
+          run: |
+            # Install pkg tools
+            sudo pkg update
+            sudo pkg install -y pkg
+            
+            # Create package staging directory
+            mkdir -p /tmp/pkg-stage
+            
+            # Copy files to staging according to pkg-plist
+            while IFS= read -r file; do
+              # Skip comments and directives
+              if [[ "$file" =~ ^[[:space:]]*# ]] || [[ "$file" =~ ^@ ]]; then
+                continue
+              fi
+              
+              # Create parent directory in staging
+              mkdir -p "/tmp/pkg-stage/$(dirname "$file")"
+              
+              # Determine source file
+              case "$file" in
+                usr/local/pkg/parental_control.inc)
+                  cp parental_control.inc "/tmp/pkg-stage/$file"
+                  ;;
+                usr/local/pkg/parental_control.xml)
+                  cp parental_control.xml "/tmp/pkg-stage/$file"
+                  ;;
+                usr/local/pkg/parental_control_VERSION)
+                  cp VERSION "/tmp/pkg-stage/$file"
+                  ;;
+                usr/local/www/parental_control_*.php)
+                  basename="${file##*/}"
+                  cp "$basename" "/tmp/pkg-stage/$file"
+                  ;;
+                usr/local/etc/rc.d/parental_control_captive.sh)
+                  cp parental_control_captive.sh "/tmp/pkg-stage/$file"
+                  chmod +x "/tmp/pkg-stage/$file"
+                  ;;
+                usr/local/bin/auto_update_parental_control.sh)
+                  cp auto_update_parental_control.sh "/tmp/pkg-stage/$file"
+                  chmod +x "/tmp/pkg-stage/$file"
+                  ;;
+                usr/local/bin/parental_control_cron.php)
+                  cp parental_control_cron.php "/tmp/pkg-stage/$file"
+                  chmod +x "/tmp/pkg-stage/$file"
+                  ;;
+                usr/local/share/pfSense-pkg-KACI-Parental_Control/info.xml)
+                  cp info.xml "/tmp/pkg-stage/$file"
+                  ;;
+              esac
+            done < pkg-plist
+            
+            # Create the package
+            sudo pkg create \
+              -M pkg-manifest.ucl \
+              -p pkg-plist \
+              -r /tmp/pkg-stage \
+              -o /tmp
+            
+            # Find the created package
+            PACKAGE_FILE=$(ls /tmp/${PACKAGE_NAME}-*.pkg)
+            echo "Created package: $PACKAGE_FILE"
+            
+            # Copy to workspace
+            cp "$PACKAGE_FILE" .
+      
+      - name: Sign package with GPG
+        if: github.event_name != 'pull_request'
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          # Import GPG key
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          
+          # Sign the package
+          PACKAGE_FILE=$(ls ${PACKAGE_NAME}-*.pkg)
+          echo "$GPG_PASSPHRASE" | gpg --batch --yes --passphrase-fd 0 \
+            --armor --detach-sign "$PACKAGE_FILE"
+          
+          echo "Created signature: ${PACKAGE_FILE}.asc"
+      
+      - name: Generate checksums
+        run: |
+          PACKAGE_FILE=$(ls ${PACKAGE_NAME}-*.pkg)
+          sha256sum "$PACKAGE_FILE" > "${PACKAGE_FILE}.sha256"
+          md5sum "$PACKAGE_FILE" > "${PACKAGE_FILE}.md5"
+      
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: freebsd-package
+          path: |
+            *.pkg
+            *.pkg.asc
+            *.sha256
+            *.md5
+          retention-days: 90
+      
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            *.pkg
+            *.pkg.asc
+            *.sha256
+            *.md5
+          body: |
+            # KACI Parental Control v${{ steps.version.outputs.version }}
+            
+            ## Installation
+            
+            ```bash
+            # Add custom repository
+            mkdir -p /usr/local/etc/pkg/repos
+            cat > /usr/local/etc/pkg/repos/kaci.conf << 'EOF'
+            kaci: {
+              url: "pkg+https://nas.keekar.com/packages/freebsd/${ABI}",
+              mirror_type: "srv",
+              signature_type: "fingerprints",
+              fingerprints: "/usr/local/etc/pkg/fingerprints/kaci",
+              enabled: yes
+            }
+            EOF
+            
+            # Install package
+            pkg install -y kaci-parental-control
+            ```
+            
+            ## Upgrade from Previous Version
+            
+            ```bash
+            pkg upgrade kaci-parental-control
+            ```
+            
+            ## Changelog
+            
+            See [BUILD_INFO.json](https://github.com/keekar2022/KACI-Parental_Control/blob/main/BUILD_INFO.json) for detailed changelog.
+            
+            ---
+            
+            **Built:** ${{ steps.version.outputs.build_date }}  
+            **Commit:** ${{ github.sha }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

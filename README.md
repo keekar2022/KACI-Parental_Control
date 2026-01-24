@@ -13,13 +13,41 @@ A comprehensive parental control package for pfSense that helps parents manage a
 
 ## 📦 Quick Installation
 
+### Method 1: PKG Manager (Recommended) 🆕
+
+```bash
+# Step 1: Add custom repository
+mkdir -p /usr/local/etc/pkg/repos
+cat > /usr/local/etc/pkg/repos/kaci.conf << 'EOF'
+kaci: {
+  url: "pkg+https://nas.keekar.com/packages/freebsd/${ABI}",
+  mirror_type: "none",
+  signature_type: "none",
+  enabled: yes,
+  priority: 10
+}
+EOF
+
+# Step 2: Install package
+pkg update
+pkg install -y kaci-parental-control
+```
+
+**Benefits:**
+✅ Binary distribution (source code protected)  
+✅ Automatic updates via pkg manager  
+✅ Easy installation and upgrades  
+✅ Professional package management  
+
+### Method 2: Legacy Installation (For Development)
+
 ```bash
 ./INSTALL.sh <pfsense_ip_address>
 # Example: ./INSTALL.sh 192.168.1.1
 ```
 
 **Requirements:**
-- pfSense 2.6.0+ with SSH enabled
+- pfSense 2.7.0+ with SSH enabled
 - Network access to pfSense
 - Basic SSH/command-line knowledge
 
@@ -27,7 +55,7 @@ A comprehensive parental control package for pfSense that helps parents manage a
 - `sudo` (security/sudo v1.9.16p2+)
 - `cron` (sysutils/cron v0.3.8_6+)
 
-*Note: The installer automatically checks and offers to install missing dependencies.*
+**Migration:** If you have an existing legacy installation, see [Migration Guide](docs/MIGRATION_TO_PKG_REPO.md)
 
 ---
 
@@ -379,6 +407,26 @@ Executes: `/usr/local/bin/php -f /usr/local/pkg/parental_control.inc -- cron`
 
 ## 🔄 Updating the Package
 
+### For PKG Manager Installations (Recommended)
+
+#### Automatic Updates
+The package automatically checks for updates every 15 minutes and upgrades when available.
+
+#### Manual Update
+```bash
+# Check for updates
+pkg update
+pkg upgrade -n kaci-parental-control
+
+# Perform upgrade
+pkg upgrade kaci-parental-control
+
+# Verify new version
+pkg info kaci-parental-control
+```
+
+### For Legacy Installations
+
 To update after making changes:
 
 ```bash
@@ -394,6 +442,8 @@ php -l parental_control.inc
 # Check pfSense web UI
 # Verify changes took effect
 ```
+
+**Consider migrating to PKG manager:** See [Migration Guide](docs/MIGRATION_TO_PKG_REPO.md)
 
 ---
 
