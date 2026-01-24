@@ -51,6 +51,10 @@ jobs:
             # Create package staging directory
             mkdir -p /tmp/pkg-stage
             
+            # Create required directories for @dir directives
+            mkdir -p /tmp/pkg-stage/var/log
+            mkdir -p /tmp/pkg-stage/var/db
+            
             # Copy files to staging according to pkg-plist
             while IFS= read -r file; do
               # Skip comments and directives
