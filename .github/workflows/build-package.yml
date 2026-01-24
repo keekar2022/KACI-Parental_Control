@@ -48,10 +48,6 @@ jobs:
           version: '14.1'
           shell: bash
           run: |
-            # Install pkg tools
-            sudo pkg update
-            sudo pkg install -y pkg
-            
             # Create package staging directory
             mkdir -p /tmp/pkg-stage
             
