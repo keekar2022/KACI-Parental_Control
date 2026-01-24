@@ -124,9 +124,13 @@ jobs:
           # Import GPG key
           echo "$GPG_PRIVATE_KEY" | gpg --batch --import
           
+          # Configure GPG for non-interactive use
+          export GPG_TTY=$(tty)
+          
           # Sign the package
           PACKAGE_FILE=$(ls ${PACKAGE_NAME}-*.pkg)
           echo "$GPG_PASSPHRASE" | gpg --batch --yes --passphrase-fd 0 \
+            --pinentry-mode loopback \
             --armor --detach-sign "$PACKAGE_FILE"
           
           echo "Created signature: ${PACKAGE_FILE}.asc"
