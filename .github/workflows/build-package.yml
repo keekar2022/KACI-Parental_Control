@@ -13,6 +13,11 @@ on:
       - develop
   workflow_dispatch:
 
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
 env:
   PACKAGE_NAME: kaci-parental-control
 
@@ -154,6 +159,128 @@ jobs:
             *.sha256
             *.md5
           retention-days: 90
+      
+      - name: Generate repository metadata
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        run: |
+          # Create metadata files for pkg repository
+          PACKAGE_FILE=$(ls ${PACKAGE_NAME}-*.pkg)
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # Create meta.conf
+          cat > meta.conf << EOF
+          version = 2;
+          packing_format = "txz";
+          EOF
+          
+          # Create packagesite.yaml
+          cat > packagesite.yaml << 'YAML_EOF'
+          kaci-parental-control-${{ steps.version.outputs.version }}:
+            name: kaci-parental-control
+            version: "${{ steps.version.outputs.version }}"
+            origin: sysutils/kaci-parental-control
+            comment: "Keekar's Parental Control for pfSense - Advanced time-based access control"
+            arch: FreeBSD:14:amd64
+            www: https://github.com/keekar2022/KACI-Parental_Control
+            maintainer: mkesharw@keekar.com
+            prefix: /
+            sum: $(sha256sum "$PACKAGE_FILE" | awk '{print $1}')
+            flatsize: $(stat -c%s "$PACKAGE_FILE" 2>/dev/null || stat -f%z "$PACKAGE_FILE")
+            path: $PACKAGE_FILE
+            licenses: [GPL-3.0-or-later]
+            categories: [sysutils]
+          YAML_EOF
+          
+          # Replace variables in packagesite.yaml
+          sed -i "s|\$PACKAGE_FILE|$PACKAGE_FILE|g" packagesite.yaml
+          
+          # Create compressed metadata
+          tar -czf meta.txz meta.conf
+          tar -czf packagesite.txz packagesite.yaml
+          
+          echo "Created meta.txz and packagesite.txz"
+      
+      - name: Prepare GitHub Pages deployment
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        run: |
+          # Create directory structure for GitHub Pages
+          mkdir -p gh-pages/packages/freebsd/FreeBSD:14:amd64/latest
+          
+          # Copy package and metadata files
+          cp *.pkg gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
+          cp *.pkg.asc gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/ 2>/dev/null || true
+          cp *.sha256 gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
+          cp *.md5 gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
+          cp meta.txz gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
+          cp packagesite.txz gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
+          
+          # Copy GPG fingerprint
+          mkdir -p gh-pages/fingerprints
+          cp fingerprint.txt gh-pages/fingerprints/
+          
+          # Create index.html for GitHub Pages root
+          cat > gh-pages/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>KACI Parental Control - Package Repository</title>
+            <meta charset="utf-8">
+            <style>
+              body { font-family: system-ui, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+              h1 { color: #2c3e50; }
+              code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+              pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
+            </style>
+          </head>
+          <body>
+            <h1>KACI Parental Control - FreeBSD Package Repository</h1>
+            <p>Official package repository for KACI Parental Control on pfSense.</p>
+            
+            <h2>Installation</h2>
+            <pre><code># Configure repository
+          mkdir -p /usr/local/etc/pkg/repos
+          cat > /usr/local/etc/pkg/repos/kaci.conf << 'REPO_EOF'
+          kaci: {
+            url: "https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}/latest",
+            mirror_type: "NONE",
+            signature_type: "fingerprints",
+            fingerprints: "/usr/local/etc/pkg/fingerprints/kaci",
+            enabled: yes,
+            priority: 10
+          }
+          REPO_EOF
+          
+          # Install GPG fingerprint
+          mkdir -p /usr/local/etc/pkg/fingerprints/kaci
+          fetch -o /usr/local/etc/pkg/fingerprints/kaci/trusted \
+            https://keekar2022.github.io/KACI-Parental_Control/fingerprints/fingerprint.txt
+          
+          # Install package
+          pkg update
+          pkg install -y kaci-parental-control</code></pre>
+            
+            <h2>Links</h2>
+            <ul>
+              <li><a href="https://github.com/keekar2022/KACI-Parental_Control">GitHub Repository</a></li>
+              <li><a href="packages/freebsd/FreeBSD:14:amd64/latest/">Package Directory</a></li>
+              <li><a href="fingerprints/fingerprint.txt">GPG Fingerprint</a></li>
+            </ul>
+          </body>
+          </html>
+          EOF
+          
+          echo "GitHub Pages content prepared"
+      
+      - name: Deploy to GitHub Pages
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./gh-pages
+          force_orphan: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'Deploy package v${{ steps.version.outputs.version }}'
       
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
