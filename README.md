@@ -3,10 +3,11 @@
 A comprehensive parental control package for pfSense that helps parents manage and limit their children's internet access time.
 
 **Package ID:** KACI-Parental_Control  
-**Version:** 1.4.45 (Production)  
+**Version:** 1.4.60 (Production)  
 **Author:** Mukesh Kesharwani (Keekar)  
 **Status:** Production Ready  
 **License:** GPL 3.0 or later  
+**Repository:** https://keekar2022.github.io/KACI-Parental_Control/  
 **© 2026 Keekar**
 
 ---
@@ -16,28 +17,38 @@ A comprehensive parental control package for pfSense that helps parents manage a
 ### Method 1: PKG Manager (Recommended) 🆕
 
 ```bash
-# Step 1: Add custom repository
+# Step 1: Configure repository
 mkdir -p /usr/local/etc/pkg/repos
 cat > /usr/local/etc/pkg/repos/kaci.conf << 'EOF'
 kaci: {
-  url: "pkg+https://nas.keekar.com/packages/freebsd/${ABI}",
+  url: "pkg+https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}",
   mirror_type: "none",
-  signature_type: "none",
+  signature_type: "fingerprints",
+  fingerprints: "/usr/local/etc/pkg/fingerprints/kaci",
   enabled: yes,
   priority: 10
 }
 EOF
 
-# Step 2: Install package
+# Step 2: Download and install GPG fingerprint for package verification
+mkdir -p /usr/local/etc/pkg/fingerprints/kaci
+fetch -o /usr/local/etc/pkg/fingerprints/kaci/trusted \
+  https://keekar2022.github.io/KACI-Parental_Control/fingerprints/kaci/trusted
+
+# Step 3: Install package
 pkg update
 pkg install -y kaci-parental-control
 ```
 
 **Benefits:**
-✅ Binary distribution (source code protected)  
-✅ Automatic updates via pkg manager  
-✅ Easy installation and upgrades  
-✅ Professional package management  
+✅ **GPG-signed packages** - Cryptographically verified authenticity  
+✅ **Binary distribution** - Source code protected  
+✅ **Automatic updates** - Seamless package upgrades  
+✅ **GitHub-hosted** - Reliable, fast delivery  
+✅ **Professional package management** - Standard FreeBSD pkg tools  
+
+**Repository:** [https://keekar2022.github.io/KACI-Parental_Control/](https://keekar2022.github.io/KACI-Parental_Control/)  
+**GPG Fingerprint:** `7F066616F4E6AFA912A6B418E511980F2F261ED5`  
 
 ### Method 2: Legacy Installation (For Development)
 
@@ -543,10 +554,11 @@ The package uses OpenTelemetry-compliant JSONL format for logs:
 ## 📝 License & Credits
 
 **Package:** KACI Parental Control for pfSense  
-**Version:** 1.4.45 (Production)  
+**Version:** 1.4.60 (Production)  
 **Status:** Production Ready  
-**Compatibility:** pfSense 2.6.0+  
-**License:** GPL 3.0 or later
+**Compatibility:** pfSense 2.7.0+ (FreeBSD 14+)  
+**License:** GPL 3.0 or later  
+**Repository:** https://keekar2022.github.io/KACI-Parental_Control/
 
 ---
 
