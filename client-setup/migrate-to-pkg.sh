@@ -96,19 +96,18 @@ kaci: {
 EOF2
 }
 log_success "GPG fingerprint installed"
-# Update pkg repository
-log_info "Step 4: Updating pkg repository..."
-pkg update || {
-    log_error "Failed to update repository"
-    exit 1
-}
 
-# Install package via pkg
-log_info "Step 5: Installing via pkg manager..."
-pkg install -y ${PACKAGE_NAME} || {
+# Install package directly from GitHub Pages
+log_info "Step 4: Installing package from GitHub Pages..."
+# Detect system ABI
+ABI=$(pkg config ABI)
+PACKAGE_URL="https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}/latest/${PACKAGE_NAME}-1.4.61.pkg"
+
+log_info "Downloading from: $PACKAGE_URL"
+env IGNORE_OSVERSION=yes pkg add -f "$PACKAGE_URL" || {
     log_error "Failed to install package"
     log_info "Rolling back..."
-    rm /usr/local/etc/pkg/repos/kaci.conf
+    rm /usr/local/etc/pkg/repos/kaci.conf 2>/dev/null || true
     (crontab -l -u root 2>/dev/null; echo "*/5 * * * * $OLD_CRON_CMD") | crontab -u root -
     exit 1
 }
