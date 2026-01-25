@@ -170,30 +170,30 @@ jobs:
           PKG_SIZE=$(stat -c%s "$PACKAGE_FILE" 2>/dev/null || stat -f%z "$PACKAGE_FILE")
           
           # Create meta.conf in UCL format
-          cat > meta.conf << EOF
-version = 2;
-packing_format = "txz";
-manifests = "packagesite.yaml";
-filesite = "packagesite.yaml";
-EOF
+          cat > meta.conf << 'METAEOF'
+          version = 2;
+          packing_format = "txz";
+          manifests = "packagesite.yaml";
+          filesite = "packagesite.yaml";
+          METAEOF
           
           # Create packagesite.yaml with proper values
-          cat > packagesite.yaml << EOF
-${PACKAGE_NAME}-${VERSION}:
-  name: ${PACKAGE_NAME}
-  version: "${VERSION}"
-  origin: sysutils/${PACKAGE_NAME}
-  comment: "Keekar's Parental Control for pfSense - Advanced time-based access control"
-  arch: FreeBSD:14:amd64
-  www: https://github.com/keekar2022/KACI-Parental_Control
-  maintainer: mkesharw@keekar.com
-  prefix: /
-  sum: ${PKG_SHA256}
-  flatsize: ${PKG_SIZE}
-  path: ${PACKAGE_FILE}
-  licenses: [GPL-3.0-or-later]
-  categories: [sysutils]
-EOF
+          cat > packagesite.yaml << PKGEOF
+          ${PACKAGE_NAME}-${VERSION}:
+            name: ${PACKAGE_NAME}
+            version: "${VERSION}"
+            origin: sysutils/${PACKAGE_NAME}
+            comment: "Keekar's Parental Control for pfSense - Advanced time-based access control"
+            arch: FreeBSD:14:amd64
+            www: https://github.com/keekar2022/KACI-Parental_Control
+            maintainer: mkesharw@keekar.com
+            prefix: /
+            sum: ${PKG_SHA256}
+            flatsize: ${PKG_SIZE}
+            path: ${PACKAGE_FILE}
+            licenses: [GPL-3.0-or-later]
+            categories: [sysutils]
+          PKGEOF
           
           # Create compressed metadata
           tar -czf meta.txz meta.conf
