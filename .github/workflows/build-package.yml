@@ -179,13 +179,16 @@ jobs:
             
             # Create meta file explicitly (pkg repo doesn't always create it)
             if [ ! -f meta.txz ]; then
+              cd /home/runner/work/KACI-Parental_Control/KACI-Parental_Control
               echo 'version = 2;' > meta
               echo 'packing_format = "txz";' >> meta
               tar -czf meta.txz meta
               rm meta
+              cp meta.txz /tmp/repo/
             fi
             
             # Copy generated metadata back to workspace
+            cd /tmp/repo
             cp packagesite.* /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/ || true
             cp meta.* /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/ || true
             cp digests.* /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/ || true
