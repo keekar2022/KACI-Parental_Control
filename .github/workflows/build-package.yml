@@ -176,20 +176,9 @@ jobs:
             cp *.pkg /tmp/repo/
             cp *.pkg.asc /tmp/repo/ 2>/dev/null || true
             
-            # Generate repository metadata using pkg repo with GPG signing
+            # Generate repository metadata using pkg repo
             cd /tmp/repo
-            
-            # Import GPG key for signing
-            echo "$GPG_PRIVATE_KEY" | gpg --batch --import
-            
-            # Configure GPG for non-interactive use
-            mkdir -p ~/.gnupg
-            echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
-            echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
-            gpgconf --kill gpg-agent || true
-            
-            # Generate signed repository metadata
-            echo "$GPG_PASSPHRASE" | sudo pkg repo . "$GPG_PASSPHRASE"
+            sudo pkg repo .
             
             # Create meta file
             echo "version = 2;" > meta
