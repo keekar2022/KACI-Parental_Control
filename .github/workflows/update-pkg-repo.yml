@@ -7,11 +7,6 @@ on:
       - completed
     branches:
       - main
-  push:
-    branches:
-      - main
-    paths:
-      - '.github/workflows/update-pkg-repo.yml'
   workflow_dispatch:
 
 permissions:
@@ -23,35 +18,19 @@ jobs:
   deploy-to-pages:
     name: Deploy Package Repository to GitHub Pages
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
       
       - name: Download package artifacts
-        if: github.event_name == 'workflow_run'
         uses: actions/download-artifact@v4
         with:
           name: freebsd-package
           path: ./packages
           run-id: ${{ github.event.workflow_run.id }}
-      
-      - name: Download artifacts from latest release (fallback for push events)
-        if: github.event_name != 'workflow_run'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Get the latest successful build run
-          RUN_ID=$(gh api repos/${{ github.repository }}/actions/workflows/build-package.yml/runs \
-            --jq '.workflow_runs | map(select(.conclusion == "success")) | first | .id')
-          
-          if [ -n "$RUN_ID" ]; then
-            echo "Downloading artifacts from run $RUN_ID"
-            gh run download $RUN_ID -n freebsd-package -D ./packages
-          else
-            echo "No successful build found, creating empty directory"
-            mkdir -p ./packages
-          fi
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Create repository directory structure
         run: |
