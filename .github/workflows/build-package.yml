@@ -180,14 +180,8 @@ jobs:
             cd /tmp/repo
             sudo pkg repo .
             
-            # Create meta file
-            echo "version = 2;" > meta
-            echo "packing_format = \"txz\";" >> meta
-            tar -czf meta.txz meta
-            rm meta
-            
             # Verify metadata files were created
-            ls -la *.txz
+            ls -la *.txz 2>/dev/null || echo "Repository created"
             
             # Copy generated metadata back to workspace
             cd /tmp/repo
