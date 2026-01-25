@@ -177,12 +177,20 @@ jobs:
             cd /tmp/repo
             sudo pkg repo .
             
+            # Create meta file explicitly (pkg repo doesn't always create it)
+            if [ ! -f meta.txz ]; then
+              echo 'version = 2;' > meta
+              echo 'packing_format = "txz";' >> meta
+              tar -czf meta.txz meta
+              rm meta
+            fi
+            
             # Copy generated metadata back to workspace
             cp packagesite.* /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/ || true
             cp meta.* /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/ || true
             cp digests.* /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/ || true
             
-            ls -la /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/*.txz
+            ls -la /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/*.txz || echo "No .txz files found"
             echo "Repository metadata generated"
       
       - name: Prepare GitHub Pages deployment
@@ -196,8 +204,9 @@ jobs:
           cp *.pkg.asc gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/ 2>/dev/null || true
           cp *.sha256 gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
           cp *.md5 gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
-          cp meta.txz gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
-          cp packagesite.txz gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
+          cp meta.txz gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/ 2>/dev/null || true
+          cp packagesite.txz gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/ 2>/dev/null || true
+          cp digests.txz gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/ 2>/dev/null || true
           
           # Copy GPG fingerprint
           mkdir -p gh-pages/fingerprints
