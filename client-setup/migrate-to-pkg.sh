@@ -101,7 +101,7 @@ log_success "GPG fingerprint installed"
 log_info "Step 4: Installing package from GitHub Pages..."
 # Detect system ABI
 ABI=$(pkg config ABI)
-PACKAGE_URL="https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}/latest/${PACKAGE_NAME}-1.4.61.pkg"
+PACKAGE_URL="https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}/latest/${PACKAGE_NAME}-1.4.62.pkg"
 
 log_info "Downloading from: $PACKAGE_URL"
 env IGNORE_OSVERSION=yes pkg add -f "$PACKAGE_URL" || {

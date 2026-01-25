@@ -1,10 +1,10 @@
-# KACI Parental Control v1.4.61: Major Release + Critical Migration Notice
+# KACI Parental Control v1.4.62: Faster Bot Detection + Critical Migration Notice
 
-I'm announcing KACI Parental Control v1.4.61 for pfSense with major enhancements and an important transition to BSD package distribution.
+I'm announcing KACI Parental Control v1.4.62 for pfSense with enhanced bot detection and an important transition to BSD package distribution.
 
-## What's New
+## What's New in v1.4.62
 
-Version 1.4.61 brings improved performance, enhanced monitoring, and refined time tracking algorithms. Production-ready and available now.
+**40% Faster Bot Detection**: Background activity (iCloud sync, app updates, telemetry) is now detected in 30 minutes instead of 50+ minutes, preventing phantom usage accumulation during sleep hours. Production-ready and available now.
 
 ## Critical: Migrate to BSD Package Distribution
 
@@ -36,7 +36,7 @@ chmod +x /tmp/migrate-to-pkg.sh
 ```bash
 # Install directly from GitHub Pages
 env IGNORE_OSVERSION=yes pkg add -f \
-  https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/$(pkg config ABI)/latest/kaci-parental-control-1.4.61.pkg
+  https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/$(pkg config ABI)/latest/kaci-parental-control-1.4.62.pkg
 ```
 
 The migration script backs up your configuration, removes old cron jobs, sets up the package repository, and restores all settings. Your profiles and schedules remain intact.
