@@ -6126,12 +6126,12 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 function pc_detect_bot_behavior(&$state) {
 	// Configuration thresholds
 	$BOT_MAX_CONNECTIONS = 5;         // Max connections to be considered "low activity"
-	$BOT_MIN_SAMPLES = 5;             // Minimum samples needed (25 minutes with 5-min cron) - REDUCED v1.4.56
-	$BOT_CONSECUTIVE_THRESHOLD = 5;   // Consecutive bot-like samples before action - REDUCED v1.4.56
-	$BOT_MAX_VARIANCE = 2.0;          // Max variance in connection count (very consistent = bot)
+	$BOT_MIN_SAMPLES = 3;             // Minimum samples needed (15 minutes with 5-min cron) - REDUCED v1.4.62 for faster detection
+	$BOT_CONSECUTIVE_THRESHOLD = 3;   // Consecutive bot-like samples before action (15 minutes) - REDUCED v1.4.62
+	$BOT_MAX_VARIANCE = 2.5;          // Max variance in connection count (increased to 2.5 for more tolerance) - UPDATED v1.4.62
 	
 	// NEW v1.4.54: Ultra-stable connection detection for smart TVs/devices
-	$BOT_ULTRA_STABLE_VARIANCE = 1.5; // Very low variance = persistent background connections
+	$BOT_ULTRA_STABLE_VARIANCE = 1.8; // Very low variance = persistent background connections - RELAXED v1.4.62
 	
 	$bot_detected_count = 0;
 	$bot_reset_count = 0;
@@ -6328,10 +6328,10 @@ function pc_detect_bot_behavior(&$state) {
 function pc_detect_general_bot_behavior(&$state) {
 	// Same thresholds as service bot detection
 	$BOT_MAX_CONNECTIONS = 5;
-	$BOT_MIN_SAMPLES = 5;             // 25 minutes with 5-min cron
-	$BOT_CONSECUTIVE_THRESHOLD = 5;   // 25 minutes sustained
-	$BOT_MAX_VARIANCE = 2.0;
-	$BOT_ULTRA_STABLE_VARIANCE = 1.5; // For smart TVs, stable device traffic
+	$BOT_MIN_SAMPLES = 3;             // 15 minutes with 5-min cron - REDUCED v1.4.62 for faster detection
+	$BOT_CONSECUTIVE_THRESHOLD = 3;   // 15 minutes sustained - REDUCED v1.4.62
+	$BOT_MAX_VARIANCE = 2.5;          // INCREASED v1.4.62 for more tolerance
+	$BOT_ULTRA_STABLE_VARIANCE = 1.8; // For smart TVs, stable device traffic - RELAXED v1.4.62
 	
 	$bot_detected_count = 0;
 	
