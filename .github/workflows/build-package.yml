@@ -260,7 +260,7 @@ jobs:
             <h2>Links</h2>
             <ul>
               <li><a href="https://github.com/keekar2022/KACI-Parental_Control">GitHub Repository</a></li>
-              <li><a href="packages/freebsd/FreeBSD:14:amd64/latest/">Package Directory</a></li>
+              <li><a href="packages/freebsd/FreeBSD:15:amd64/latest/">Package Directory</a></li>
               <li><a href="fingerprints/fingerprint.txt">GPG Fingerprint</a></li>
             </ul>
           </body>
