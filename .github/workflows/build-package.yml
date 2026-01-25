@@ -13,12 +13,6 @@ on:
       - develop
   workflow_dispatch:
 
-permissions:
-  contents: write
-  pages: write
-  id-token: write
-  actions: write
-
 env:
   PACKAGE_NAME: kaci-parental-control
 
@@ -150,55 +144,6 @@ jobs:
           sha256sum "$PACKAGE_FILE" > "${PACKAGE_FILE}.sha256"
           md5sum "$PACKAGE_FILE" > "${PACKAGE_FILE}.md5"
       
-      - name: Create repository catalog
-        run: |
-          # Create a minimal pkg repository catalog
-          PACKAGE_FILE=$(ls ${PACKAGE_NAME}-*.pkg)
-          PKG_NAME="${PACKAGE_NAME}"
-          PKG_VERSION=$(echo "$PACKAGE_FILE" | sed -E 's/.*-([0-9]+\.[0-9]+\.[0-9]+)\.pkg/\1/')
-          PKG_SIZE=$(stat -c%s "$PACKAGE_FILE")
-          PKG_SHA256=$(sha256sum "$PACKAGE_FILE" | awk '{print $1}')
-          
-          # Create meta.conf for repository
-          cat > meta.conf << 'METAEOF'
-          version = 2;
-          packing_format = "txz";
-          manifests = "packagesite.yaml";
-          filesite = "filesite.yaml";
-          manifests_archive = "packagesite";
-          filesite_archive = "filesite";
-          METAEOF
-          
-          # Create packagesite.yaml with single package entry
-          cat > packagesite.yaml << PKGEOF
-          ${PKG_NAME}-${PKG_VERSION}:
-            name: "${PKG_NAME}"
-            version: "${PKG_VERSION}"
-            origin: "sysutils/kaci-parental-control"
-            comment: "Parental control package for pfSense"
-            desc: "KACI Parental Control - Time limits and schedule-based internet access control for pfSense"
-            www: "https://github.com/keekar2022/KACI-Parental_Control"
-            maintainer: "mukesh@keekar.com"
-            prefix: "/usr/local"
-            sum: "${PKG_SHA256}"
-            flatsize: ${PKG_SIZE}
-            path: "${PACKAGE_FILE}"
-            repopath: "${PACKAGE_FILE}"
-            abi: "FreeBSD:14:amd64"
-            arch: "freebsd:14:x86:64"
-          PKGEOF
-          
-          # Create the compressed catalog
-          tar -czf packagesite.txz packagesite.yaml
-          rm packagesite.yaml
-          
-          # Compress meta.conf
-          tar -czf meta.txz meta.conf
-          rm meta.conf
-          
-          echo "Created repository catalog files:"
-          ls -lh packagesite.txz meta.txz
-      
       - name: Upload package artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -208,67 +153,7 @@ jobs:
             *.pkg.asc
             *.sha256
             *.md5
-            packagesite.txz
-            meta.txz
           retention-days: 90
-      
-      - name: Prepare GitHub Pages deployment
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        run: |
-          mkdir -p gh-pages/packages/freebsd/FreeBSD:14:amd64/latest
-          mkdir -p gh-pages/fingerprints/kaci
-          
-          # Copy packages and signatures
-          cp ${PACKAGE_NAME}-*.pkg gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
-          cp ${PACKAGE_NAME}-*.pkg.asc gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
-          cp ${PACKAGE_NAME}-*.sha256 gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
-          cp ${PACKAGE_NAME}-*.md5 gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
-          
-          # Copy repository catalog files
-          cp packagesite.txz gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
-          cp meta.txz gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
-          echo "Copied repository catalog files"
-          
-          # Copy GPG fingerprint
-          cp fingerprint.txt gh-pages/fingerprints/kaci/trusted
-          
-          # Generate index.html
-          cat > gh-pages/index.html << 'HTMLEOF'
-          <!DOCTYPE html>
-          <html>
-          <head>
-              <title>KACI Parental Control Package Repository</title>
-              <style>
-                  body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
-                  h1 { color: #2c3e50; }
-                  code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
-                  pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
-              </style>
-          </head>
-          <body>
-              <h1>🔒 KACI Parental Control Package Repository</h1>
-              <p>FreeBSD package repository for Keekar's Parental Control system.</p>
-              
-              <h2>📦 Installation</h2>
-              <pre><code>pkg install -y kaci-parental-control</code></pre>
-              
-              <h2>🔗 Links</h2>
-              <ul>
-                  <li><a href="packages/freebsd/FreeBSD:14:amd64/latest/">Browse Packages</a></li>
-                  <li><a href="https://github.com/keekar2022/KACI-Parental_Control">Source Code</a></li>
-              </ul>
-          </body>
-          </html>
-          HTMLEOF
-      
-      - name: Deploy to GitHub Pages
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./gh-pages
-          publish_branch: gh-pages
-          force_orphan: true
       
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -285,12 +170,12 @@ jobs:
             ## Installation
             
             ```bash
-            # Configure repository
+            # Add custom repository
             mkdir -p /usr/local/etc/pkg/repos
             cat > /usr/local/etc/pkg/repos/kaci.conf << 'EOF'
             kaci: {
               url: "https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}/latest",
-              mirror_type: "http",
+              mirror_type: "NONE",
               signature_type: "fingerprints",
               fingerprints: "/usr/local/etc/pkg/fingerprints/kaci",
               enabled: yes,
@@ -298,13 +183,7 @@ jobs:
             }
             EOF
             
-            # Download GPG fingerprint
-            mkdir -p /usr/local/etc/pkg/fingerprints/kaci
-            fetch -o /usr/local/etc/pkg/fingerprints/kaci/trusted \
-              https://keekar2022.github.io/KACI-Parental_Control/fingerprints/kaci/trusted
-            
             # Install package
-            pkg update
             pkg install -y kaci-parental-control
             ```
             

@@ -69,7 +69,7 @@ mkdir -p /usr/local/etc/pkg/repos
 cat > /usr/local/etc/pkg/repos/kaci.conf << 'EOF'
 kaci: {
   url: "https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}/latest",
-  mirror_type: "http",
+  mirror_type: "NONE",
   signature_type: "fingerprints",
   fingerprints: "/usr/local/etc/pkg/fingerprints/kaci",
   enabled: yes,
@@ -88,7 +88,7 @@ fetch -o /usr/local/etc/pkg/fingerprints/kaci/trusted \
     cat > /usr/local/etc/pkg/repos/kaci.conf << 'EOF2'
 kaci: {
   url: "https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}/latest",
-  mirror_type: "http",
+  mirror_type: "NONE",
   signature_type: "none",
   enabled: yes,
   priority: 10
@@ -96,7 +96,6 @@ kaci: {
 EOF2
 }
 log_success "GPG fingerprint installed"
-
 # Update pkg repository
 log_info "Step 4: Updating pkg repository..."
 pkg update || {
