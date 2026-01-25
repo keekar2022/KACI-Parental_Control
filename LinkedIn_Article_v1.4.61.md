@@ -34,15 +34,9 @@ chmod +x /tmp/migrate-to-pkg.sh
 **Fresh Installation:**
 
 ```bash
-mkdir -p /usr/local/etc/pkg/repos
-cat > /usr/local/etc/pkg/repos/kaci.conf << 'EOF'
-kaci: {
-  url: "pkg+https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}",
-  enabled: yes
-}
-EOF
-
-pkg update && pkg install -y kaci-parental-control
+# Install directly from GitHub Pages
+env IGNORE_OSVERSION=yes pkg add -f \
+  https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/$(pkg config ABI)/latest/kaci-parental-control-1.4.61.pkg
 ```
 
 The migration script backs up your configuration, removes old cron jobs, sets up the package repository, and restores all settings. Your profiles and schedules remain intact.
