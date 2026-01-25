@@ -163,6 +163,9 @@ jobs:
       - name: Generate repository metadata with pkg repo
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         uses: cross-platform-actions/action@v0.25.0
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         with:
           operating_system: freebsd
           version: '14.1'
@@ -173,18 +176,36 @@ jobs:
             cp *.pkg /tmp/repo/
             cp *.pkg.asc /tmp/repo/ 2>/dev/null || true
             
-            # Generate repository metadata using pkg repo
+            # Generate repository metadata using pkg repo with GPG signing
             cd /tmp/repo
-            sudo pkg repo .
+            
+            # Import GPG key for signing
+            echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+            
+            # Configure GPG for non-interactive use
+            mkdir -p ~/.gnupg
+            echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
+            echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
+            gpgconf --kill gpg-agent || true
+            
+            # Generate signed repository metadata
+            echo "$GPG_PASSPHRASE" | sudo pkg repo . "$GPG_PASSPHRASE"
+            
+            # Create meta file
+            echo "version = 2;" > meta
+            echo "packing_format = \"txz\";" >> meta
+            tar -czf meta.txz meta
+            rm meta
             
             # Verify metadata files were created
-            ls -la
+            ls -la *.txz
             
             # Copy generated metadata back to workspace
             cd /tmp/repo
             cp packagesite.txz /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/ || true
             cp meta.txz /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/ || true
             cp digests.txz /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/ || true
+            cp packagesite.pkg.sig /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/ || true
             
             ls -la /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/*.txz || echo "No .txz files found"
             echo "Repository metadata generated"
