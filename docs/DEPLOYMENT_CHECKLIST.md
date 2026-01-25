@@ -201,7 +201,7 @@ ssh admin@192.168.1.1
 mkdir -p /usr/local/etc/pkg/repos
 cat > /usr/local/etc/pkg/repos/kaci.conf << 'EOF'
 kaci: {
-  url: "pkg+https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}",
+  url: "https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}/latest",
   mirror_type: "none",
   signature_type: "fingerprints",
   fingerprints: "/usr/local/etc/pkg/fingerprints/kaci",
@@ -210,12 +210,10 @@ kaci: {
 }
 EOF
 
-# Add fingerprint
+# Download fingerprint
 mkdir -p /usr/local/etc/pkg/fingerprints/kaci
-cat > /usr/local/etc/pkg/fingerprints/kaci/trusted << 'EOF'
-function: sha256
-fingerprint: YOUR_FINGERPRINT_HERE
-EOF
+fetch -o /usr/local/etc/pkg/fingerprints/kaci/trusted \
+  https://keekar2022.github.io/KACI-Parental_Control/fingerprints/kaci/trusted
 
 # Install package
 pkg update

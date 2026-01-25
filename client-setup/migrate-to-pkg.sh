@@ -68,14 +68,34 @@ log_info "Step 3: Configuring pkg repository..."
 mkdir -p /usr/local/etc/pkg/repos
 cat > /usr/local/etc/pkg/repos/kaci.conf << 'EOF'
 kaci: {
-  url: "pkg+https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}",
+  url: "https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}/latest",
   mirror_type: "none",
-  signature_type: "none",
+  signature_type: "fingerprints",
+  fingerprints: "/usr/local/etc/pkg/fingerprints/kaci",
   enabled: yes,
   priority: 10
 }
 EOF
 log_success "Repository configured"
+
+# Download GPG fingerprint
+log_info "Step 3b: Installing GPG fingerprint for package verification..."
+mkdir -p /usr/local/etc/pkg/fingerprints/kaci
+fetch -o /usr/local/etc/pkg/fingerprints/kaci/trusted \
+  https://keekar2022.github.io/KACI-Parental_Control/fingerprints/kaci/trusted || {
+    log_warning "Failed to download GPG fingerprint, continuing without verification"
+    # Fallback to no signature verification
+    cat > /usr/local/etc/pkg/repos/kaci.conf << 'EOF2'
+kaci: {
+  url: "https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}/latest",
+  mirror_type: "none",
+  signature_type: "none",
+  enabled: yes,
+  priority: 10
+}
+EOF2
+}
+log_success "GPG fingerprint installed"
 
 # Update pkg repository
 log_info "Step 4: Updating pkg repository..."

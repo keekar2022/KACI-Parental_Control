@@ -92,13 +92,19 @@ crontab -l -u root | grep -v "parental_control" | crontab -u root -
 mkdir -p /usr/local/etc/pkg/repos
 cat > /usr/local/etc/pkg/repos/kaci.conf << 'EOF'
 kaci: {
-  url: "pkg+https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}",
+  url: "https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}/latest",
   mirror_type: "none",
-  signature_type: "none",
+  signature_type: "fingerprints",
+  fingerprints: "/usr/local/etc/pkg/fingerprints/kaci",
   enabled: yes,
   priority: 10
 }
 EOF
+
+# Download GPG fingerprint for package verification
+mkdir -p /usr/local/etc/pkg/fingerprints/kaci
+fetch -o /usr/local/etc/pkg/fingerprints/kaci/trusted \
+  https://keekar2022.github.io/KACI-Parental_Control/fingerprints/kaci/trusted
 
 # Update repository
 pkg update
