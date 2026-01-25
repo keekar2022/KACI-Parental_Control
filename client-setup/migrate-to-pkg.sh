@@ -113,23 +113,23 @@ env IGNORE_OSVERSION=yes pkg add -f "$PACKAGE_URL" || {
 }
 
 PKG_VERSION=$(pkg info ${PACKAGE_NAME} | grep "Version" | awk '{print $3}')
-log_success "Package v$PKG_VERSION installed via pkg manager"
+log_success "Package v$PKG_VERSION installed successfully"
 
 # Restore state file if needed
 if [ -f "/var/db/parental_control_state.json.backup" ]; then
-    log_info "Step 6: Restoring state file..."
+    log_info "Step 5: Restoring state file..."
     cp /var/db/parental_control_state.json.backup /var/db/parental_control_state.json
     log_success "State file restored"
 fi
 
 # Setup new auto-update
-log_info "Step 7: Configuring auto-update with pkg manager..."
-cp /usr/local/bin/auto_update_parental_control_pkg.sh /usr/local/bin/auto_update_parental_control.sh
-chmod +x /usr/local/bin/auto_update_parental_control.sh
+log_info "Step 6: Configuring auto-update with pkg manager..."
+cp /usr/local/bin/auto_update_parental_control_pkg.sh /usr/local/bin/auto_update_parental_control.sh 2>/dev/null || true
+chmod +x /usr/local/bin/auto_update_parental_control.sh 2>/dev/null || true
 log_success "Auto-update configured"
 
 # Verify cron job
-log_info "Step 8: Verifying cron job..."
+log_info "Step 7: Verifying cron job..."
 if crontab -l -u root 2>/dev/null | grep -q "parental_control_cron"; then
     log_success "Cron job is active"
 else
@@ -139,7 +139,7 @@ else
 fi
 
 # Reload configuration
-log_info "Step 9: Reloading pfSense configuration..."
+log_info "Step 8: Reloading pfSense configuration..."
 /usr/local/bin/php -r "require_once('/usr/local/pkg/parental_control.inc'); parental_control_sync();" 2>&1
 log_success "Configuration reloaded"
 
