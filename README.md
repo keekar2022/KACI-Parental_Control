@@ -21,8 +21,8 @@ A comprehensive parental control package for pfSense that helps parents manage a
 mkdir -p /usr/local/etc/pkg/repos
 cat > /usr/local/etc/pkg/repos/kaci.conf << 'EOF'
 kaci: {
-  url: "pkg+https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}",
-  mirror_type: "none",
+  url: "https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}/latest",
+  mirror_type: "http",
   signature_type: "fingerprints",
   fingerprints: "/usr/local/etc/pkg/fingerprints/kaci",
   enabled: yes,

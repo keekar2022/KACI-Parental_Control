@@ -49,8 +49,8 @@ mkdir -p /usr/local/etc/pkg/repos
 
 cat > /usr/local/etc/pkg/repos/${REPO_NAME}.conf << 'EOF'
 kaci: {
-  url: "pkg+https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}",
-  mirror_type: "none",
+  url: "https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}/latest",
+  mirror_type: "http",
   signature_type: "fingerprints",
   fingerprints: "/usr/local/etc/pkg/fingerprints/kaci",
   enabled: yes,
@@ -66,12 +66,13 @@ mkdir -p /usr/local/etc/pkg/fingerprints/${REPO_NAME}
 
 # Fetch GPG fingerprint from repository
 log_info "Fetching GPG fingerprint from repository..."
-fetch -qo - "${REPO_URL}/fingerprint.txt" > /usr/local/etc/pkg/fingerprints/${REPO_NAME}/trusted 2>/dev/null || {
+fetch -o /usr/local/etc/pkg/fingerprints/${REPO_NAME}/trusted \
+  https://keekar2022.github.io/KACI-Parental_Control/fingerprints/kaci/trusted 2>/dev/null || {
     log_warning "Could not fetch GPG fingerprint, using unsigned packages"
     cat > /usr/local/etc/pkg/repos/${REPO_NAME}.conf << 'EOF'
 kaci: {
-  url: "pkg+https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}",
-  mirror_type: "none",
+  url: "https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}/latest",
+  mirror_type: "http",
   signature_type: "none",
   enabled: yes,
   priority: 10

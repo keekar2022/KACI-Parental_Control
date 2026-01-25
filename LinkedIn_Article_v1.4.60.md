@@ -1,28 +1,28 @@
-# 🚀 KACI Parental Control v1.4.60: Major Enhancement + Critical Migration Update
+# KACI Parental Control v1.4.60: Major Release + Critical Migration Notice
 
-I'm excited to announce the release of **KACI Parental Control v1.4.60** with major enhancements for pfSense! This release marks a significant milestone in our journey toward professional BSD package distribution.
+I'm announcing KACI Parental Control v1.4.60 for pfSense with major enhancements and an important transition to BSD package distribution.
 
-## 🎯 What's New in v1.4.60
+## What's New
 
-Version 1.4.60 brings major enhancements to the parental control system, including improved performance, enhanced monitoring capabilities, and refined time tracking algorithms. This production-ready release represents months of development and testing.
+Version 1.4.60 brings improved performance, enhanced monitoring, and refined time tracking algorithms. Production-ready and available now.
 
-## 📦 Important: Migrate to BSD Package Distribution
+## Critical: Migrate to BSD Package Distribution
 
-**Starting today, we're transitioning from code-based deployment to industry-standard BSD package management.** This change brings significant benefits to all users:
+We're transitioning from code-based deployment to BSD package management. Benefits include:
 
-✅ **Easier Installation** - One command, fully automated  
-✅ **Automatic Updates** - Integrated with FreeBSD pkg system  
-✅ **Enhanced Security** - GPG-signed packages  
-✅ **Professional Distribution** - Industry-standard approach  
-✅ **Better Stability** - Tested binary packages  
+- Simpler installation (one command)
+- Automatic updates via FreeBSD pkg system
+- GPG-signed packages for better security
+- Tested binary packages for improved stability
 
-## ⏰ Critical Timeline: 90 Days to Migrate
+## 90-Day Migration Deadline
 
-**The legacy code-based deployment (INSTALL.sh and auto_update scripts) will be available for the next 90 days only.** After that, these methods will be decommissioned. Please migrate to the BSD package distribution before **April 25, 2026**.
+The old installation method (INSTALL.sh and auto_update scripts) will be decommissioned after April 25, 2026. Migration takes 5 minutes.
 
-## 🔧 How to Migrate (Takes 5 Minutes)
+## Migration Steps
 
-**Option 1: Automated Migration** (Recommended)
+**Automated (Recommended):**
+
 ```bash
 fetch -o /tmp/migrate-to-pkg.sh \
   https://raw.githubusercontent.com/keekar2022/KACI-Parental_Control/main/client-setup/migrate-to-pkg.sh
@@ -31,9 +31,9 @@ chmod +x /tmp/migrate-to-pkg.sh
 /tmp/migrate-to-pkg.sh
 ```
 
-**Option 2: Fresh Installation**
+**Fresh Installation:**
+
 ```bash
-# Configure repository
 mkdir -p /usr/local/etc/pkg/repos
 cat > /usr/local/etc/pkg/repos/kaci.conf << 'EOF'
 kaci: {
@@ -42,47 +42,23 @@ kaci: {
 }
 EOF
 
-# Install package
-pkg update
-pkg install -y kaci-parental-control
+pkg update && pkg install -y kaci-parental-control
 ```
 
-The migration script automatically:
-- Backs up your configuration and state
-- Removes legacy cron jobs
-- Configures the new pkg repository
-- Installs the package via pkg manager
-- Restores your settings seamlessly
+The migration script backs up your configuration, removes old cron jobs, sets up the package repository, and restores all settings. Your profiles and schedules remain intact.
 
-## 🤝 Call for Collaboration
+## Seeking Collaborators
 
-**Want to make KACI Parental Control available directly through the pfSense Package Manager?**
+I'm looking for help integrating KACI Parental Control into the official pfSense Package Manager. If you have experience with pfSense package development, FreeBSD port maintenance, or package repository management, let's connect.
 
-I'm actively seeking collaborators who can help integrate this package into the official pfSense package repository. If you have experience with:
-- pfSense package development and submission
-- FreeBSD port maintenance
-- Package repository management
-- Community engagement within pfSense ecosystem
+## Resources
 
-Let's connect! Together, we can make advanced parental controls accessible to thousands of pfSense users worldwide through native package manager integration.
+- Migration Guide: https://github.com/keekar2022/KACI-Parental_Control/blob/main/docs/MIGRATION_TO_PKG_REPO.md
+- Documentation: https://keekar2022.github.io/KACI-Parental_Control/
+- Support: https://github.com/keekar2022/KACI-Parental_Control/issues
 
-## 📚 Resources
+Moving to BSD package distribution makes this project more mature and reliable, follows pfSense best practices, and positions us for potential official package repository inclusion.
 
-- **Migration Guide**: https://github.com/keekar2022/KACI-Parental_Control/blob/main/docs/MIGRATION_TO_PKG_REPO.md
-- **Documentation**: https://keekar2022.github.io/KACI-Parental_Control/
-- **Support**: https://github.com/keekar2022/KACI-Parental_Control/issues
+Questions? Drop a comment or reach out directly.
 
-## 🎯 Why This Matters
-
-Moving to BSD package distribution represents a maturation of this project from a script-based tool to an enterprise-grade solution. It aligns with FreeBSD and pfSense best practices, enhances security through package signing, and provides a foundation for potential inclusion in the official pfSense package repository.
-
-**Don't wait—migrate today and enjoy a more stable, secure, and maintainable parental control solution!**
-
----
-
-*Have questions about migration? Drop a comment below or reach out directly. I'm here to help make your transition smooth and hassle-free.*
-
-#pfSense #FreeBSD #NetworkSecurity #ParentalControls #OpenSource #PackageManagement #BSDPackages #Cybersecurity
-
----
-© 2026 Keekar - Built with Passion
+#pfSense #FreeBSD #NetworkSecurity #ParentalControls #OpenSource
