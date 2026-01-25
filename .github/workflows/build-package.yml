@@ -166,39 +166,43 @@ jobs:
           # Create metadata files for pkg repository
           PACKAGE_FILE=$(ls ${PACKAGE_NAME}-*.pkg)
           VERSION="${{ steps.version.outputs.version }}"
+          PKG_SHA256=$(sha256sum "$PACKAGE_FILE" | awk '{print $1}')
+          PKG_SIZE=$(stat -c%s "$PACKAGE_FILE" 2>/dev/null || stat -f%z "$PACKAGE_FILE")
           
-          # Create meta.conf
+          # Create meta.conf in UCL format
           cat > meta.conf << EOF
-          version = 2;
-          packing_format = "txz";
-          EOF
+version = 2;
+packing_format = "txz";
+manifests = "packagesite.yaml";
+filesite = "packagesite.yaml";
+EOF
           
-          # Create packagesite.yaml
-          cat > packagesite.yaml << 'YAML_EOF'
-          kaci-parental-control-${{ steps.version.outputs.version }}:
-            name: kaci-parental-control
-            version: "${{ steps.version.outputs.version }}"
-            origin: sysutils/kaci-parental-control
-            comment: "Keekar's Parental Control for pfSense - Advanced time-based access control"
-            arch: FreeBSD:14:amd64
-            www: https://github.com/keekar2022/KACI-Parental_Control
-            maintainer: mkesharw@keekar.com
-            prefix: /
-            sum: $(sha256sum "$PACKAGE_FILE" | awk '{print $1}')
-            flatsize: $(stat -c%s "$PACKAGE_FILE" 2>/dev/null || stat -f%z "$PACKAGE_FILE")
-            path: $PACKAGE_FILE
-            licenses: [GPL-3.0-or-later]
-            categories: [sysutils]
-          YAML_EOF
-          
-          # Replace variables in packagesite.yaml
-          sed -i "s|\$PACKAGE_FILE|$PACKAGE_FILE|g" packagesite.yaml
+          # Create packagesite.yaml with proper values
+          cat > packagesite.yaml << EOF
+${PACKAGE_NAME}-${VERSION}:
+  name: ${PACKAGE_NAME}
+  version: "${VERSION}"
+  origin: sysutils/${PACKAGE_NAME}
+  comment: "Keekar's Parental Control for pfSense - Advanced time-based access control"
+  arch: FreeBSD:14:amd64
+  www: https://github.com/keekar2022/KACI-Parental_Control
+  maintainer: mkesharw@keekar.com
+  prefix: /
+  sum: ${PKG_SHA256}
+  flatsize: ${PKG_SIZE}
+  path: ${PACKAGE_FILE}
+  licenses: [GPL-3.0-or-later]
+  categories: [sysutils]
+EOF
           
           # Create compressed metadata
           tar -czf meta.txz meta.conf
           tar -czf packagesite.txz packagesite.yaml
           
           echo "Created meta.txz and packagesite.txz"
+          echo "Package: $PACKAGE_FILE"
+          echo "SHA256: $PKG_SHA256"
+          echo "Size: $PKG_SIZE"
       
       - name: Prepare GitHub Pages deployment
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
