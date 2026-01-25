@@ -160,45 +160,30 @@ jobs:
             *.md5
           retention-days: 90
       
-      - name: Generate repository metadata
+      - name: Generate repository metadata with pkg repo
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
-        run: |
-          # Create metadata files for pkg repository
-          PACKAGE_FILE=$(ls ${PACKAGE_NAME}-*.pkg)
-          VERSION="${{ steps.version.outputs.version }}"
-          PKG_SHA256=$(sha256sum "$PACKAGE_FILE" | awk '{print $1}')
-          PKG_SIZE=$(stat -c%s "$PACKAGE_FILE" 2>/dev/null || stat -f%z "$PACKAGE_FILE")
-          
-          # Create meta.conf in UCL format
-          echo 'version = 2;' > meta.conf
-          echo 'packing_format = "txz";' >> meta.conf
-          echo 'manifests = "packagesite.yaml";' >> meta.conf
-          echo 'filesite = "packagesite.yaml";' >> meta.conf
-          
-          # Create packagesite.yaml with proper values
-          echo "${PACKAGE_NAME}-${VERSION}:" > packagesite.yaml
-          echo "  name: ${PACKAGE_NAME}" >> packagesite.yaml
-          echo "  version: \"${VERSION}\"" >> packagesite.yaml
-          echo "  origin: sysutils/${PACKAGE_NAME}" >> packagesite.yaml
-          echo "  comment: \"Keekar's Parental Control for pfSense - Advanced time-based access control\"" >> packagesite.yaml
-          echo "  arch: FreeBSD:14:amd64" >> packagesite.yaml
-          echo "  www: https://github.com/keekar2022/KACI-Parental_Control" >> packagesite.yaml
-          echo "  maintainer: mkesharw@keekar.com" >> packagesite.yaml
-          echo "  prefix: /" >> packagesite.yaml
-          echo "  sum: ${PKG_SHA256}" >> packagesite.yaml
-          echo "  flatsize: ${PKG_SIZE}" >> packagesite.yaml
-          echo "  path: ${PACKAGE_FILE}" >> packagesite.yaml
-          echo "  licenses: [GPL-3.0-or-later]" >> packagesite.yaml
-          echo "  categories: [sysutils]" >> packagesite.yaml
-          
-          # Create compressed metadata
-          tar -czf meta.txz meta.conf
-          tar -czf packagesite.txz packagesite.yaml
-          
-          echo "Created meta.txz and packagesite.txz"
-          echo "Package: $PACKAGE_FILE"
-          echo "SHA256: $PKG_SHA256"
-          echo "Size: $PKG_SIZE"
+        uses: cross-platform-actions/action@v0.25.0
+        with:
+          operating_system: freebsd
+          version: '14.1'
+          shell: bash
+          run: |
+            # Create repository directory structure
+            mkdir -p /tmp/repo
+            cp *.pkg /tmp/repo/
+            cp *.pkg.asc /tmp/repo/ 2>/dev/null || true
+            
+            # Generate repository metadata using pkg repo
+            cd /tmp/repo
+            sudo pkg repo .
+            
+            # Copy generated metadata back to workspace
+            cp packagesite.* /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/ || true
+            cp meta.* /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/ || true
+            cp digests.* /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/ || true
+            
+            ls -la /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/*.txz
+            echo "Repository metadata generated"
       
       - name: Prepare GitHub Pages deployment
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
