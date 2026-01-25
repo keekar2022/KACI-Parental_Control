@@ -189,8 +189,13 @@ End users will configure their systems with:
 mkdir -p /usr/local/etc/pkg/repos
 cat > /usr/local/etc/pkg/repos/kaci.conf << 'EOF'
 kaci: {
+<<<<<<< Updated upstream
   url: "pkg+https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}",
   mirror_type: "none",
+=======
+  url: "https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}/latest",
+  mirror_type: "NONE",
+>>>>>>> Stashed changes
   signature_type: "fingerprints",
   fingerprints: "/usr/local/etc/pkg/fingerprints/kaci",
   enabled: yes,
