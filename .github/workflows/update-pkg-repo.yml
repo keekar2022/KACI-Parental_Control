@@ -34,14 +34,14 @@ jobs:
       
       - name: Create repository directory structure
         run: |
-          mkdir -p gh-pages/packages/freebsd/FreeBSD:14:amd64/latest
+          mkdir -p gh-pages/packages/freebsd/FreeBSD:15:amd64/latest
           mkdir -p gh-pages/fingerprints/kaci
           
           # Copy packages
-          cp packages/*.pkg gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
-          cp packages/*.pkg.asc gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
-          cp packages/*.sha256 gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
-          cp packages/*.md5 gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
+          cp packages/*.pkg gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/
+          cp packages/*.pkg.asc gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/
+          cp packages/*.sha256 gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/
+          cp packages/*.md5 gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/
           
           # Copy GPG fingerprint
           cp fingerprint.txt gh-pages/fingerprints/kaci/trusted
@@ -61,4 +61,4 @@ jobs:
       - name: Summary
         run: |
           echo "✅ Package repository deployed to GitHub Pages!"
-          echo "📦 Packages available at: https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/FreeBSD:14:amd64/latest/"
+          echo "📦 Packages available at: https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/FreeBSD:15:amd64/latest/"
