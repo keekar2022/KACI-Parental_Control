@@ -257,7 +257,7 @@ Follow the guides in order:
 ```bash
 # Commit all changes
 git add .
-git commit -m "feat: v1.4.60 - Add FreeBSD pkg manager distribution"
+git commit -m "feat: v1.4.61 - Add FreeBSD pkg manager distribution"
 
 # Push to develop for testing
 git push origin develop

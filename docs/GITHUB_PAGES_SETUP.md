@@ -99,10 +99,10 @@ https://keekar2022.github.io/KACI-Parental_Control/
     └── freebsd/
         └── FreeBSD:15:amd64/
             └── latest/
-                ├── kaci-parental-control-1.4.60.pkg
-                ├── kaci-parental-control-1.4.60.pkg.asc  (GPG signature)
-                ├── kaci-parental-control-1.4.60.pkg.sha256
-                └── kaci-parental-control-1.4.60.pkg.md5
+                ├── kaci-parental-control-1.4.61.pkg
+                ├── kaci-parental-control-1.4.61.pkg.asc  (GPG signature)
+                ├── kaci-parental-control-1.4.61.pkg.sha256
+                └── kaci-parental-control-1.4.61.pkg.md5
 ```
 
 ---
@@ -124,12 +124,10 @@ kaci: {
 }
 EOF
 
-# Add GPG fingerprint
+# Download GPG fingerprint
 mkdir -p /usr/local/etc/pkg/fingerprints/kaci
-cat > /usr/local/etc/pkg/fingerprints/kaci/trusted << 'EOF'
-function: sha256
-fingerprint: YOUR_GPG_FINGERPRINT_HERE
-EOF
+fetch -o /usr/local/etc/pkg/fingerprints/kaci/trusted \
+  https://keekar2022.github.io/KACI-Parental_Control/fingerprints/kaci/trusted
 
 # Install package
 pkg update

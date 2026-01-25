@@ -1,10 +1,10 @@
-# KACI Parental Control v1.4.60: Major Release + Critical Migration Notice
+# KACI Parental Control v1.4.61: Major Release + Critical Migration Notice
 
-I'm announcing KACI Parental Control v1.4.60 for pfSense with major enhancements and an important transition to BSD package distribution.
+I'm announcing KACI Parental Control v1.4.61 for pfSense with major enhancements and an important transition to BSD package distribution.
 
 ## What's New
 
-Version 1.4.60 brings improved performance, enhanced monitoring, and refined time tracking algorithms. Production-ready and available now.
+Version 1.4.61 brings improved performance, enhanced monitoring, and refined time tracking algorithms. Production-ready and available now.
 
 ## Critical: Migrate to BSD Package Distribution
 

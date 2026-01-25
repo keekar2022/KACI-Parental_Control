@@ -101,6 +101,11 @@ kaci: {
 }
 EOF
 
+# Download GPG fingerprint for package verification
+mkdir -p /usr/local/etc/pkg/fingerprints/kaci
+fetch -o /usr/local/etc/pkg/fingerprints/kaci/trusted \
+  https://keekar2022.github.io/KACI-Parental_Control/fingerprints/kaci/trusted
+
 # Update repository
 pkg update
 ```
@@ -149,9 +154,9 @@ pkg info kaci-parental-control
 
 Expected output:
 ```
-kaci-parental-control-1.4.59
+kaci-parental-control-1.4.61
 Name           : kaci-parental-control
-Version        : 1.4.59
+Version        : 1.4.61
 ...
 ```
 
@@ -341,4 +346,4 @@ If you encounter issues during migration:
 ---
 
 **Last Updated:** January 24, 2026  
-**Applies To:** KACI Parental Control v1.4.59+
+**Applies To:** KACI Parental Control v1.4.61+

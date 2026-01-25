@@ -37,8 +37,8 @@
 - ✅ Package build workflow SUCCESSFUL!
 - ✅ GPG signing WORKS! (Fixed with `--pinentry-mode loopback`)
 - ✅ Package artifacts generated:
-  - `kaci-parental-control-1.4.60.pkg`
-  - `kaci-parental-control-1.4.60.pkg.asc` (GPG signature)
+  - `kaci-parental-control-1.4.61.pkg`
+  - `kaci-parental-control-1.4.61.pkg.asc` (GPG signature)
   - SHA256 and MD5 checksums
 - ✅ All code committed and pushed to `develop` branch
 
@@ -139,8 +139,8 @@ Make repository private:
 
 ### **Artifacts Created:**
 Package artifacts are available in GitHub Actions (Run #21321763222):
-- Binary package: `kaci-parental-control-1.4.60.pkg`
-- GPG signature: `kaci-parental-control-1.4.60.pkg.asc`
+- Binary package: `kaci-parental-control-1.4.61.pkg`
+- GPG signature: `kaci-parental-control-1.4.61.pkg.asc`
 - SHA256 checksum
 - MD5 checksum
 

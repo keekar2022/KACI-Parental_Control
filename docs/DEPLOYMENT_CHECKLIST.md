@@ -153,7 +153,7 @@ gh repo edit keekar2022/KACI-Parental_Control --enable-pages --pages-build-type 
 ```bash
 # Commit changes
 git add .
-git commit -m "feat: v1.4.60 - Add FreeBSD pkg manager distribution
+git commit -m "feat: v1.4.61 - Add FreeBSD pkg manager distribution
 
 - Create pkg-manifest.ucl and pkg-plist
 - Add GitHub Actions workflows for building and distributing packages
@@ -210,12 +210,10 @@ kaci: {
 }
 EOF
 
-# Add fingerprint
+# Download fingerprint
 mkdir -p /usr/local/etc/pkg/fingerprints/kaci
-cat > /usr/local/etc/pkg/fingerprints/kaci/trusted << 'EOF'
-function: sha256
-fingerprint: YOUR_FINGERPRINT_HERE
-EOF
+fetch -o /usr/local/etc/pkg/fingerprints/kaci/trusted \
+  https://keekar2022.github.io/KACI-Parental_Control/fingerprints/kaci/trusted
 
 # Install package
 pkg update
