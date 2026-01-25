@@ -160,33 +160,33 @@ jobs:
           PKG_SHA256=$(sha256sum "$PACKAGE_FILE" | awk '{print $1}')
           
           # Create meta.conf for repository
-          cat > meta.conf << METAEOF
-version = 2;
-packing_format = "txz";
-manifests = "packagesite.yaml";
-filesite = "filesite.yaml";
-manifests_archive = "packagesite";
-filesite_archive = "filesite";
-METAEOF
+          cat > meta.conf << 'METAEOF'
+          version = 2;
+          packing_format = "txz";
+          manifests = "packagesite.yaml";
+          filesite = "filesite.yaml";
+          manifests_archive = "packagesite";
+          filesite_archive = "filesite";
+          METAEOF
           
           # Create packagesite.yaml with single package entry
           cat > packagesite.yaml << PKGEOF
-${PKG_NAME}-${PKG_VERSION}:
-  name: "${PKG_NAME}"
-  version: "${PKG_VERSION}"
-  origin: "sysutils/kaci-parental-control"
-  comment: "Parental control package for pfSense"
-  desc: "KACI Parental Control - Time limits and schedule-based internet access control for pfSense"
-  www: "https://github.com/keekar2022/KACI-Parental_Control"
-  maintainer: "mukesh@keekar.com"
-  prefix: "/usr/local"
-  sum: "${PKG_SHA256}"
-  flatsize: ${PKG_SIZE}
-  path: "${PACKAGE_FILE}"
-  repopath: "${PACKAGE_FILE}"
-  abi: "FreeBSD:14:amd64"
-  arch: "freebsd:14:x86:64"
-PKGEOF
+          ${PKG_NAME}-${PKG_VERSION}:
+            name: "${PKG_NAME}"
+            version: "${PKG_VERSION}"
+            origin: "sysutils/kaci-parental-control"
+            comment: "Parental control package for pfSense"
+            desc: "KACI Parental Control - Time limits and schedule-based internet access control for pfSense"
+            www: "https://github.com/keekar2022/KACI-Parental_Control"
+            maintainer: "mukesh@keekar.com"
+            prefix: "/usr/local"
+            sum: "${PKG_SHA256}"
+            flatsize: ${PKG_SIZE}
+            path: "${PACKAGE_FILE}"
+            repopath: "${PACKAGE_FILE}"
+            abi: "FreeBSD:14:amd64"
+            arch: "freebsd:14:x86:64"
+          PKGEOF
           
           # Create the compressed catalog
           tar -czf packagesite.txz packagesite.yaml
