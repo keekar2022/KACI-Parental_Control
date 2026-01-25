@@ -172,32 +172,32 @@ jobs:
           
           # Generate index.html
           cat > gh-pages/index.html << 'HTMLEOF'
-<!DOCTYPE html>
-<html>
-<head>
-    <title>KACI Parental Control Package Repository</title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
-        h1 { color: #2c3e50; }
-        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
-        pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
-    </style>
-</head>
-<body>
-    <h1>🔒 KACI Parental Control Package Repository</h1>
-    <p>FreeBSD package repository for Keekar's Parental Control system.</p>
-    
-    <h2>📦 Installation</h2>
-    <pre><code>pkg install -y kaci-parental-control</code></pre>
-    
-    <h2>🔗 Links</h2>
-    <ul>
-        <li><a href="packages/freebsd/FreeBSD:14:amd64/latest/">Browse Packages</a></li>
-        <li><a href="https://github.com/keekar2022/KACI-Parental_Control">Source Code</a></li>
-    </ul>
-</body>
-</html>
-HTMLEOF
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>KACI Parental Control Package Repository</title>
+              <style>
+                  body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+                  h1 { color: #2c3e50; }
+                  code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+                  pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
+              </style>
+          </head>
+          <body>
+              <h1>🔒 KACI Parental Control Package Repository</h1>
+              <p>FreeBSD package repository for Keekar's Parental Control system.</p>
+              
+              <h2>📦 Installation</h2>
+              <pre><code>pkg install -y kaci-parental-control</code></pre>
+              
+              <h2>🔗 Links</h2>
+              <ul>
+                  <li><a href="packages/freebsd/FreeBSD:14:amd64/latest/">Browse Packages</a></li>
+                  <li><a href="https://github.com/keekar2022/KACI-Parental_Control">Source Code</a></li>
+              </ul>
+          </body>
+          </html>
+          HTMLEOF
       
       - name: Deploy to GitHub Pages
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
