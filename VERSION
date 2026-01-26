@@ -1,4 +1,4 @@
-VERSION=1.4.63
+VERSION=1.4.64
 BUILD_DATE=2026-01-26
 RELEASE_TYPE=whatsapp_exception_fix
 STATUS=production-ready

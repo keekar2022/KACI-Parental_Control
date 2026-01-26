@@ -3237,7 +3237,11 @@ function pc_create_service_monitoring_rules() {
 	$pf_rules[] = "";
 	
 	// v1.4.63: WhatsApp Exception - MUST come BEFORE service blocks
-	if ($has_whatsapp_alias && $has_facebook_alias) {
+	// Check if both WhatsApp and Facebook services exist
+	$has_whatsapp_pf = in_array('PC_Service_WhatsApp', $service_aliases);
+	$has_facebook_pf = in_array('PC_Service_Facebook', $service_aliases);
+	
+	if ($has_whatsapp_pf && $has_facebook_pf) {
 		$pf_rules[] = "# WhatsApp Exception: Allow WhatsApp even when Facebook is blocked";
 		$pf_rules[] = "# REASON: Meta owns WhatsApp/Facebook/Instagram - they share IP infrastructure";
 		$pf_rules[] = "pass log quick on {$lan_if} inet from <pc_blocked_facebook> to <PC_Service_WhatsApp> flags S/SA keep state label \"USER_RULE: Parental Control - WhatsApp Exception\"";
