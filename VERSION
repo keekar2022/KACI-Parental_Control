@@ -1,4 +1,4 @@
-VERSION=1.4.62
+VERSION=1.4.63
 BUILD_DATE=2026-01-26
-RELEASE_TYPE=bot_detection_enhancement
+RELEASE_TYPE=whatsapp_exception_fix
 STATUS=production-ready

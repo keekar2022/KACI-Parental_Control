@@ -3147,10 +3147,50 @@ function pc_create_service_monitoring_rules() {
 		$service_monitor_rules[] = $monitor_rule;
 	}
 	
+	// v1.4.63: Add WhatsApp exception rule to allow WhatsApp even when Facebook is blocked
+	// CRITICAL: Meta owns WhatsApp, Facebook, Instagram - they share IP infrastructure
+	// PROBLEM: WhatsApp calls get blocked when Facebook is blocked (same IPs)
+	// SOLUTION: Insert exception rule BEFORE Facebook block to allow WhatsApp always
+	$whatsapp_exception_rules = array();
+	
+	// Check if both WhatsApp and Facebook services exist
+	$has_whatsapp = in_array('PC_Service_WhatsApp', $service_aliases);
+	$has_facebook = in_array('PC_Service_Facebook', $service_aliases);
+	
+	if ($has_whatsapp && $has_facebook) {
+		// Exception rule: Allow WhatsApp from devices blocked for Facebook
+		$whatsapp_exception = array(
+			'type' => 'pass',
+			'interface' => 'lan',
+			'ipprotocol' => 'inet',
+			'direction' => 'any',
+			'floating' => 'yes',
+			'quick' => 'yes',
+			'source' => array(
+				'address' => 'pc_blocked_facebook'  // Devices blocked for Facebook
+			),
+			'destination' => array(
+				'address' => 'PC_Service_WhatsApp'  // But allow WhatsApp
+			),
+			'descr' => 'Parental Control - WhatsApp Exception (Allow despite Facebook block)',
+			'created' => array(
+				'time' => time(),
+				'username' => 'system@parentalcontrol'
+			),
+			'log' => 'yes'
+		);
+		$whatsapp_exception_rules[] = $whatsapp_exception;
+		
+		pc_log("Added WhatsApp exception rule to allow calls when Facebook is blocked", 'info', array(
+			'event.action' => 'whatsapp_exception_added',
+			'reason' => 'Meta services share IP infrastructure'
+		));
+	}
+	
 	// CRITICAL: Insert rules AFTER general block rule in correct priority order
 	// Position: After "Parental Control - Dynamic Blocking" rule
-	// Order: Service blocks first, then service monitors
-	$all_service_rules = array_merge($service_block_rules, $service_monitor_rules);
+	// Order: WhatsApp exceptions FIRST, then service blocks, then service monitors
+	$all_service_rules = array_merge($whatsapp_exception_rules, $service_block_rules, $service_monitor_rules);
 	array_splice($rules, $blocking_rule_index + 1, 0, $all_service_rules);
 	
 	config_set_path('filter/rule', $rules);
@@ -3195,6 +3235,14 @@ function pc_create_service_monitoring_rules() {
 	$pf_rules[] = "# PRIORITY 1: General Profile Time Limit Blocking";
 	$pf_rules[] = "block drop log quick on {$lan_if} inet from <parental_control_blocked> to any label \"USER_RULE: Parental Control - Dynamic Blocking\"";
 	$pf_rules[] = "";
+	
+	// v1.4.63: WhatsApp Exception - MUST come BEFORE service blocks
+	if ($has_whatsapp_alias && $has_facebook_alias) {
+		$pf_rules[] = "# WhatsApp Exception: Allow WhatsApp even when Facebook is blocked";
+		$pf_rules[] = "# REASON: Meta owns WhatsApp/Facebook/Instagram - they share IP infrastructure";
+		$pf_rules[] = "pass log quick on {$lan_if} inet from <pc_blocked_facebook> to <PC_Service_WhatsApp> flags S/SA keep state label \"USER_RULE: Parental Control - WhatsApp Exception\"";
+		$pf_rules[] = "";
+	}
 	
 	// PRIORITY 2 & 3: Service-specific rules (block then monitor)
 	$pf_rules[] = "# PRIORITY 2: Service-Specific Blocking (checked after general block)";
