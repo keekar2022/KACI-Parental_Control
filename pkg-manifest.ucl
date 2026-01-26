@@ -1,5 +1,5 @@
 name = "kaci-parental-control"
-version = "1.4.63"
+version = "1.4.65"
 origin = "sysutils/kaci-parental-control"
 comment = "Keekar's Parental Control for pfSense - Advanced time-based access control"
 arch = "FreeBSD:15:amd64"
@@ -32,7 +32,7 @@ EOD
 categories = [ "sysutils" ]
 message = <<EOM
 ====================================================================
-Keekar's Parental Control v1.4.63 has been installed successfully!
+Keekar's Parental Control v1.4.65 has been installed successfully!
 ====================================================================
 
 To configure the service:

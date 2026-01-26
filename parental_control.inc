@@ -1044,6 +1044,76 @@ function pc_get_today_midnight() {
  * @see pc_save_state() For writing state
  * @see pc_get_today_midnight() For proper reset time initialization
  */
+/**
+ * Sync profile metadata from config.xml into state structure
+ * 
+ * CRITICAL FIX v1.4.65: Profile metadata (name, devices, service_tracking) was never
+ * being populated from config into state. This caused "No Monitoring Active" warnings
+ * and broke bot detection which requires full profile structures.
+ * 
+ * This function reads profile configs and populates state['profiles'] with:
+ * - Profile name
+ * - Device list (from 'row' in config)
+ * - Service tracking enabled flag
+ * - Usage counters (preserves existing if present)
+ * 
+ * @param array &$state Reference to state array to update
+ * @return void Updates state array directly
+ * @since 1.4.65
+ */
+function pc_sync_profiles_to_state(&$state) {
+	// Ensure profiles structure exists
+	if (!isset($state['profiles'])) {
+		$state['profiles'] = array();
+	}
+	
+	// Load profiles from config
+	$config_profiles = pc_get_profiles(true); // no cache - fresh data
+	
+	foreach ($config_profiles as $profile) {
+		$profile_name = isset($profile['name']) ? $profile['name'] : null;
+		if (!$profile_name) {
+			continue; // Skip profiles without names
+		}
+		
+		// Initialize profile in state if doesn't exist
+		if (!isset($state['profiles'][$profile_name])) {
+			$state['profiles'][$profile_name] = array(
+				'usage_today' => 0,
+				'usage_week' => 0,
+				'last_reset' => pc_get_today_midnight()
+			);
+		}
+		
+		// Populate profile metadata from config
+		$state['profiles'][$profile_name]['name'] = $profile_name;
+		$state['profiles'][$profile_name]['enabled'] = isset($profile['enabled']) && $profile['enabled'] === 'on';
+		$state['profiles'][$profile_name]['service_tracking_enabled'] = !empty($profile['service_limits']);
+		
+		// Extract devices from profile (already normalized by pc_get_profiles)
+		$state['profiles'][$profile_name]['devices'] = array();
+		if (isset($profile['devices']) && is_array($profile['devices'])) {
+			foreach ($profile['devices'] as $device) {
+				if (!empty($device['mac_address'])) {
+					$state['profiles'][$profile_name]['devices'][] = array(
+						'mac' => pc_normalize_mac($device['mac_address']),
+						'name' => isset($device['device_name']) ? $device['device_name'] : 'Unknown',
+						'ip' => isset($device['ip_address']) ? $device['ip_address'] : null
+					);
+				}
+			}
+		}
+	}
+	
+	pc_log("Synced profile metadata from config to state", 'debug', array(
+		'event.action' => 'profiles_synced',
+		'profile_count' => count($config_profiles),
+		'total_devices' => array_sum(array_map(function($p) { 
+			return isset($p['devices']) ? count($p['devices']) : 0; 
+		}, $state['profiles']))
+	));
+}
+
 function pc_init_state() {
 	if (!file_exists(PC_STATE_FILE)) {
 		// GRACEFUL DEGRADATION: Ensure state directory exists
@@ -1063,14 +1133,20 @@ function pc_init_state() {
 			'last_check' => time()
 		);
 		
+		// CRITICAL FIX v1.4.65: Sync profile metadata from config into state
+		// WHY: State initialization was creating empty profiles array, but never
+		// populating it with actual profile data from config. This broke monitoring.
+		pc_sync_profiles_to_state($state);
+		
 		try {
 			$result = file_put_contents(PC_STATE_FILE, json_encode($state, JSON_PRETTY_PRINT));
 			if ($result !== false) {
 				@chmod(PC_STATE_FILE, 0644);
-				pc_log("Initialized state file with IP-based structure (Layer 3)", 'info', array(
+				pc_log("Initialized state file with IP-based structure and profile metadata", 'info', array(
 					'event.action' => 'state_initialized',
 					'format' => 'ip_based',
-					'version' => '0.2.1'
+					'version' => '1.4.65',
+					'profiles' => count($state['profiles'])
 				));
 			} else {
 				pc_log("Failed to initialize state file", 'error');
@@ -1133,6 +1209,11 @@ function pc_load_state_from_disk() {
 		
 		// CRITICAL: Migrate from MAC-based to IP-based state (v0.2.0 → v0.2.1)
 		$state = pc_migrate_state_to_ip_based($state);
+		
+		// CRITICAL FIX v1.4.65: Sync profile metadata on every load
+		// WHY: Ensures state always has current profile/device info from config
+		// IMPACT: Fixes "No Monitoring Active" warnings and enables bot detection
+		pc_sync_profiles_to_state($state);
 		
 		return $state;
 	} catch (Exception $e) {
