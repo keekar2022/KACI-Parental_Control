@@ -170,7 +170,7 @@ jobs:
           operating_system: freebsd
           version: '14.1'
           shell: bash
-          sync_files: runner-to-vm
+          sync_files: true
           run: |
             # Create repository directory structure
             mkdir -p repo-tmp
@@ -219,19 +219,16 @@ jobs:
           cp packagesite.yaml gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/ 2>/dev/null || echo "Warning: packagesite.yaml missing"
           cp digests.txz gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/ 2>/dev/null || echo "Warning: digests.txz missing (optional)"
           
-          # Create meta.conf if not exists
-          if [ ! -f gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/meta.conf ]; then
-            cat > gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/meta.conf << 'META_EOF'
-name: "kaci"
-url: "https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/FreeBSD:15:amd64/latest"
-mirror_type: "NONE"
-signature_type: "fingerprints"
-fingerprints: "/usr/local/etc/pkg/fingerprints/kaci"
-enabled: yes
-priority: 10
+          # Always create meta.conf in correct FreeBSD pkg format (semicolon-terminated)
+          cat > gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/meta.conf << 'META_EOF'
+version = 2;
+packing_format = "txz";
+manifests = "packagesite.txz";
+filesite = "filesite.txz";
+manifests_archive = "packagesite";
+filesite_archive = "filesite";
 META_EOF
-            echo "Created meta.conf"
-          fi
+          echo "Created meta.conf in correct FreeBSD pkg format"
           
           # Create symlink/copy for latest version
           LATEST_PKG=$(ls -t gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/*.pkg | head -1)
