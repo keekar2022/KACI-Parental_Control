@@ -221,13 +221,13 @@ jobs:
           
           # Always create meta.conf in correct FreeBSD pkg format (semicolon-terminated)
           cat > gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/meta.conf << 'META_EOF'
-version = 2;
-packing_format = "txz";
-manifests = "packagesite.txz";
-filesite = "filesite.txz";
-manifests_archive = "packagesite";
-filesite_archive = "filesite";
-META_EOF
+          version = 2;
+          packing_format = "txz";
+          manifests = "packagesite.txz";
+          filesite = "filesite.txz";
+          manifests_archive = "packagesite";
+          filesite_archive = "filesite";
+          META_EOF
           echo "Created meta.conf in correct FreeBSD pkg format"
           
           # Create symlink/copy for latest version
