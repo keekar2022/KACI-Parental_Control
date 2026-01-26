@@ -1,0 +1,15 @@
+# FreeBSD Package Repository Directory
+# This directory contains the FreeBSD package repository for pfSense 2.7.x (FreeBSD 14)
+#
+# Structure:
+# - meta.conf          : Repository metadata configuration
+# - meta.txz           : Compressed repository metadata
+# - packagesite.txz    : Package index/catalog
+# - packagesite.pkg.sig: GPG signature for packagesite.txz
+# - digests.txz        : Package checksums
+# - *.pkg              : FreeBSD package files
+# - *.pkg.asc          : GPG signatures for packages
+#
+# This directory is automatically populated by GitHub Actions workflow
+# Files are deployed to GitHub Pages at:
+# https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/FreeBSD:14:amd64/latest/
