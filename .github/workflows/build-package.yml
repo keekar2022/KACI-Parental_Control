@@ -170,27 +170,31 @@ jobs:
           operating_system: freebsd
           version: '14.1'
           shell: bash
+          sync_files: runner-to-vm
           run: |
             # Create repository directory structure
-            mkdir -p /tmp/repo
-            cp *.pkg /tmp/repo/
-            cp *.pkg.asc /tmp/repo/ 2>/dev/null || true
+            mkdir -p repo-tmp
+            cp *.pkg repo-tmp/
+            cp *.pkg.asc repo-tmp/ 2>/dev/null || true
             
             # Generate repository metadata using pkg repo
-            cd /tmp/repo
+            cd repo-tmp
             sudo pkg repo .
             
             # Verify metadata files were created
-            ls -la *.txz 2>/dev/null || echo "Repository created"
+            echo "Generated repository files:"
+            ls -lah *.txz *.yaml 2>/dev/null || echo "Repository created"
             
-            # Copy generated metadata back to workspace
-            cd /tmp/repo
-            cp packagesite.txz /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/ || true
-            cp meta.txz /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/ || true
-            cp digests.txz /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/ || true
-            cp packagesite.pkg.sig /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/ || true
+            # Copy generated metadata back to parent directory
+            cp packagesite.txz ../ || echo "Warning: packagesite.txz not created"
+            cp packagesite.yaml ../ || echo "Warning: packagesite.yaml not created"
+            cp meta.txz ../ || echo "Warning: meta.txz not created"
+            cp digests.txz ../ || echo "Warning: digests.txz not created"
             
-            ls -la /home/runner/work/KACI-Parental_Control/KACI-Parental_Control/*.txz || echo "No .txz files found"
+            # List files in parent directory
+            cd ..
+            echo "Files in workspace:"
+            ls -lah *.txz *.yaml 2>/dev/null || echo "No metadata files found in workspace"
             echo "Repository metadata generated"
       
       - name: Prepare GitHub Pages deployment
@@ -201,16 +205,43 @@ jobs:
           
           # Debug: List files before copying
           echo "Files in current directory:"
-          ls -la *.pkg *.pkg.asc *.sha256 *.md5 *.txz 2>/dev/null || echo "Some files not found"
+          ls -lah *.pkg *.pkg.asc *.sha256 *.md5 *.txz *.yaml 2>/dev/null || echo "Some files not found"
           
-          # Copy package and metadata files
+          # Copy package files
           cp *.pkg gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/
-          cp *.pkg.asc gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/ 2>/dev/null || true
+          cp *.pkg.asc gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/ 2>/dev/null || echo "No .pkg.asc files"
           cp *.sha256 gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/
           cp *.md5 gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/
-          cp meta.txz gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/ 2>/dev/null || echo "No meta.txz (optional, pkg will generate)"
-          cp packagesite.txz gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/
-          cp digests.txz gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/ 2>/dev/null || echo "No digests.txz (optional)"
+          
+          # Copy repository metadata files
+          cp meta.txz gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/ 2>/dev/null || echo "Warning: meta.txz missing (optional)"
+          cp packagesite.txz gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/ 2>/dev/null || echo "Warning: packagesite.txz missing"
+          cp packagesite.yaml gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/ 2>/dev/null || echo "Warning: packagesite.yaml missing"
+          cp digests.txz gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/ 2>/dev/null || echo "Warning: digests.txz missing (optional)"
+          
+          # Create meta.conf if not exists
+          if [ ! -f gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/meta.conf ]; then
+            cat > gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/meta.conf << 'META_EOF'
+name: "kaci"
+url: "https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/FreeBSD:15:amd64/latest"
+mirror_type: "NONE"
+signature_type: "fingerprints"
+fingerprints: "/usr/local/etc/pkg/fingerprints/kaci"
+enabled: yes
+priority: 10
+META_EOF
+            echo "Created meta.conf"
+          fi
+          
+          # Create symlink/copy for latest version
+          LATEST_PKG=$(ls -t gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/*.pkg | head -1)
+          if [ -n "$LATEST_PKG" ]; then
+            cp "$LATEST_PKG" gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/kaci-parental-control-latest.pkg
+            if [ -f "${LATEST_PKG}.asc" ]; then
+              cp "${LATEST_PKG}.asc" gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/kaci-parental-control-latest.pkg.asc
+            fi
+            echo "Created latest package symlink/copy"
+          fi
           
           # Debug: List files after copying
           echo "Files in gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/:"
