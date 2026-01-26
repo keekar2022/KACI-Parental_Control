@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>KACI Parental Control - Package Repository</title>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+    h1 { color: #2c3e50; }
+    code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+    pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>KACI Parental Control - FreeBSD Package Repository</h1>
+  <p>Official package repository for KACI Parental Control on pfSense.</p>
+  
+  <h2>Installation</h2>
+  <pre><code># Configure repository
+mkdir -p /usr/local/etc/pkg/repos
+cat > /usr/local/etc/pkg/repos/kaci.conf << 'REPO_EOF'
+kaci: {
+  url: "https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd/${ABI}/latest",
+  mirror_type: "NONE",
+  signature_type: "fingerprints",
+  fingerprints: "/usr/local/etc/pkg/fingerprints/kaci",
+  enabled: yes,
+  priority: 10
+}
+REPO_EOF
+
+# Install GPG fingerprint
+mkdir -p /usr/local/etc/pkg/fingerprints/kaci
+fetch -o /usr/local/etc/pkg/fingerprints/kaci/trusted \
+  https://keekar2022.github.io/KACI-Parental_Control/fingerprints/fingerprint.txt
+
+# Install package
+pkg update
+pkg install -y kaci-parental-control</code></pre>
+  
+  <h2>Links</h2>
+  <ul>
+    <li><a href="https://github.com/keekar2022/KACI-Parental_Control">GitHub Repository</a></li>
+    <li><a href="packages/freebsd/FreeBSD:15:amd64/latest/">Package Directory</a></li>
+    <li><a href="fingerprints/fingerprint.txt">GPG Fingerprint</a></li>
+  </ul>
+</body>
+</html>
