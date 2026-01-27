@@ -325,18 +325,28 @@ if (is_array($profiles)) {
 							$limit_formatted = $daily_limit > 0 ? sprintf("%d:%02d", floor($daily_limit / 60), $daily_limit % 60) : "Unlimited";
 							$remaining_formatted = $daily_limit > 0 ? sprintf("%d:%02d", floor($remaining / 60), $remaining % 60) : "∞";
 							
-						?>
-						<tr class="<?=$status_class?>">
-							<td><?=$profile_name?></td>
-							<td><?=$device_name?></td>
-							<td><code><?=$mac_display?></code></td>
-							<td><?php 
-								if ($device_ip) {
-									echo '<code>' . htmlspecialchars($device_ip) . '</code>';
-								} else {
-									echo '<em style="color: #999;">Not Found</em>';
-								}
-							?></td>
+					?>
+					<tr class="<?=$status_class?>">
+						<td><?=$profile_name?></td>
+						<td>
+							<?=$device_name?>
+							<?php 
+							// NEW v1.4.67: Show auto-discovered badge
+							if (!empty($device['auto_discovered'])):
+							?>
+								<span class="label label-info" style="margin-left: 5px;" title="Auto-discovered on <?=htmlspecialchars($device['auto_discovered'])?>">
+									<i class="fa fa-magic"></i> Auto
+								</span>
+							<?php endif; ?>
+						</td>
+						<td><code><?=$mac_display?></code></td>
+						<td><?php 
+							if ($device_ip) {
+								echo '<code>' . htmlspecialchars($device_ip) . '</code>';
+							} else {
+								echo '<em style="color: #999;">Not Found</em>';
+							}
+						?></td>
 							<td><?=$status?></td>
 							<td><?=$limit_formatted?></td>
 							<td>

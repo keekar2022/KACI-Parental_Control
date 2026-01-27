@@ -703,6 +703,9 @@ function parental_control_sync() {
 			'event.category' => 'configuration'
 		));
 		
+		// NEW v1.4.67: Ensure Default profile exists for auto-discovery
+		pc_ensure_default_profile();
+		
 		// Check if service is enabled
 		$enabled = config_get_path('installedpackages/parentalcontrol/config/0/enable') === 'on';
 		
@@ -1112,6 +1115,281 @@ function pc_sync_profiles_to_state(&$state) {
 			return isset($p['devices']) ? count($p['devices']) : 0; 
 		}, $state['profiles']))
 	));
+}
+
+/**
+ * Ensure Default profile exists with predefined limits
+ * 
+ * Creates "Default" profile during installation/upgrade if it doesn't exist.
+ * This profile is used for auto-discovery of unassigned devices.
+ * 
+ * Default Limits:
+ * - General Internet: 24 hours (1440 min)
+ * - Facebook: 2 hours (120 min)
+ * - YouTube: 2 hours (120 min)
+ * - Discord: 2 hours (120 min)
+ * - WhatsApp: 12 hours (720 min)
+ * 
+ * @return bool True if Default profile exists or was created
+ * @since 1.4.67
+ */
+function pc_ensure_default_profile() {
+	global $config;
+	
+	$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', []);
+	
+	// Check if Default profile already exists
+	foreach ($profiles as $profile) {
+		if (isset($profile['name']) && $profile['name'] === 'Default') {
+			return true; // Already exists
+		}
+	}
+	
+	// Create Default profile
+	$default_profile = array(
+		'name' => 'Default',
+		'enabled' => 'on',
+		'daily_limit' => 1440, // 24 hours
+		'weekend_bonus' => 0,
+		'service_limits' => array(
+			'PC_Service_Facebook' => array(
+				'daily_limit' => 120, // 2 hours
+				'weekend_bonus' => 0
+			),
+			'PC_Service_YouTube' => array(
+				'daily_limit' => 120, // 2 hours
+				'weekend_bonus' => 0
+			),
+			'PC_Service_Discord' => array(
+				'daily_limit' => 120, // 2 hours
+				'weekend_bonus' => 0
+			),
+			'PC_Service_WhatsApp' => array(
+				'daily_limit' => 720, // 12 hours
+				'weekend_bonus' => 0
+			)
+		),
+		'row' => array(), // No devices initially
+		'auto_discovery_enabled' => 'on', // Flag for auto-discovery
+		'description' => 'Auto-discovery profile for unassigned devices'
+	);
+	
+	$profiles[] = $default_profile;
+	config_set_path('installedpackages/parentalcontrolprofiles/config', $profiles);
+	write_config("Created Default profile for auto-discovery");
+	
+	pc_log("Created Default profile for auto-discovery", 'info', array(
+		'event.action' => 'default_profile_created',
+		'profile.name' => 'Default',
+		'daily_limit' => 1440
+	));
+	
+	return true;
+}
+
+/**
+ * Auto-discover and assign untracked devices to Default profile
+ * 
+ * Checks devices with active service connections that have no profile assigned.
+ * Automatically adds them to the Default profile unless marked as manually managed.
+ * 
+ * Handles devices with changing MAC addresses by:
+ * - Using hostname as primary identifier
+ * - Supporting multiple MACs per hostname
+ * - Tracking auto-discovered devices separately
+ * 
+ * @param array &$state State array (modified by reference)
+ * @param array $service_connections_by_ip Array of [ip => [service => count]]
+ * @return array Stats about auto-discovery (discovered_count, assigned_count)
+ * @since 1.4.67
+ */
+function pc_auto_discover_devices(&$state, $service_connections_by_ip) {
+	global $config;
+	
+	$stats = array(
+		'checked' => 0,
+		'discovered' => 0,
+		'assigned' => 0,
+		'skipped_managed' => 0
+	);
+	
+	// Get all manually assigned devices (devices in any profile)
+	$assigned_macs = array();
+	$assigned_ips = array();
+	$assigned_hostnames = array();
+	$manually_managed = array(); // Track devices moved from Default
+	
+	$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', []);
+	foreach ($profiles as $profile) {
+		$devices = isset($profile['row']) ? $profile['row'] : [];
+		foreach ($devices as $device) {
+			if (!empty($device['mac_address'])) {
+				$assigned_macs[pc_normalize_mac($device['mac_address'])] = true;
+			}
+			if (!empty($device['ip_address'])) {
+				$assigned_ips[$device['ip_address']] = true;
+			}
+			if (!empty($device['hostname'])) {
+				$assigned_hostnames[strtolower($device['hostname'])] = true;
+			}
+			// Track manually managed flag
+			if (!empty($device['manually_managed'])) {
+				$manually_managed[pc_normalize_mac($device['mac_address'])] = true;
+			}
+		}
+	}
+	
+	// Check each device with service connections
+	foreach ($service_connections_by_ip as $ip => $services) {
+		$stats['checked']++;
+		
+		// Get device info from state
+		if (!isset($state['devices_by_ip'][$ip])) {
+			continue; // No device info yet
+		}
+		
+		$device = $state['devices_by_ip'][$ip];
+		$mac = isset($device['mac']) ? pc_normalize_mac($device['mac']) : null;
+		$hostname = isset($device['hostname']) ? strtolower($device['hostname']) : null;
+		
+		// Skip if device already has a profile
+		if (!empty($device['profile']) && $device['profile'] !== 'Default') {
+			continue;
+		}
+		
+		// Skip if marked as manually managed
+		if ($mac && isset($manually_managed[$mac])) {
+			$stats['skipped_managed']++;
+			continue;
+		}
+		
+		// Skip if already assigned (by MAC, IP, or hostname)
+		if ($mac && isset($assigned_macs[$mac])) {
+			continue;
+		}
+		if (isset($assigned_ips[$ip])) {
+			continue;
+		}
+		if ($hostname && isset($assigned_hostnames[$hostname])) {
+			continue;
+		}
+		
+		// Check if device is connecting to monitored services
+		$monitored_services = array('Facebook', 'Discord', 'YouTube', 'WhatsApp');
+		$has_monitored_connection = false;
+		foreach ($services as $service_name => $count) {
+			if (in_array($service_name, $monitored_services) && $count > 0) {
+				$has_monitored_connection = true;
+				break;
+			}
+		}
+		
+		if (!$has_monitored_connection) {
+			continue; // Not connecting to monitored services
+		}
+		
+		// Device qualifies for auto-discovery
+		$stats['discovered']++;
+		
+		// Ensure Default profile exists
+		pc_ensure_default_profile();
+		
+		// Add device to Default profile
+		$success = pc_auto_assign_to_default($ip, $device);
+		
+		if ($success) {
+			$stats['assigned']++;
+			
+			// Update state to reflect profile assignment
+			$state['devices_by_ip'][$ip]['profile'] = 'Default';
+			$state['devices_by_ip'][$ip]['auto_discovered'] = time();
+			
+			// Log the event
+			pc_log("Auto-discovered device and assigned to Default profile", 'notice', array(
+				'event.action' => 'device_auto_discovered',
+				'device.name' => isset($device['name']) ? $device['name'] : 'Unknown',
+				'device.hostname' => $hostname,
+				'device.mac' => $mac,
+				'client.address' => $ip,
+				'services_detected' => array_keys($services),
+				'profile.assigned' => 'Default'
+			));
+			
+			// Add dashboard notification
+			pc_add_auto_discovery_notification($device, $services);
+		}
+	}
+	
+	return $stats;
+}
+
+/**
+ * Add device to Default profile configuration
+ * 
+ * @param string $ip Device IP address
+ * @param array $device Device info from state
+ * @return bool True if successfully added
+ * @since 1.4.67
+ */
+function pc_auto_assign_to_default($ip, $device) {
+	global $config;
+	
+	$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', []);
+	
+	// Find Default profile
+	$default_idx = null;
+	foreach ($profiles as $idx => $profile) {
+		if (isset($profile['name']) && $profile['name'] === 'Default') {
+			$default_idx = $idx;
+			break;
+		}
+	}
+	
+	if ($default_idx === null) {
+		return false; // Default profile not found
+	}
+	
+	// Prepare device entry
+	$new_device = array(
+		'device_name' => isset($device['name']) ? $device['name'] : (isset($device['hostname']) ? $device['hostname'] : $ip),
+		'mac_address' => isset($device['mac']) ? $device['mac'] : '',
+		'ip_address' => $ip,
+		'hostname' => isset($device['hostname']) ? $device['hostname'] : '',
+		'auto_discovered' => date('Y-m-d H:i:s'),
+		'manually_managed' => '' // Not manually managed
+	);
+	
+	// Initialize row array if it doesn't exist
+	if (!isset($profiles[$default_idx]['row'])) {
+		$profiles[$default_idx]['row'] = array();
+	}
+	
+	// Add device
+	$profiles[$default_idx]['row'][] = $new_device;
+	
+	// Save configuration
+	config_set_path('installedpackages/parentalcontrolprofiles/config', $profiles);
+	write_config("Auto-discovered device {$new_device['device_name']} added to Default profile");
+	
+	return true;
+}
+
+/**
+ * Add dashboard notification for auto-discovered device
+ * 
+ * @param array $device Device info
+ * @param array $services Service connections detected
+ * @since 1.4.67
+ */
+function pc_add_auto_discovery_notification($device, $services) {
+	$device_name = isset($device['name']) ? $device['name'] : 'Unknown Device';
+	$service_list = implode(', ', array_keys($services));
+	
+	$message = "Auto-discovered device '{$device_name}' connecting to {$service_list}. " .
+	           "Added to Default profile (24h internet, 2h per service). " .
+	           "You can move it to a custom profile in Profiles tab.";
+	
+	file_notice("parental_control_auto_discovery", $message, "Parental Control Auto-Discovery", "");
 }
 
 function pc_init_state() {
@@ -4728,6 +5006,32 @@ function parental_control_cron_job() {
 	// that aren't monitored services, causing 60-75 min phantom usage across ALL profiles
 	pc_detect_general_bot_behavior($state);
 	
+	// NEW v1.4.67: Auto-discovery for unassigned devices
+	// Collect service connections for auto-discovery
+	$service_connections_by_ip = array();
+	foreach ($devices as $device) {
+		$ip = pc_get_device_ip($device);
+		if ($ip) {
+			$connections = pc_get_service_connections($ip, $service_ips_cache, $all_states);
+			if (!empty($connections)) {
+				$service_connections_by_ip[$ip] = $connections;
+			}
+		}
+	}
+	
+	// Run auto-discovery
+	$auto_discovery_stats = pc_auto_discover_devices($state, $service_connections_by_ip);
+	
+	if ($auto_discovery_stats['discovered'] > 0) {
+		pc_log("Auto-discovery completed", 'info', array(
+			'event.action' => 'auto_discovery_completed',
+			'checked' => $auto_discovery_stats['checked'],
+			'discovered' => $auto_discovery_stats['discovered'],
+			'assigned' => $auto_discovery_stats['assigned'],
+			'skipped_managed' => $auto_discovery_stats['skipped_managed']
+		));
+	}
+	
 	// SMART BLOCKING: Calculate which devices should be blocked NOW
 	// Then compare with previous state and only update changed devices
 	// This avoids calling filter_configure() which causes AQM errors
@@ -7398,6 +7702,45 @@ function pc_get_profile_by_mac($mac) {
 		foreach ($profile['devices'] as $device) {
 			if (pc_normalize_mac($device['mac_address']) == $mac) {
 				return $profile;
+			}
+		}
+	}
+	
+	return null;
+}
+
+/**
+ * Find device by hostname (supports multiple MACs)
+ * 
+ * Searches for devices with matching hostname across all profiles.
+ * Returns the first matching device found with profile context.
+ * Useful for tracking devices with frequently changing MAC addresses.
+ * 
+ * @param string $hostname Device hostname to search for
+ * @return array|null Device array with profile_name or null if not found
+ * @since 1.4.67
+ * 
+ * @example
+ * $device = pc_find_device_by_hostname('iphone');
+ * if ($device) {
+ *     echo "Found in profile: " . $device['profile_name'];
+ * }
+ */
+function pc_find_device_by_hostname($hostname) {
+	if (empty($hostname)) {
+		return null;
+	}
+	
+	$hostname_lower = strtolower($hostname);
+	$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', []);
+	
+	foreach ($profiles as $profile) {
+		$devices = isset($profile['row']) ? $profile['row'] : [];
+		foreach ($devices as $device) {
+			if (!empty($device['hostname']) && 
+			    strtolower($device['hostname']) === $hostname_lower) {
+				$device['profile_name'] = isset($profile['name']) ? $profile['name'] : null;
+				return $device;
 			}
 		}
 	}

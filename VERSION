@@ -1,4 +1,4 @@
-VERSION=1.4.66
+VERSION=1.4.67
 BUILD_DATE=2026-01-28
-RELEASE_TYPE=profile_service_bot_check_fix
+RELEASE_TYPE=auto_discovery_default_profile
 STATUS=production-ready

@@ -271,12 +271,30 @@ if ($_POST['save_device']) {
 		if (isset($_POST['device_id']) && is_numeric($_POST['device_id'])) {
 			// Edit existing device
 			$device_id = intval($_POST['device_id']);
+			
+			// NEW v1.4.67: Check if device is being moved FROM Default profile
+			$old_device = isset($profiles[$profile_id]['row'][$device_id]) ? $profiles[$profile_id]['row'][$device_id] : null;
+			$is_from_default = ($old_device && isset($old_device['auto_discovered']) && !empty($old_device['auto_discovered']));
+			
+			// If device was auto-discovered in Default and still in Default, mark as manually managed
+			// This prevents it from being reassigned by auto-discovery
+			if ($is_from_default && isset($profiles[$profile_id]['name']) && $profiles[$profile_id]['name'] === 'Default') {
+				$device['manually_managed'] = 'on';
+			}
+			
 			$profiles[$profile_id]['row'][$device_id] = $device;
 			$action = "Updated";
 		} else {
 			// Add new device
 			$profiles[$profile_id]['row'][] = $device;
 			$action = "Added";
+		}
+		
+		// NEW v1.4.67: Mark device as manually managed if being added to non-Default profile
+		// This prevents auto-discovery from reassigning it
+		if (isset($profiles[$profile_id]['name']) && $profiles[$profile_id]['name'] !== 'Default') {
+			$device_idx = isset($_POST['device_id']) ? intval($_POST['device_id']) : (count($profiles[$profile_id]['row']) - 1);
+			$profiles[$profile_id]['row'][$device_idx]['manually_managed'] = 'on';
 		}
 		
 		config_set_path('installedpackages/parentalcontrolprofiles/config', $profiles);
