@@ -1,4 +1,4 @@
-VERSION=1.4.65
-BUILD_DATE=2026-01-27
-RELEASE_TYPE=state_initialization_fix
+VERSION=1.4.66
+BUILD_DATE=2026-01-28
+RELEASE_TYPE=profile_service_bot_check_fix
 STATUS=production-ready

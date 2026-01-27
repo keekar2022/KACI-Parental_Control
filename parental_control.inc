@@ -6154,10 +6154,27 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 						);
 					}
 					
-					// Add interval minutes to profile's service usage
-					$state['profiles'][$profile_name]['service_usage'][$service_name]['usage_today'] += $interval_minutes;
-					$state['profiles'][$profile_name]['service_usage'][$service_name]['usage_week'] += $interval_minutes;
-					$state['profiles'][$profile_name]['service_usage'][$service_name]['last_seen'] = time();
+					// CRITICAL FIX v1.4.66: Check if this service is flagged as bot for this device
+					// WHY: Device-level bot detection prevents phantom usage for device counters,
+					// but profile-level was missing this check, causing profile service usage to
+					// exceed general internet usage (e.g., Facebook 5h vs Internet 3.5h - IMPOSSIBLE!)
+					// IMPACT: Fixes critical bug where background iOS connections (iCloud, Apple Push)
+					// hitting Meta IPs were counted as "Facebook usage" at profile level even when
+					// device-level correctly skipped them as bot traffic.
+					$is_service_bot = isset($state['devices_by_ip'][$ip]['service_usage'][$service_name]['is_bot']) && 
+					                  $state['devices_by_ip'][$ip]['service_usage'][$service_name]['is_bot'];
+					
+					// Only add usage if NOT flagged as bot (matching device-level logic)
+					if (!$is_service_bot) {
+						// Add interval minutes to profile's service usage
+						$state['profiles'][$profile_name]['service_usage'][$service_name]['usage_today'] += $interval_minutes;
+						$state['profiles'][$profile_name]['service_usage'][$service_name]['usage_week'] += $interval_minutes;
+						$state['profiles'][$profile_name]['service_usage'][$service_name]['last_seen'] = time();
+					} else {
+						// Bot traffic detected - skip profile service usage increment
+						// Only update last_seen timestamp
+						$state['profiles'][$profile_name]['service_usage'][$service_name]['last_seen'] = time();
+					}
 				}
 			}
 		}
