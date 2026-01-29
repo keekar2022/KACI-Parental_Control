@@ -100,6 +100,7 @@ echo "3. Removing configuration data..."
 /usr/local/bin/php <<'EOF'
 <?php
 require_once('/etc/inc/config.inc');
+global $config;
 
 // Remove all parental control config sections
 config_set_path('installedpackages/parentalcontrol', null);
@@ -107,7 +108,7 @@ config_set_path('installedpackages/parentalcontrolprofiles', null);
 config_set_path('installedpackages/parentalcontrolschedules', null);
 
 // Remove menu entries
-$config = parse_config(true);
+// In pfSense 2.8.x, $config is automatically loaded after requiring config.inc
 if (isset($config['installedpackages']['menu'])) {
     $config['installedpackages']['menu'] = array_filter(
         $config['installedpackages']['menu'],

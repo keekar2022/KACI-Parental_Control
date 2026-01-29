@@ -23,9 +23,10 @@ require_once("/usr/local/pkg/parental_control.inc");
 session_start();
 
 // Safety check: Ensure config is valid
+// In pfSense 2.8.x, $config is automatically loaded when config.inc is required
 if (!is_array($config) || $config === -1) {
 	require_once("config.inc");
-	$config = parse_config(true);
+	global $config;
 	if (!is_array($config) || $config === -1) {
 		die("Fatal: Unable to load configuration. Please restore from backup.");
 	}
@@ -50,7 +51,7 @@ function safe_write_config($desc) {
 	if (!is_array($config) || $config === -1) {
 		// Config is corrupted, try to reload it
 		require_once("config.inc");
-		$config = parse_config(true);
+		global $config;
 		if (!is_array($config) || $config === -1) {
 			// Can't recover, give up
 			error_log("Cannot write config: config is corrupted");
@@ -77,7 +78,7 @@ function safe_write_config($desc) {
 		if (!is_array($config) || $config === -1) {
 			// write_config failed and corrupted $config, reload it
 			require_once("config.inc");
-			$config = parse_config(true);
+			global $config;
 			return false;
 		}
 		
@@ -86,13 +87,13 @@ function safe_write_config($desc) {
 		error_log("Failed to write config: " . $e->getMessage());
 		// Reload config after failure
 		require_once("config.inc");
-		$config = parse_config(true);
+		global $config;
 		return false;
 	} catch (Error $e) {
 		error_log("Failed to write config: " . $e->getMessage());
 		// Reload config after failure
 		require_once("config.inc");
-		$config = parse_config(true);
+		global $config;
 		return false;
 	}
 }

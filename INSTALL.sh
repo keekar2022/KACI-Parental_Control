@@ -378,7 +378,8 @@ register_package() {
 require_once('/etc/inc/config.inc');
 require_once('/etc/inc/util.inc');
 
-$config = parse_config();
+// In pfSense 2.8.x, $config is automatically loaded after requiring config.inc
+global $config;
 
 // Ensure installedpackages array exists
 if (!is_array($config['installedpackages'])) {

@@ -1,4 +1,4 @@
-VERSION=1.4.67
-BUILD_DATE=2026-01-28
-RELEASE_TYPE=auto_discovery_default_profile
+VERSION=1.4.69
+BUILD_DATE=2026-01-30
+RELEASE_TYPE=parse_config_critical_fix
 STATUS=production-ready
