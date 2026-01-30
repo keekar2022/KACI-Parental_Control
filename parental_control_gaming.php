@@ -297,14 +297,58 @@ $tab_array[] = array("Status", false, "/parental_control_status.php");
 display_top_tabs($tab_array);
 ?>
 
+<!-- Gaming Detection & WHO Gaming Disorder Prevention (Merged Section) -->
 <div class="panel panel-default">
 	<div class="panel-heading">
-		<h2 class="panel-title">Gaming Detection & Control</h2>
+		<h2 class="panel-title"><i class="fa fa-gamepad"></i> Gaming Detection & Control</h2>
 	</div>
 	<div class="panel-body">
-		<div class="content">
+		<!-- Gaming Detection Description -->
+		<div class="content" style="margin-bottom: 20px;">
 			<p><strong>Gaming Detection</strong> automatically identifies when devices are playing online games (Minecraft, Steam, Roblox, etc.) and enforces gaming-specific time limits.</p>
 			<p><strong>How it works:</strong> Combines port detection (Minecraft: 25565, Steam: 27015-27030), behavioral patterns (high connections + Discord), and IP lists to identify gaming activity with confidence scores.</p>
+		</div>
+		
+		<!-- WHO Gaming Disorder Prevention -->
+		<div class="alert alert-info">
+			<h4><i class="fa fa-heartbeat"></i> World Health Organization Guidelines</h4>
+			<p><strong>Gaming disorder</strong> is officially recognized in the WHO's International Classification of Diseases (ICD-11) as a pattern of gaming behavior characterized by impaired control over gaming, increasing priority given to gaming over other activities.</p>
+			<p style="margin-bottom: 0;"><strong>Learn more:</strong> <a href="https://www.who.int/standards/classifications/frequently-asked-questions/gaming-disorder" target="_blank" rel="noopener">WHO Gaming Disorder FAQ</a></p>
+		</div>
+		
+		<!-- Universal Daily Gaming Limit Form -->
+		<form method="post" class="form-horizontal" style="margin-top: 20px;">
+			<div class="form-group">
+				<label class="col-sm-3 control-label">
+					<strong>Universal Daily Gaming Limit</strong>
+				</label>
+				<div class="col-sm-3">
+					<div class="input-group">
+						<input type="number" 
+						       name="daily_gaming_limit" 
+						       class="form-control" 
+						       value="<?= intval($gaming_config['daily_gaming_limit'] ?? 60) ?>" 
+						       min="30" max="180" />
+						<span class="input-group-addon">minutes</span>
+					</div>
+					<span class="help-block">
+						<strong>Applies to ALL profiles.</strong> WHO recommends limiting gaming time to prevent gaming disorder. Default: 60 minutes/day.
+					</span>
+				</div>
+			</div>
+			
+			<div class="form-group">
+				<div class="col-sm-offset-3 col-sm-6">
+					<button type="submit" name="save" value="save" class="btn btn-primary">
+						<i class="fa fa-save"></i> Save Gaming Limit
+					</button>
+				</div>
+			</div>
+		</form>
+		
+		<!-- Note about Status Tab -->
+		<div class="alert alert-info" style="margin: 15px 0 0 0;">
+			<i class="fa fa-info-circle"></i> <strong>Note:</strong> View real-time gaming usage and monitoring data on the <a href="/parental_control_status.php">Status</a> tab.
 		</div>
 	</div>
 </div>
@@ -644,53 +688,6 @@ display_top_tabs($tab_array);
 			</table>
 		</div>
 		<?php endif; ?>
-	</div>
-</div>
-
-<!-- WHO Recommendations & Universal Gaming Limits -->
-<div class="panel panel-default">
-	<div class="panel-heading">
-		<h2 class="panel-title"><i class="fa fa-heartbeat"></i> WHO Gaming Disorder Prevention</h2>
-	</div>
-	<div class="panel-body">
-		<div class="alert alert-info">
-			<h4><i class="fa fa-info-circle"></i> World Health Organization Guidelines</h4>
-			<p><strong>Gaming disorder</strong> is officially recognized in the WHO's International Classification of Diseases (ICD-11) as a pattern of gaming behavior characterized by impaired control over gaming, increasing priority given to gaming over other activities.</p>
-			<p><strong>Learn more:</strong> <a href="https://www.who.int/standards/classifications/frequently-asked-questions/gaming-disorder" target="_blank" rel="noopener">WHO Gaming Disorder FAQ</a></p>
-		</div>
-		
-		<form method="post" class="form-horizontal">
-			<div class="form-group">
-				<label class="col-sm-3 control-label">
-					<strong>Universal Daily Gaming Limit</strong>
-				</label>
-				<div class="col-sm-3">
-					<div class="input-group">
-						<input type="number" 
-						       name="daily_gaming_limit" 
-						       class="form-control" 
-						       value="<?= intval($gaming_config['daily_gaming_limit'] ?? 60) ?>" 
-						       min="30" max="180" />
-						<span class="input-group-addon">minutes</span>
-					</div>
-					<span class="help-block">
-						<strong>Applies to ALL profiles.</strong> WHO recommends limiting gaming time to prevent gaming disorder. Default: 60 minutes/day.
-					</span>
-				</div>
-			</div>
-			
-			<div class="form-group">
-				<div class="col-sm-offset-3 col-sm-6">
-					<button type="submit" name="save" value="save" class="btn btn-primary">
-						<i class="fa fa-save"></i> Save Gaming Limit
-					</button>
-				</div>
-			</div>
-		</form>
-		
-		<div class="alert alert-info" style="margin-top: 15px;">
-			<i class="fa fa-info-circle"></i> <strong>Note:</strong> View real-time gaming usage and monitoring data on the <a href="/parental_control_status.php">Status</a> tab.
-		</div>
 	</div>
 </div>
 

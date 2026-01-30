@@ -1,4 +1,4 @@
-VERSION=1.4.77
+VERSION=1.4.78
 BUILD_DATE=2026-01-31
-RELEASE_TYPE=gaming_block_page_integration
+RELEASE_TYPE=gaming_ui_consolidation
 STATUS=feature-testing
