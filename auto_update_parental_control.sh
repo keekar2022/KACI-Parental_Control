@@ -148,8 +148,8 @@ cp parental_control_blocked.php /usr/local/www/
 cp parental_control_captive.php /usr/local/www/
 cp parental_control_api.php /usr/local/www/
 cp parental_control_health.php /usr/local/www/
+cp parental_control_services.php /usr/local/www/
 
-cp parental_control_diagnostic.php /usr/local/bin/
 cp parental_control_analyzer.sh /usr/local/bin/
 cp parental_control_captive.sh /usr/local/etc/rc.d/parental_control_captive
 
@@ -157,7 +157,6 @@ cp parental_control_captive.sh /usr/local/etc/rc.d/parental_control_captive
 chmod 755 /usr/local/pkg/parental_control.inc
 chmod 644 /usr/local/pkg/parental_control.xml
 chmod 644 /usr/local/www/parental_control_*.php
-chmod 755 /usr/local/bin/parental_control_diagnostic.php
 chmod 755 /usr/local/bin/parental_control_analyzer.sh
 chmod 755 /usr/local/etc/rc.d/parental_control_captive
 
