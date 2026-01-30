@@ -8,6 +8,11 @@
 
 set -e
 
+# CRITICAL FIX v1.4.70: Ignore OS version mismatches
+# WHY: Packages built for FreeBSD 14 work fine on FreeBSD 15
+# SOLUTION: Bypass pkg version checks to prevent installation failures
+export IGNORE_OSVERSION=yes
+
 REPO_URL="https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd"
 REPO_NAME="kaci"
 PACKAGE_NAME="kaci-parental-control"

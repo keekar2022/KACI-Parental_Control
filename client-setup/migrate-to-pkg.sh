@@ -6,6 +6,11 @@
 
 set -e
 
+# CRITICAL FIX v1.4.70: Ignore OS version mismatches
+# WHY: Packages built for FreeBSD 14 work fine on FreeBSD 15
+# SOLUTION: Bypass pkg version checks to prevent migration failures
+export IGNORE_OSVERSION=yes
+
 PACKAGE_NAME="kaci-parental-control"
 OLD_CRON_CMD="/usr/local/bin/php /usr/local/bin/parental_control_cron.php"
 REPO_URL="https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd"

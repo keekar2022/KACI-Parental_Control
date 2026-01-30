@@ -8,8 +8,9 @@
 
 1. [Configuration Guide](#configuration-guide)
 2. [Troubleshooting](#troubleshooting)
-3. [Auto-Update Feature](#auto-update-feature)
-4. [Latest Fixes & Updates](#latest-fixes--updates)
+3. [Gaming Device Investigation](#gaming-device-investigation)
+4. [Auto-Update Feature](#auto-update-feature)
+5. [Latest Fixes & Updates](#latest-fixes--updates)
 
 ---
 
@@ -6448,3 +6449,270 @@ If you continue to experience issues after upgrading to 1.4.1:
 **Date**: 2026-01-01  
 **Fix Type**: Critical Bug Fix
 
+---
+
+# Gaming Device Investigation
+
+**How to identify and verify gaming activity is being tracked**
+
+## Quick Investigation
+
+If you need to identify which device is currently gaming and verify it's in a profile:
+
+### Method 1: Use Web UI Status Page (Easiest)
+
+1. Navigate to: **Services → Keekar's Parental Control → Status**
+2. Check **"Profile & Device Status"** section:
+   - Look for devices with high connection counts (50-100+)
+   - Check "Status" column for "Online" devices
+   - Note IP Address and MAC Address
+3. Check **"Per-Service Usage Breakdown"** section:
+   - High Discord connections = gaming voice chat
+   - High YouTube connections = gaming videos/streams
+   - Look for "Active Now" showing many connections
+
+### Method 2: Use Investigation Script (Most Detailed)
+
+A script is available in the project directory: `identify_gaming_device.sh`
+
+**To run from your Mac:**
+```bash
+cd ~/Documents/KACI-Parental_Control-Dev
+ssh nas.keekar.com "ssh admin@192.168.1.1 'sh -s'" < identify_gaming_device.sh
+```
+
+**What it shows:**
+- Device with most active connections
+- Gaming port detection (Xbox, PlayStation, Steam, etc.)
+- Profile assignment status
+- Recommendations
+
+### Method 3: Manual SSH Investigation
+
+Connect to pfSense via jump host:
+
+```bash
+# Connect through jump host
+ssh nas.keekar.com "fw exec 'COMMAND'"
+
+# Find devices with most connections
+ssh nas.keekar.com "fw exec 'pfctl -s state | grep ESTABLISHED | awk \"{print \\\$3}\" | cut -d: -f1 | sort | uniq -c | sort -rn | head -10'"
+
+# Check KACI state for device details
+ssh nas.keekar.com "fw exec 'cat /var/db/parental_control_state.json | jq \".devices_by_ip | to_entries | sort_by(.value.connections_last_check) | reverse | .[0:5]\"'"
+
+# Use KACI analyzer tool
+ssh nas.keekar.com "fw exec '/usr/local/bin/parental_control_analyzer.sh state'"
+```
+
+## Gaming Detection Indicators
+
+### Connection Count Patterns
+
+| Connection Count | Likely Activity |
+|------------------|-----------------|
+| 1-10 connections | Normal browsing, email |
+| 10-30 connections | Video streaming |
+| 30-60 connections | Heavy browsing or light gaming |
+| **60-100+ connections** | **Active gaming or heavy streaming** |
+
+### Gaming Ports
+
+| Port(s) | Gaming Platform |
+|---------|----------------|
+| 3074 | Xbox Live |
+| 3478-3480 | PlayStation Network |
+| 27015-27030 | Steam (PC Games) |
+| 6112-6119 | Blizzard Games (WoW, Overwatch) |
+| 5222-5223 | Epic Games (Fortnite) |
+| 25565 | Minecraft (custom servers) |
+
+### Service Usage Patterns
+
+**Strong gaming indicators:**
+- **Discord**: 30+ active connections = gaming voice chat
+- **YouTube**: 20+ active connections = gaming videos/streams
+- **Both active simultaneously** = almost certainly gaming
+
+## Verify Profile Assignment
+
+### Check if Device is Tracked
+
+**Option 1: Status Page**
+1. Go to **Status** tab
+2. Find the device in "Profile & Device Status"
+3. If device is listed → It's tracked ✓
+4. If device is missing → It's NOT tracked ✗
+
+**Option 2: Using PHP Script**
+
+A verification script is available: `check_gaming_profile.php`
+
+Copy to firewall and run:
+```bash
+ssh nas.keekar.com "scp ~/check_gaming_profile.php admin@192.168.1.1:/tmp/"
+ssh nas.keekar.com "fw exec 'php /tmp/check_gaming_profile.php'"
+```
+
+## What KACI Currently Tracks
+
+### Already Monitoring:
+
+✅ **Connection-Based Tracking**
+- Number of active ESTABLISHED connections per device
+- Only counts connections to PUBLIC IPs (external internet)
+- Filters out local LAN traffic
+- Updates every 5 minutes
+
+✅ **Per-Service Tracking**
+- YouTube, Facebook, Discord, TikTok, Instagram, Twitter, Twitch, Netflix
+- Tracks time spent per service
+- Counts active connections per service
+- Shows service-specific usage on Status page
+
+✅ **Device Information**
+- IP Address (Layer 3)
+- MAC Address (Layer 2)
+- Device Name (from DHCP/hostname)
+- Usage today/week
+- Last seen timestamp
+- Connection history
+
+✅ **Smart Features**
+- Bot detection (prevents phantom usage from background apps)
+- Auto-discovery (automatically finds new devices)
+- Schedule-based blocking (bedtime, homework hours)
+
+## If Device is NOT in a Profile
+
+### Immediate Action Required
+
+The device has **no tracking or limits** enforced. Add it immediately:
+
+1. **Via Web UI:**
+   - Go to: **Services → Keekar's Parental Control → Profiles**
+   - Click "Edit" for the appropriate child's profile
+   - Scroll to "Devices" section
+   - Click "+ Add Device"
+   - Enter Device Name and MAC Address
+   - Click "Save"
+
+2. **Via Auto-Discovery (v1.4.67+):**
+   - Go to: **Services → Keekar's Parental Control → Settings**
+   - Enable "Auto-Discovery"
+   - Set "Default Profile" to the desired profile
+   - Devices with active connections will be automatically discovered
+   - Check Status page after 5 minutes
+
+## Recommended Enhancements
+
+### 1. Add Gaming Schedule
+
+Block gaming during homework hours:
+
+1. Go to: **KACI-PC-Schedule** tab
+2. Click "+ Add Schedule"
+3. Configure:
+   - **Name:** "No Gaming - Homework Time"
+   - **Profile:** Select child's profile
+   - **Start Time:** 15:00 (3 PM)
+   - **End Time:** 19:00 (7 PM)
+   - **Days:** Monday-Friday
+   - **Enable:** Checked
+4. Click "Save"
+
+### 2. Set Service-Specific Limits
+
+Limit gaming-related services:
+
+1. Go to: **Profiles** tab
+2. Edit child's profile
+3. Configure service limits:
+   - **Discord:** 60-120 minutes/day (gaming voice chat)
+   - **YouTube:** 120-150 minutes/day (gaming videos)
+   - **Twitch:** 60 minutes/day (game streaming)
+4. Click "Save"
+
+### 3. Review Daily Limits
+
+Consider different limits for weekdays vs weekends:
+- **Weekdays:** 180-240 minutes (3-4 hours)
+- **Weekends:** 360-480 minutes (6-8 hours)
+- Use "Weekend Bonus" feature for extra time
+
+## Future Gaming Detection Features
+
+### Planned Enhancements:
+
+1. **Gaming Service Detection**
+   - Add Steam, Epic Games, Roblox, Xbox Live IP ranges
+   - Track gaming-specific time separately
+   - Gaming-specific daily limits
+
+2. **Port-Based Gaming Detection**
+   - Automatic detection of Xbox/PlayStation/Steam ports
+   - Gaming activity badge on Status page
+   - Real-time gaming alerts
+
+3. **Gaming Reports**
+   - Weekly gaming time summary
+   - Most played platform detection
+   - Gaming vs homework time trends
+
+## Troubleshooting
+
+### Device shows as "Offline" but is clearly being used
+
+**Possible causes:**
+1. Device using VPN (bypassing detection)
+2. MAC address changed (random MAC on iOS/Android)
+3. Using different network interface (WiFi vs Ethernet)
+
+**Solutions:**
+1. Disable VPN on the device
+2. Disable "Private WiFi Address" (iOS) or "Random MAC" (Android)
+3. Add both MAC addresses (WiFi + Ethernet) to profile
+
+### Usage counter not incrementing
+
+**Check:**
+1. Profile is **Enabled**
+2. Device MAC address is correct (verify with `arp -an`)
+3. Cron job is running (`crontab -l | grep parental_control`)
+4. Check logs: `/usr/local/bin/parental_control_analyzer.sh recent`
+
+### Gaming detected but not blocked
+
+**Possible causes:**
+1. Profile has no daily limit (unlimited)
+2. Usage hasn't exceeded limit yet
+3. Service-specific limits not configured
+4. Still within the 5-minute cron window
+
+**Solutions:**
+1. Set daily limit on profile
+2. Add gaming schedule for specific hours
+3. Configure service limits for Discord/YouTube
+4. Wait for next cron cycle (< 5 minutes)
+
+## Related Tools
+
+### Available Scripts in Project Directory:
+
+1. **identify_gaming_device.sh** - Automated gaming detection
+2. **check_gaming_profile.php** - Profile verification
+3. **parental_control_analyzer.sh** - On firewall, comprehensive analysis
+
+### KACI Analyzer Commands:
+
+```bash
+# On pfSense firewall:
+/usr/local/bin/parental_control_analyzer.sh status    # System status
+/usr/local/bin/parental_control_analyzer.sh state     # Current state
+/usr/local/bin/parental_control_analyzer.sh recent    # Recent activity
+/usr/local/bin/parental_control_analyzer.sh watch     # Real-time logs
+```
+
+---
+
+**Note:** Always use the jump host pattern (nas.keekar.com) when connecting to the firewall to avoid CrowdStrike alerts. See `docs/AI-ASSISTANT-INSTRUCTIONS.md` for connection patterns

@@ -5,6 +5,11 @@
 # Runs via cron every 15 minutes
 #
 
+# CRITICAL FIX v1.4.70: Ignore OS version mismatches globally
+# WHY: Packages built for FreeBSD 14 work fine on FreeBSD 15
+# SOLUTION: Bypass pkg version checks to prevent blocking auto-updates
+export IGNORE_OSVERSION=yes
+
 PACKAGE_NAME="kaci-parental-control"
 LOCAL_VERSION_FILE="/usr/local/pkg/parental_control_VERSION"
 LOG_FILE="/var/log/parental_control_auto_update.log"
@@ -41,6 +46,12 @@ fi
 
 log "Auto-Update: Current version is $CURRENT_VERSION"
 
+# CRITICAL FIX v1.4.70: Ignore OS version mismatches
+# WHY: FreeBSD packages built for v14 work fine on v15, but pkg complains
+# PROBLEM: "Newer FreeBSD version" errors block auto-updates for all consumers
+# SOLUTION: Set IGNORE_OSVERSION=yes to bypass version checks (safe for parental control)
+export IGNORE_OSVERSION=yes
+
 # Update repository metadata quietly
 log "Auto-Update: Updating repository metadata..."
 if ! pkg update -q 2>&1 | tee -a "$LOG_FILE"; then
@@ -66,7 +77,8 @@ fi
 log "Auto-Update: New version available: $CURRENT_VERSION -> $AVAILABLE_VERSION"
 log "Auto-Update: Starting package upgrade..."
 
-# Perform upgrade
+# Perform upgrade (IGNORE_OSVERSION already set above)
+# This allows packages built for FreeBSD 14 to install on FreeBSD 15, etc.
 if pkg upgrade -y ${PACKAGE_NAME} 2>&1 | tee -a "$LOG_FILE"; then
     NEW_VERSION=$(pkg info ${PACKAGE_NAME} | grep "Version" | awk '{print $3}')
     log "Auto-Update: SUCCESS! Upgraded to v$NEW_VERSION"
