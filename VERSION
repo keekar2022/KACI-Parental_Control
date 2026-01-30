@@ -1,4 +1,4 @@
-VERSION=1.4.72
+VERSION=1.4.73
 BUILD_DATE=2026-01-31
-RELEASE_TYPE=gaming_who_limits
+RELEASE_TYPE=gaming_service_integration
 STATUS=feature-testing

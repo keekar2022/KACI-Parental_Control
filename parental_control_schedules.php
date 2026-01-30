@@ -169,6 +169,7 @@ $tab_array[] = array("Settings", false, "/pkg_edit.php?xml=parental_control.xml"
 $tab_array[] = array("Profiles", false, "/parental_control_profiles.php");
 $tab_array[] = array("KACI-PC-Schedule", true, "/parental_control_schedules.php");
 $tab_array[] = array("Online-Service", false, "/parental_control_services.php");
+$tab_array[] = array("Gaming Detection", false, "/parental_control_gaming.php");
 $tab_array[] = array("Status", false, "/parental_control_status.php");
 display_top_tabs($tab_array);
 ?>
