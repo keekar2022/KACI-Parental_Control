@@ -7124,7 +7124,7 @@ function pc_is_mac_exempted_from_gaming($mac) {
  */
 function pc_detect_gaming_by_port($device_ip, $all_states = null) {
 	if (empty($device_ip)) {
-		return array('detected' => false, 'platforms' => array(), 'ports' => array());
+		return array('detected' => false, 'platforms' => array(), 'ports' => array(), 'confidence' => 0);
 	}
 	
 	// Load state table if not provided
@@ -7133,14 +7133,14 @@ function pc_detect_gaming_by_port($device_ip, $all_states = null) {
 	}
 	
 	if (empty($all_states)) {
-		return array('detected' => false, 'platforms' => array(), 'ports' => array());
+		return array('detected' => false, 'platforms' => array(), 'ports' => array(), 'confidence' => 0);
 	}
 	
 	// Get gaming configuration
 	$gaming_config = pc_get_gaming_config();
 	
 	if (!isset($gaming_config['platforms']) || empty($gaming_config['platforms'])) {
-		return array('detected' => false, 'platforms' => array(), 'ports' => array());
+		return array('detected' => false, 'platforms' => array(), 'ports' => array(), 'confidence' => 0);
 	}
 	
 	// Filter states for this device
@@ -7149,11 +7149,37 @@ function pc_detect_gaming_by_port($device_ip, $all_states = null) {
 	});
 	
 	if (empty($device_states)) {
-		return array('detected' => false, 'platforms' => array(), 'ports' => array());
+		return array('detected' => false, 'platforms' => array(), 'ports' => array(), 'confidence' => 0);
 	}
+	
+	// Port specificity scoring (higher = more specific to gaming)
+	// High-specificity ports require fewer connections, low-specificity require more
+	$port_specificity = array(
+		25565 => 95,  // Minecraft Java - very specific
+		19132 => 95,  // Minecraft Bedrock - very specific
+		27015 => 85,  // Steam Source engine - specific
+		27016 => 85,  // Steam Source engine
+		27030 => 80,  // Steam range end
+		5222  => 20,  // XMPP - very common (Facebook, WhatsApp, chat apps)
+		5223  => 20,  // XMPP/APNs - very common (Apple Push Notifications)
+		9000  => 30,  // Generic - many services use this range
+		9100  => 30   // Generic - many services use this range
+	);
 	
 	$detected_platforms = array();
 	$detected_ports = array();
+	$port_connections = array(); // Track connection count per port
+	
+	// First pass: Count connections per port
+	foreach ($device_states as $line) {
+		if (preg_match('/-> (\d+\.\d+\.\d+\.\d+):(\d+)/', $line, $matches)) {
+			$dst_port = intval($matches[2]);
+			if (!isset($port_connections[$dst_port])) {
+				$port_connections[$dst_port] = 0;
+			}
+			$port_connections[$dst_port]++;
+		}
+	}
 	
 	// Check each gaming platform's ports
 	foreach ($gaming_config['platforms'] as $platform_id => $platform) {
@@ -7186,12 +7212,26 @@ function pc_detect_gaming_by_port($device_ip, $all_states = null) {
 				$end_port = intval(trim($end_port));
 				
 				// Check if any port in range is being used
-				foreach ($device_states as $line) {
-					// Extract destination port from state line
-					// Format: "all tcp NAT_IP:port (192.168.1.27:12345) -> DEST_IP:PORT"
-					if (preg_match('/-> (\d+\.\d+\.\d+\.\d+):(\d+)/', $line, $matches)) {
-						$dst_port = intval($matches[2]);
-						if ($dst_port >= $start_port && $dst_port <= $end_port) {
+				foreach ($port_connections as $dst_port => $conn_count) {
+					if ($dst_port >= $start_port && $dst_port <= $end_port) {
+						// Get port specificity (default to 50 for unknown ports)
+						$specificity = isset($port_specificity[$dst_port]) ? $port_specificity[$dst_port] : 50;
+						
+						// Calculate minimum connections required based on specificity
+						// High specificity (90+): 1 connection
+						// Medium specificity (50-89): 3 connections
+						// Low specificity (<50): 5 connections
+						$min_connections = 1;
+						if ($specificity >= 80) {
+							$min_connections = 2;
+						} elseif ($specificity >= 50) {
+							$min_connections = 4;
+						} else {
+							$min_connections = 8; // Low specificity requires many connections
+						}
+						
+						// Only detect if connection count meets threshold
+						if ($conn_count >= $min_connections) {
 							$detected_platforms[$platform_id] = $platform['name'];
 							$detected_ports[] = $dst_port;
 						}
@@ -7201,24 +7241,46 @@ function pc_detect_gaming_by_port($device_ip, $all_states = null) {
 				// Single port
 				$port = intval($port_def);
 				
-				// Check if this port is in use
-				foreach ($device_states as $line) {
-					if (preg_match('/-> (\d+\.\d+\.\d+\.\d+):(\d+)/', $line, $matches)) {
-						$dst_port = intval($matches[2]);
-						if ($dst_port === $port) {
-							$detected_platforms[$platform_id] = $platform['name'];
-							$detected_ports[] = $port;
-						}
+				// Check if this port is in use with enough connections
+				if (isset($port_connections[$port])) {
+					$conn_count = $port_connections[$port];
+					$specificity = isset($port_specificity[$port]) ? $port_specificity[$port] : 50;
+					
+					// Calculate minimum connections required
+					$min_connections = 1;
+					if ($specificity >= 80) {
+						$min_connections = 2;
+					} elseif ($specificity >= 50) {
+						$min_connections = 4;
+					} else {
+						$min_connections = 8; // Low specificity requires many connections
+					}
+					
+					// Only detect if connection count meets threshold
+					if ($conn_count >= $min_connections) {
+						$detected_platforms[$platform_id] = $platform['name'];
+						$detected_ports[] = $port;
 					}
 				}
 			}
 		}
 	}
 	
+	// Calculate overall confidence based on detected ports
+	$confidence = 0;
+	if (!empty($detected_ports)) {
+		$total_specificity = 0;
+		foreach (array_unique($detected_ports) as $port) {
+			$total_specificity += isset($port_specificity[$port]) ? $port_specificity[$port] : 50;
+		}
+		$confidence = min(99, intval($total_specificity / count(array_unique($detected_ports))));
+	}
+	
 	return array(
 		'detected' => !empty($detected_platforms),
 		'platforms' => $detected_platforms,
-		'ports' => array_unique($detected_ports)
+		'ports' => array_unique($detected_ports),
+		'confidence' => $confidence
 	);
 }
 
@@ -7336,16 +7398,16 @@ function pc_identify_game_platform(&$state, $device_ip, $all_states = null) {
 	// Port-based detection (highest accuracy)
 	$port_result = pc_detect_gaming_by_port($device_ip, $all_states);
 	if ($port_result['detected']) {
-		// Port detection gives high confidence
+		// Port detection confidence varies based on port specificity and connection count
 		$platform_id = array_keys($port_result['platforms'])[0];
 		$platform_name = $port_result['platforms'][$platform_id];
 		
 		return array(
 			'platform' => $platform_id,
 			'platform_name' => $platform_name,
-			'confidence' => 99, // Port detection is highly accurate
+			'confidence' => $port_result['confidence'], // Confidence based on port specificity
 			'method' => 'port',
-			'details' => array('ports' => $port_result['ports'])
+			'details' => array('ports' => $port_result['ports'], 'specificity' => $port_result['confidence'])
 		);
 	}
 	

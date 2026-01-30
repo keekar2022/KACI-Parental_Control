@@ -80,9 +80,9 @@ $default_platforms = array(
 	'epic' => array(
 		'name' => 'Epic Games',
 		'enabled' => 'on',
-		'ports' => '5222,5223,9000-9100',
-		'detection_method' => 'port',
-		'description' => 'Epic Games / Fortnite'
+		'ports' => '9000-9100',
+		'detection_method' => 'both',
+		'description' => 'Epic Games / Fortnite (Note: Ports 5222-5223 removed due to XMPP/APNs false positives. Use with Online Gaming service for better accuracy.)'
 	)
 );
 
