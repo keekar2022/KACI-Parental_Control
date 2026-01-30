@@ -7078,11 +7078,31 @@ function pc_get_gaming_config() {
 			'pattern_discord_minutes' => 60,
 			'pattern_youtube_minutes' => 60,
 			'pattern_session_minutes' => 60,
-			'platforms' => array()
+			'platforms' => array(),
+			'exempt_macs' => array()
 		);
 	}
 	
 	return $gaming_config;
+}
+
+/**
+ * Check if a MAC address is exempted from gaming detection
+ * 
+ * @param string $mac MAC address to check (will be normalized)
+ * @return bool True if exempted, false otherwise
+ */
+function pc_is_mac_exempted_from_gaming($mac) {
+	$gaming_config = pc_get_gaming_config();
+	
+	if (!isset($gaming_config['exempt_macs']) || empty($gaming_config['exempt_macs'])) {
+		return false;
+	}
+	
+	// Normalize MAC address (uppercase with colons)
+	$normalized_mac = strtoupper(str_replace('-', ':', $mac));
+	
+	return isset($gaming_config['exempt_macs'][$normalized_mac]);
 }
 
 /**
@@ -7532,6 +7552,20 @@ function pc_detect_and_track_gaming(&$state, $service_ips_cache = null, $all_sta
 			continue;
 		}
 		
+		// Check if this device's MAC address is exempted from gaming detection
+		// Gaming detection applies to ALL devices, but exemptions allow specific devices to be skipped
+		$device_mac = $device_state['mac'] ?? '';
+		if (!empty($device_mac) && pc_is_mac_exempted_from_gaming($device_mac)) {
+			// Device is exempted - clear any existing gaming detection
+			if (isset($device_state['gaming_detection']) && 
+			    $device_state['gaming_detection']['detected_platform'] !== 'none') {
+				$device_state['gaming_detection']['detected_platform'] = 'none';
+				$device_state['gaming_detection']['confidence_score'] = 0;
+				$device_state['gaming_detection']['session_start'] = 0;
+			}
+			continue;
+		}
+		
 		$detected = false;
 		$platform_result = null;
 		
@@ -7705,6 +7739,12 @@ function pc_enforce_gaming_limits(&$state) {
 		}
 		
 		$mac = pc_normalize_mac($device['mac_address']);
+		
+		// Skip devices exempted from gaming detection
+		if (pc_is_mac_exempted_from_gaming($mac)) {
+			continue;
+		}
+		
 		$ip = pc_get_ip_from_mac($mac);
 		
 		if (empty($ip)) {

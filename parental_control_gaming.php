@@ -43,7 +43,9 @@ if (empty($gaming_config)) {
 		// WHO-based universal gaming limits (applies to all profiles)
 		'daily_gaming_limit' => 60, // 60 minutes per day (WHO recommendation)
 		'override_limit' => 120, // 2 hours override for administrators
-		'override_enabled' => array() // Format: ['profile_name' => timestamp_when_override_expires]
+		'override_enabled' => array(), // Format: ['profile_name' => timestamp_when_override_expires]
+		// MAC address exemptions (devices excluded from gaming detection)
+		'exempt_macs' => array() // Format: ['mac' => 'description']
 	);
 }
 
@@ -123,6 +125,34 @@ if ($_POST['save']) {
 		}
 		if (isset($_POST['platform_' . $platform_id . '_detection_method'])) {
 			$gaming_config['platforms'][$platform_id]['detection_method'] = $_POST['platform_' . $platform_id . '_detection_method'];
+		}
+	}
+	
+	// Update MAC exemptions
+	if (isset($_POST['exempt_macs_list'])) {
+		$exempt_macs_raw = trim($_POST['exempt_macs_list']);
+		$gaming_config['exempt_macs'] = array();
+		
+		if (!empty($exempt_macs_raw)) {
+			$lines = explode("\n", $exempt_macs_raw);
+			foreach ($lines as $line) {
+				$line = trim($line);
+				if (empty($line) || $line[0] === '#') {
+					continue; // Skip empty lines and comments
+				}
+				
+				// Format: MAC_ADDRESS|Description or just MAC_ADDRESS
+				$parts = explode('|', $line, 2);
+				$mac = strtoupper(trim($parts[0]));
+				$description = isset($parts[1]) ? trim($parts[1]) : 'Exempted device';
+				
+				// Validate MAC address format
+				if (preg_match('/^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/', $mac)) {
+					$gaming_config['exempt_macs'][$mac] = $description;
+				} else {
+					$input_errors[] = "Invalid MAC address format: {$mac}";
+				}
+			}
 		}
 	}
 	
@@ -548,6 +578,72 @@ display_top_tabs($tab_array);
 				</div>
 			</div>
 		</form>
+	</div>
+</div>
+
+<!-- MAC Address Exemptions -->
+<div class="panel panel-default">
+	<div class="panel-heading">
+		<h2 class="panel-title"><i class="fa fa-ban"></i> Device Exemptions (MAC Address)</h2>
+	</div>
+	<div class="panel-body">
+		<div class="content">
+			<p><strong>Exempt specific devices from gaming detection.</strong> Useful for gaming consoles (Xbox, Nintendo Switch, PlayStation) that have their own parental controls.</p>
+			<p><strong>Important:</strong> When gaming detection is enabled, it applies to <strong>ALL devices on the network</strong>, regardless of whether they're assigned to a profile. Use exemptions to exclude specific devices.</p>
+		</div>
+		
+		<form method="post" class="form-horizontal">
+			<div class="form-group">
+				<label class="col-sm-3 control-label">
+					<strong>Exempted MAC Addresses</strong>
+				</label>
+				<div class="col-sm-6">
+					<textarea name="exempt_macs_list" class="form-control" rows="8" placeholder="Enter MAC addresses, one per line&#10;Format: XX:XX:XX:XX:XX:XX|Description&#10;Example:&#10;AA:BB:CC:DD:EE:FF|Xbox Series X&#10;11:22:33:44:55:66|Nintendo Switch&#10;&#10;Lines starting with # are ignored"><?php
+					// Build the textarea content from exempt_macs array
+					if (isset($gaming_config['exempt_macs']) && is_array($gaming_config['exempt_macs'])) {
+						foreach ($gaming_config['exempt_macs'] as $mac => $description) {
+							echo htmlspecialchars($mac . '|' . $description) . "\n";
+						}
+					}
+					?></textarea>
+					<span class="help-block">
+						<i class="fa fa-info-circle"></i> Add MAC addresses of devices you want to exempt from gaming detection (e.g., Xbox, PlayStation, Nintendo Switch with built-in parental controls).
+						<br><strong>Format:</strong> MAC_ADDRESS|Description (e.g., AA:BB:CC:DD:EE:FF|Xbox Series X)
+						<br><strong>Note:</strong> MAC addresses must be in format XX:XX:XX:XX:XX:XX or XX-XX-XX-XX-XX-XX
+					</span>
+				</div>
+			</div>
+			
+			<div class="form-group">
+				<div class="col-sm-offset-3 col-sm-6">
+					<button type="submit" name="save" value="save" class="btn btn-primary">
+						<i class="fa fa-save"></i> Save Exemptions
+					</button>
+				</div>
+			</div>
+		</form>
+		
+		<?php if (isset($gaming_config['exempt_macs']) && !empty($gaming_config['exempt_macs'])): ?>
+		<div class="table-responsive" style="margin-top: 20px;">
+			<h4>Currently Exempted Devices</h4>
+			<table class="table table-striped table-hover">
+				<thead>
+					<tr>
+						<th>MAC Address</th>
+						<th>Description</th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ($gaming_config['exempt_macs'] as $mac => $description): ?>
+					<tr>
+						<td><code><?= htmlspecialchars($mac) ?></code></td>
+						<td><?= htmlspecialchars($description) ?></td>
+					</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+		</div>
+		<?php endif; ?>
 	</div>
 </div>
 
