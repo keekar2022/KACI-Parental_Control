@@ -100,7 +100,7 @@ parental_control_captive.php
 parental_control_captive.sh
 parental_control_api.php
 parental_control_health.php
-parental_control_diagnostic.php
+parental_control_services.php
 parental_control_analyzer.sh
 info.xml
 VERSION
