@@ -169,9 +169,41 @@ if ($client_mac) {
 		$usage_today = $state['devices_by_ip'][$client_ip]['usage_today'];
 	}
 	
-	// Determine block reason
+	// Determine block reason (check gaming first, then schedule, then general time limit)
+	$gaming_block = false;
+	$gaming_usage = 0;
+	$gaming_limit = 0;
+	$gaming_platform = 'Unknown';
+	
 	if ($device_info) {
-		if (pc_is_in_blocked_schedule($device_info)) {
+		// Check gaming limits first
+		$gaming_check = pc_check_gaming_limits($device_info, $state);
+		if ($gaming_check['exceeded']) {
+			$block_reason = 'Gaming Limit Exceeded';
+			$gaming_block = true;
+			
+			// Get gaming details from state
+			$profile_name = $device_info['child_name'];
+			if (isset($state['profiles'][$profile_name]['gaming_usage']['general'])) {
+				$gaming_usage = $state['profiles'][$profile_name]['gaming_usage']['general']['usage_today'] ?? 0;
+			}
+			
+			// Get gaming config
+			$gaming_config = config_get_path('installedpackages/parentalcontrolgaming/config/0', array());
+			$gaming_limit = intval($gaming_config['daily_gaming_limit'] ?? 60);
+			
+			// Check for admin override
+			if (isset($gaming_config['override_enabled'][$profile_name]) && 
+			    $gaming_config['override_enabled'][$profile_name] > time()) {
+				$gaming_limit += intval($gaming_config['override_limit'] ?? 120);
+			}
+			
+			// Get platform name if detected
+			if (isset($state['devices_by_ip'][$client_ip]['gaming_detection']['detected_platform'])) {
+				$gaming_platform = strtoupper($state['devices_by_ip'][$client_ip]['gaming_detection']['detected_platform']);
+			}
+			
+		} elseif (pc_is_in_blocked_schedule($device_info)) {
 			$block_reason = 'Scheduled Block Time';
 		} elseif (pc_is_time_limit_exceeded($device_info, $state)) {
 			$block_reason = 'Daily Time Limit Exceeded';
@@ -660,7 +692,12 @@ $version = defined('PC_VERSION') ? PC_VERSION : '1.1.10';
 			
 			<div class="block-body">
 				<div class="block-message">
-					<?= htmlspecialchars($blocked_message) ?>
+					<?php if ($gaming_block): ?>
+						<strong>🎮 Gaming Time Limit Reached</strong><br>
+						Your gaming time is up for today! The WHO recommends limiting gaming to prevent gaming disorder. Take a break, go outside, read a book, or spend time with family and friends.
+					<?php else: ?>
+						<?= htmlspecialchars($blocked_message) ?>
+					<?php endif; ?>
 				</div>
 				
 				<div class="info-grid">
@@ -678,7 +715,38 @@ $version = defined('PC_VERSION') ? PC_VERSION : '1.1.10';
 						</div>
 					</div>
 					
-					<?php if ($usage_limit > 0): ?>
+					<?php if ($gaming_block): ?>
+					<!-- Gaming-specific stats -->
+					<div class="info-item">
+						<div class="label"><i class="fa-solid fa-gamepad"></i> Gaming Today</div>
+						<div class="value <?= $gaming_usage >= $gaming_limit ? 'exceeded' : '' ?>">
+							<?= format_minutes($gaming_usage) ?>
+						</div>
+					</div>
+					
+					<div class="info-item">
+						<div class="label"><i class="fa-solid fa-heartbeat"></i> WHO Limit</div>
+						<div class="value">
+							<?= format_minutes($gaming_limit) ?>
+						</div>
+					</div>
+					
+					<div class="info-item">
+						<div class="label"><i class="fa-solid fa-trophy"></i> Platform</div>
+						<div class="value" style="font-size: 16px;">
+							<?= htmlspecialchars($gaming_platform) ?>
+						</div>
+					</div>
+					
+					<div class="info-item">
+						<div class="label"><i class="fa-solid fa-info-circle"></i> Note</div>
+						<div class="value" style="font-size: 14px; color: #6c757d;">
+							WHO Gaming Disorder Prevention
+						</div>
+					</div>
+					
+					<?php elseif ($usage_limit > 0): ?>
+					<!-- General internet usage stats -->
 					<div class="info-item">
 						<div class="label"><i class="fa-solid fa-clock"></i> Usage Today</div>
 						<div class="value <?= $usage_today >= $usage_limit ? 'exceeded' : '' ?>">
