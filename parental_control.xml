@@ -39,6 +39,10 @@
 		<text>Online-Service</text>
 		<url>/parental_control_services.php</url>
 	</tab>
+	<tab>
+		<text>Gaming Detection</text>
+		<url>/parental_control_gaming.php</url>
+	</tab>
 		<tab>
 			<text>Status</text>
 			<url>/parental_control_status.php</url>
