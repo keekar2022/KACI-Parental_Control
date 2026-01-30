@@ -29,7 +29,7 @@ $pglinks = array("", "/pkg_edit.php?xml=parental_control.xml", "@self");
 $gaming_config = config_get_path('installedpackages/parentalcontrolgaming/config/0', array());
 $profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', array());
 
-// Initialize gaming config with defaults if empty
+// Initialize gaming config with defaults if empty (WHO-based universal limits)
 if (empty($gaming_config)) {
 	$gaming_config = array(
 		'enable' => 'off',
@@ -39,7 +39,11 @@ if (empty($gaming_config)) {
 		'pattern_discord_minutes' => '60',
 		'pattern_youtube_minutes' => '60',
 		'pattern_session_minutes' => '60',
-		'platforms' => array()
+		'platforms' => array(),
+		// WHO-based universal gaming limits (applies to all profiles)
+		'daily_gaming_limit' => 60, // 60 minutes per day (WHO recommendation)
+		'override_limit' => 120, // 2 hours override for administrators
+		'override_enabled' => array() // Format: ['profile_name' => timestamp_when_override_expires]
 	);
 }
 
@@ -104,6 +108,11 @@ if ($_POST['save']) {
 	$gaming_config['pattern_youtube_minutes'] = $_POST['pattern_youtube_minutes'] ?? '60';
 	$gaming_config['pattern_session_minutes'] = $_POST['pattern_session_minutes'] ?? '60';
 	
+	// WHO-based universal gaming limit (applies to all profiles)
+	if (isset($_POST['daily_gaming_limit'])) {
+		$gaming_config['daily_gaming_limit'] = intval($_POST['daily_gaming_limit']);
+	}
+	
 	// Update platform settings
 	foreach ($default_platforms as $platform_id => $platform_data) {
 		if (isset($_POST['platform_' . $platform_id . '_enabled'])) {
@@ -134,35 +143,83 @@ if ($_POST['save']) {
 	}
 }
 
-// SAVE PER-PROFILE GAMING LIMITS
-if ($_POST['save_profile_limits']) {
-	$profile_id = intval($_POST['profile_id']);
-	if (isset($profiles[$profile_id])) {
-		// Initialize gaming_limits if not exists
-		if (!isset($profiles[$profile_id]['gaming_limits'])) {
-			$profiles[$profile_id]['gaming_limits'] = array();
+// ADMINISTRATOR OVERRIDE (Add 2 hours to daily limit)
+if ($_POST['apply_override']) {
+	// Check if user is administrator
+	if (!pc_is_admin_user()) {
+		$input_errors[] = "Access denied. Only administrators can apply gaming time override.";
+	} else {
+		$profile_name = $_POST['override_profile'] ?? '';
+		if (!empty($profile_name)) {
+			// Initialize override_enabled if not exists
+			if (!isset($gaming_config['override_enabled'])) {
+				$gaming_config['override_enabled'] = array();
+			}
+			
+			// Set override expiration (end of current day at midnight)
+			$override_expires = strtotime('tomorrow 00:00:00');
+			$gaming_config['override_enabled'][$profile_name] = $override_expires;
+			
+			config_set_path('installedpackages/parentalcontrolgaming/config/0', $gaming_config);
+			
+			if (write_config("Parental Control: Applied gaming override for profile: {$profile_name}")) {
+				$savemsg = "Administrator override applied for {$profile_name}: +2 hours gaming time until midnight.";
+				
+				pc_log("Gaming override applied by administrator", 'notice', array(
+					'event.action' => 'gaming_override_applied',
+					'profile.name' => $profile_name,
+					'override.hours' => 2,
+					'override.expires' => date('Y-m-d H:i:s', $override_expires),
+					'admin.user' => $_SERVER['REMOTE_USER'] ?? 'unknown'
+				));
+			} else {
+				$input_errors[] = "Failed to apply gaming override.";
+			}
+		} else {
+			$input_errors[] = "Please select a profile for override.";
 		}
-		
-		// Update per-game limits
-		foreach ($default_platforms as $platform_id => $platform_data) {
-			$limit_key = 'profile_' . $profile_id . '_' . $platform_id . '_limit';
-			if (isset($_POST[$limit_key])) {
-				$profiles[$profile_id]['gaming_limits'][$platform_id] = intval($_POST[$limit_key]);
+	}
+}
+
+// REMOVE OVERRIDE
+if ($_POST['remove_override']) {
+	if (!pc_is_admin_user()) {
+		$input_errors[] = "Access denied. Only administrators can remove gaming time override.";
+	} else {
+		$profile_name = $_POST['remove_override_profile'] ?? '';
+		if (!empty($profile_name) && isset($gaming_config['override_enabled'][$profile_name])) {
+			unset($gaming_config['override_enabled'][$profile_name]);
+			
+			config_set_path('installedpackages/parentalcontrolgaming/config/0', $gaming_config);
+			
+			if (write_config("Parental Control: Removed gaming override for profile: {$profile_name}")) {
+				$savemsg = "Gaming override removed for {$profile_name}.";
+				
+				pc_log("Gaming override removed by administrator", 'notice', array(
+					'event.action' => 'gaming_override_removed',
+					'profile.name' => $profile_name,
+					'admin.user' => $_SERVER['REMOTE_USER'] ?? 'unknown'
+				));
 			}
 		}
-		
-		// General gaming limit (all games combined)
-		if (isset($_POST['profile_' . $profile_id . '_general_gaming_limit'])) {
-			$profiles[$profile_id]['gaming_limits']['general'] = intval($_POST['profile_' . $profile_id . '_general_gaming_limit']);
+	}
+}
+
+// Clean up expired overrides
+if (isset($gaming_config['override_enabled']) && is_array($gaming_config['override_enabled'])) {
+	$current_time = time();
+	$overrides_changed = false;
+	
+	foreach ($gaming_config['override_enabled'] as $profile_name => $expires_at) {
+		if ($current_time >= $expires_at) {
+			unset($gaming_config['override_enabled'][$profile_name]);
+			$overrides_changed = true;
 		}
-		
-		config_set_path('installedpackages/parentalcontrolprofiles/config', $profiles);
-		
-		if (write_config("Parental Control: Updated gaming limits for profile")) {
-			$savemsg = "Gaming limits saved for profile: " . $profiles[$profile_id]['name'];
-		} else {
-			$input_errors[] = "Failed to save gaming limits.";
-		}
+	}
+	
+	if ($overrides_changed) {
+		config_set_path('installedpackages/parentalcontrolgaming/config/0', $gaming_config);
+		write_config("Parental Control: Cleaned up expired gaming overrides");
 	}
 }
 
@@ -494,142 +551,219 @@ display_top_tabs($tab_array);
 	</div>
 </div>
 
-<!-- Per-Profile Gaming Limits -->
+<!-- WHO Recommendations & Universal Gaming Limits -->
 <div class="panel panel-default">
 	<div class="panel-heading">
-		<h2 class="panel-title">Per-Profile Gaming Limits</h2>
+		<h2 class="panel-title"><i class="fa fa-heartbeat"></i> WHO Gaming Disorder Prevention</h2>
 	</div>
 	<div class="panel-body">
-		<div class="content">
-			<p><strong>Set gaming time limits for each profile and game platform.</strong> Limits are enforced independently from general internet limits.</p>
+		<div class="alert alert-info">
+			<h4><i class="fa fa-info-circle"></i> World Health Organization Guidelines</h4>
+			<p><strong>Gaming disorder</strong> is officially recognized in the WHO's International Classification of Diseases (ICD-11) as a pattern of gaming behavior characterized by impaired control over gaming, increasing priority given to gaming over other activities.</p>
+			<p><strong>Learn more:</strong> <a href="https://www.who.int/standards/classifications/frequently-asked-questions/gaming-disorder" target="_blank" rel="noopener">WHO Gaming Disorder FAQ</a></p>
 		</div>
 		
-		<?php if (empty($profiles)): ?>
-		<div class="alert alert-warning">
-			No profiles configured. Please create profiles in the <a href="/parental_control_profiles.php">Profiles</a> tab first.
-		</div>
-		<?php else: ?>
-		
-		<?php foreach ($profiles as $profile_id => $profile): ?>
 		<form method="post" class="form-horizontal">
-			<input type="hidden" name="profile_id" value="<?= $profile_id ?>" />
-			
-			<div class="panel panel-info">
-				<div class="panel-heading">
-					<h3 class="panel-title">
-						<i class="fa fa-user"></i> <?= htmlspecialchars($profile['name']) ?> - Gaming Limits
-					</h3>
+			<div class="form-group">
+				<label class="col-sm-3 control-label">
+					<strong>Universal Daily Gaming Limit</strong>
+				</label>
+				<div class="col-sm-3">
+					<div class="input-group">
+						<input type="number" 
+						       name="daily_gaming_limit" 
+						       class="form-control" 
+						       value="<?= intval($gaming_config['daily_gaming_limit'] ?? 60) ?>" 
+						       min="30" max="180" />
+						<span class="input-group-addon">minutes</span>
+					</div>
+					<span class="help-block">
+						<strong>Applies to ALL profiles.</strong> WHO recommends limiting gaming time to prevent gaming disorder. Default: 60 minutes/day.
+					</span>
 				</div>
-				<div class="panel-body">
-					<div class="table-responsive">
-						<table class="table table-condensed">
-							<thead>
-								<tr>
-									<th>Game Platform</th>
-									<th>Daily Limit (minutes)</th>
-									<th>Today's Usage</th>
-									<th>Status</th>
-								</tr>
-							</thead>
-							<tbody>
-								<!-- General Gaming Limit (All Games Combined) -->
-								<tr style="background-color: #f8f9fa; font-weight: bold;">
-									<td>
-										<i class="fa fa-gamepad"></i> <strong>All Gaming (Combined)</strong>
-									</td>
-									<td>
-										<input type="number" 
-										       name="profile_<?= $profile_id ?>_general_gaming_limit" 
-										       class="form-control" 
-										       value="<?= intval($profile['gaming_limits']['general'] ?? 0) ?>" 
-										       min="0" max="600" 
-										       placeholder="0 = unlimited" 
-										       style="width: 120px;" />
-									</td>
-									<td>
-										<?php
-										$general_usage = 0;
-										if (isset($state['profiles'][$profile['name']]['gaming_usage']['general'])) {
-											$general_usage = $state['profiles'][$profile['name']]['gaming_usage']['general']['usage_today'] ?? 0;
-										}
-										echo intval($general_usage) . ' min';
-										?>
-									</td>
-									<td>
-										<?php
-										$general_limit = intval($profile['gaming_limits']['general'] ?? 0);
-										if ($general_limit > 0 && $general_usage >= $general_limit) {
-											echo '<span class="label label-danger">OVER LIMIT</span>';
-										} elseif ($general_limit > 0 && $general_usage >= ($general_limit * 0.8)) {
-											echo '<span class="label label-warning">NEAR LIMIT</span>';
-										} elseif ($general_limit > 0) {
-											echo '<span class="label label-success">OK</span>';
-										} else {
-											echo '<span class="label label-default">UNLIMITED</span>';
-										}
-										?>
-									</td>
-								</tr>
-								
-								<!-- Per-Game Limits -->
-								<?php foreach ($default_platforms as $platform_id => $platform_data): ?>
-								<tr>
-									<td>
-										<i class="fa fa-circle"></i> <?= htmlspecialchars($platform_data['name']) ?>
-									</td>
-									<td>
-										<input type="number" 
-										       name="profile_<?= $profile_id ?>_<?= $platform_id ?>_limit" 
-										       class="form-control" 
-										       value="<?= intval($profile['gaming_limits'][$platform_id] ?? 0) ?>" 
-										       min="0" max="600" 
-										       placeholder="0 = unlimited" 
-										       style="width: 120px;" />
-									</td>
-									<td>
-										<?php
-										$platform_usage = 0;
-										if (isset($state['profiles'][$profile['name']]['gaming_usage'][$platform_id])) {
-											$platform_usage = $state['profiles'][$profile['name']]['gaming_usage'][$platform_id]['usage_today'] ?? 0;
-										}
-										echo intval($platform_usage) . ' min';
-										?>
-									</td>
-									<td>
-										<?php
-										$platform_limit = intval($profile['gaming_limits'][$platform_id] ?? 0);
-										if ($platform_limit > 0 && $platform_usage >= $platform_limit) {
-											echo '<span class="label label-danger">OVER LIMIT</span>';
-										} elseif ($platform_limit > 0 && $platform_usage >= ($platform_limit * 0.8)) {
-											echo '<span class="label label-warning">NEAR LIMIT</span>';
-										} elseif ($platform_limit > 0) {
-											echo '<span class="label label-success">OK</span>';
-										} else {
-											echo '<span class="label label-default">UNLIMITED</span>';
-										}
-										?>
-									</td>
-								</tr>
-								<?php endforeach; ?>
-							</tbody>
-						</table>
-					</div>
-					
-					<div class="form-group">
-						<div class="col-sm-12">
-							<button type="submit" name="save_profile_limits" value="save" class="btn btn-primary">
-								<i class="fa fa-save"></i> Save Limits for <?= htmlspecialchars($profile['name']) ?>
-							</button>
-						</div>
-					</div>
+			</div>
+			
+			<div class="form-group">
+				<div class="col-sm-offset-3 col-sm-6">
+					<button type="submit" name="save" value="save" class="btn btn-primary">
+						<i class="fa fa-save"></i> Save Gaming Limit
+					</button>
 				</div>
 			</div>
 		</form>
-		<?php endforeach; ?>
 		
+		<!-- Current Usage by Profile -->
+		<div class="panel panel-info" style="margin-top: 20px;">
+			<div class="panel-heading">
+				<h3 class="panel-title">Today's Gaming Usage by Profile</h3>
+			</div>
+			<div class="panel-body">
+				<?php if (empty($profiles)): ?>
+				<div class="alert alert-warning">
+					No profiles configured. Please create profiles in the <a href="/parental_control_profiles.php">Profiles</a> tab first.
+				</div>
+				<?php else: ?>
+				
+				<div class="table-responsive">
+					<table class="table table-striped">
+						<thead>
+							<tr>
+								<th>Profile</th>
+								<th>Gaming Time Today</th>
+								<th>Daily Limit</th>
+								<th>Override Active</th>
+								<th>Status</th>
+							</tr>
+						</thead>
+						<tbody>
+							<?php foreach ($profiles as $profile): ?>
+							<?php
+							$profile_name = $profile['name'];
+							$gaming_usage = 0;
+							if (isset($state['profiles'][$profile_name]['gaming_usage']['general'])) {
+								$gaming_usage = $state['profiles'][$profile_name]['gaming_usage']['general']['usage_today'] ?? 0;
+							}
+							
+							$daily_limit = intval($gaming_config['daily_gaming_limit'] ?? 60);
+							$override_active = isset($gaming_config['override_enabled'][$profile_name]) && 
+							                   $gaming_config['override_enabled'][$profile_name] > time();
+							
+							$effective_limit = $daily_limit;
+							if ($override_active) {
+								$effective_limit += intval($gaming_config['override_limit'] ?? 120);
+							}
+							
+							$usage_percent = ($effective_limit > 0) ? ($gaming_usage / $effective_limit * 100) : 0;
+							?>
+							<tr>
+								<td><strong><?= htmlspecialchars($profile_name) ?></strong></td>
+								<td><?= intval($gaming_usage) ?> min</td>
+								<td>
+									<?= $daily_limit ?> min
+									<?php if ($override_active): ?>
+									<span class="label label-warning">+<?= intval($gaming_config['override_limit'] ?? 120) ?> min override</span>
+									<?php endif; ?>
+								</td>
+								<td>
+									<?php if ($override_active): ?>
+									<span class="label label-warning">YES</span>
+									<br/><small>Expires: <?= date('H:i', $gaming_config['override_enabled'][$profile_name]) ?></small>
+									<?php else: ?>
+									<span class="label label-default">NO</span>
+									<?php endif; ?>
+								</td>
+								<td>
+									<?php if ($gaming_usage >= $effective_limit): ?>
+										<span class="label label-danger">OVER LIMIT</span>
+										<div class="progress" style="margin-top: 5px; margin-bottom: 0;">
+											<div class="progress-bar progress-bar-danger" style="width: 100%">100%</div>
+										</div>
+									<?php elseif ($usage_percent >= 80): ?>
+										<span class="label label-warning">NEAR LIMIT</span>
+										<div class="progress" style="margin-top: 5px; margin-bottom: 0;">
+											<div class="progress-bar progress-bar-warning" style="width: <?= round($usage_percent) ?>%"><?= round($usage_percent) ?>%</div>
+										</div>
+									<?php else: ?>
+										<span class="label label-success">OK</span>
+										<div class="progress" style="margin-top: 5px; margin-bottom: 0;">
+											<div class="progress-bar progress-bar-success" style="width: <?= round($usage_percent) ?>%"><?= round($usage_percent) ?>%</div>
+										</div>
+									<?php endif; ?>
+								</td>
+							</tr>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+				</div>
+				
+				<?php endif; ?>
+			</div>
+		</div>
+	</div>
+</div>
+
+<!-- Administrator Override (Visible Only to Administrators) -->
+<?php if (pc_is_admin_user()): ?>
+<div class="panel panel-warning">
+	<div class="panel-heading">
+		<h2 class="panel-title"><i class="fa fa-unlock"></i> Administrator Gaming Time Override</h2>
+	</div>
+	<div class="panel-body">
+		<div class="alert alert-warning">
+			<i class="fa fa-exclamation-triangle"></i> <strong>Administrator Only:</strong> You can temporarily grant +2 hours of gaming time to a profile. Override expires at midnight (resets daily).
+		</div>
+		
+		<form method="post" class="form-horizontal">
+			<div class="form-group">
+				<label class="col-sm-3 control-label">
+					<strong>Apply Override to Profile</strong>
+				</label>
+				<div class="col-sm-4">
+					<select name="override_profile" class="form-control" required>
+						<option value="">-- Select Profile --</option>
+						<?php foreach ($profiles as $profile): ?>
+						<option value="<?= htmlspecialchars($profile['name']) ?>">
+							<?= htmlspecialchars($profile['name']) ?>
+						</option>
+						<?php endforeach; ?>
+					</select>
+					<span class="help-block">
+						Grant additional 2 hours (120 minutes) of gaming time until midnight.
+					</span>
+				</div>
+				<div class="col-sm-3">
+					<button type="submit" name="apply_override" value="apply" class="btn btn-warning">
+						<i class="fa fa-plus-circle"></i> Apply +2 Hours Override
+					</button>
+				</div>
+			</div>
+		</form>
+		
+		<!-- Active Overrides -->
+		<?php if (!empty($gaming_config['override_enabled'])): ?>
+		<div class="panel panel-default" style="margin-top: 20px;">
+			<div class="panel-heading">
+				<h3 class="panel-title">Active Overrides</h3>
+			</div>
+			<div class="panel-body">
+				<div class="table-responsive">
+					<table class="table table-condensed">
+						<thead>
+							<tr>
+								<th>Profile</th>
+								<th>Override Amount</th>
+								<th>Expires At</th>
+								<th>Action</th>
+							</tr>
+						</thead>
+						<tbody>
+							<?php foreach ($gaming_config['override_enabled'] as $override_profile => $expires_at): ?>
+							<?php if ($expires_at > time()): ?>
+							<tr>
+								<td><strong><?= htmlspecialchars($override_profile) ?></strong></td>
+								<td>+<?= intval($gaming_config['override_limit'] ?? 120) ?> minutes</td>
+								<td><?= date('Y-m-d H:i', $expires_at) ?></td>
+								<td>
+									<form method="post" style="display: inline;">
+										<input type="hidden" name="remove_override_profile" value="<?= htmlspecialchars($override_profile) ?>" />
+										<button type="submit" name="remove_override" value="remove" class="btn btn-xs btn-danger" 
+										        onclick="return confirm('Remove override for <?= htmlspecialchars($override_profile) ?>?');">
+											<i class="fa fa-times"></i> Remove
+										</button>
+									</form>
+								</td>
+							</tr>
+							<?php endif; ?>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+				</div>
+			</div>
+		</div>
 		<?php endif; ?>
 	</div>
 </div>
+<?php endif; ?>
 
 <!-- Active Gaming Sessions -->
 <?php if (!empty($active_gaming)): ?>

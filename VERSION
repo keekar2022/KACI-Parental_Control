@@ -1,4 +1,4 @@
-VERSION=1.4.71
+VERSION=1.4.72
 BUILD_DATE=2026-01-31
-RELEASE_TYPE=osversion_mismatch_fix
-STATUS=production-ready
+RELEASE_TYPE=gaming_who_limits
+STATUS=feature-testing

@@ -7632,57 +7632,53 @@ function pc_check_gaming_limits($device, &$state) {
 		return array('exceeded' => false, 'reason' => '', 'limit_type' => '');
 	}
 	
-	// Get profile configuration
-	$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', array());
-	$profile = null;
-	foreach ($profiles as $p) {
-		if ($p['name'] === $profile_name) {
-			$profile = $p;
-			break;
-		}
-	}
-	
-	if (!$profile || !isset($profile['gaming_limits'])) {
-		return array('exceeded' => false, 'reason' => '', 'limit_type' => '');
-	}
-	
-	$gaming_limits = $profile['gaming_limits'];
-	
 	// Check if device is currently gaming
 	if (!isset($device_state['gaming_detection']) || 
 	    $device_state['gaming_detection']['detected_platform'] === 'none') {
 		return array('exceeded' => false, 'reason' => '', 'limit_type' => '');
 	}
 	
-	$detected_platform = $device_state['gaming_detection']['detected_platform'];
+	// Get gaming configuration (WHO-based universal limits)
+	$gaming_config = pc_get_gaming_config();
+	$daily_limit = intval($gaming_config['daily_gaming_limit'] ?? 60); // Default 60 min (WHO recommendation)
+	$override_limit = intval($gaming_config['override_limit'] ?? 120); // Default 2 hours override
 	
-	// Check per-platform limit
-	if (isset($gaming_limits[$detected_platform]) && $gaming_limits[$detected_platform] > 0) {
-		$platform_usage = $state['profiles'][$profile_name]['gaming_usage'][$detected_platform]['usage_today'] ?? 0;
-		$platform_limit = intval($gaming_limits[$detected_platform]);
-		
-		if ($platform_usage >= $platform_limit) {
-			return array(
-				'exceeded' => true,
-				'reason' => "{$detected_platform} limit exceeded ({$platform_usage}/{$platform_limit} minutes)",
-				'limit_type' => 'platform',
-				'platform' => $detected_platform
-			);
+	// Check if administrator override is active for this profile
+	$override_active = false;
+	if (isset($gaming_config['override_enabled'][$profile_name])) {
+		$override_expires = $gaming_config['override_enabled'][$profile_name];
+		if ($override_expires > time()) {
+			$override_active = true;
 		}
 	}
 	
-	// Check general gaming limit (all games combined)
-	if (isset($gaming_limits['general']) && $gaming_limits['general'] > 0) {
-		$general_usage = $state['profiles'][$profile_name]['gaming_usage']['general']['usage_today'] ?? 0;
-		$general_limit = intval($gaming_limits['general']);
-		
-		if ($general_usage >= $general_limit) {
-			return array(
-				'exceeded' => true,
-				'reason' => "General gaming limit exceeded ({$general_usage}/{$general_limit} minutes)",
-				'limit_type' => 'general'
-			);
+	// Calculate effective limit (base + override if active)
+	$effective_limit = $daily_limit;
+	if ($override_active) {
+		$effective_limit += $override_limit;
+	}
+	
+	// Get profile's total gaming usage today
+	$gaming_usage = 0;
+	if (isset($state['profiles'][$profile_name]['gaming_usage']['general']['usage_today'])) {
+		$gaming_usage = $state['profiles'][$profile_name]['gaming_usage']['general']['usage_today'];
+	}
+	
+	// Check if limit exceeded
+	if ($gaming_usage >= $effective_limit) {
+		$reason = "WHO gaming limit exceeded ({$gaming_usage}/{$effective_limit} minutes)";
+		if ($override_active) {
+			$reason .= " [Override active: +{$override_limit} min]";
 		}
+		
+		return array(
+			'exceeded' => true,
+			'reason' => $reason,
+			'limit_type' => 'universal_who',
+			'usage' => $gaming_usage,
+			'limit' => $effective_limit,
+			'override_active' => $override_active
+		);
 	}
 	
 	return array('exceeded' => false, 'reason' => '', 'limit_type' => '');
