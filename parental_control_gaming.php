@@ -304,16 +304,15 @@ display_top_tabs($tab_array);
 	</div>
 	<div class="panel-body">
 		<!-- Gaming Detection Description -->
-		<div class="content" style="margin-bottom: 20px;">
+		<div class="content">
 			<p><strong>Gaming Detection</strong> automatically identifies when devices are playing online games (Minecraft, Steam, Roblox, etc.) and enforces gaming-specific time limits.</p>
-			<p><strong>How it works:</strong> Combines port detection (Minecraft: 25565, Steam: 27015-27030), behavioral patterns (high connections + Discord), and IP lists to identify gaming activity with confidence scores.</p>
+			<p><strong>How it works:</strong> Combines port detection (Minecraft: 25565, Steam: 27015-27030), behavioral patterns (high connections + Discord), and IP lists to identify gaming activity with confidence scores. <strong>Learn more:</strong> <a href="https://www.who.int/standards/classifications/frequently-asked-questions/gaming-disorder" target="_blank" rel="noopener">WHO Gaming Disorder FAQ</a></p>
 		</div>
 		
 		<!-- WHO Gaming Disorder Prevention -->
-		<div class="alert alert-info">
-			<h4><i class="fa fa-heartbeat"></i> World Health Organization Guidelines</h4>
-			<p><strong>Gaming disorder</strong> is officially recognized in the WHO's International Classification of Diseases (ICD-11) as a pattern of gaming behavior characterized by impaired control over gaming, increasing priority given to gaming over other activities.</p>
-			<p style="margin-bottom: 0;"><strong>Learn more:</strong> <a href="https://www.who.int/standards/classifications/frequently-asked-questions/gaming-disorder" target="_blank" rel="noopener">WHO Gaming Disorder FAQ</a></p>
+		<div class="alert alert-info" style="margin-top: 15px;">
+			<h4 style="margin-top: 0;"><i class="fa fa-heartbeat"></i> World Health Organization Guidelines</h4>
+			<p style="margin-bottom: 0;"><strong>Gaming disorder</strong> is officially recognized in the WHO's International Classification of Diseases (ICD-11) as a pattern of gaming behavior characterized by impaired control over gaming, increasing priority given to gaming over other activities.</p>
 		</div>
 		
 		<!-- Universal Daily Gaming Limit Form -->
