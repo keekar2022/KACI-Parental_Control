@@ -1,8 +1,30 @@
 # Deployment History - January 2026
 
-**Date:** January 25-29, 2026  
+**Date:** January 25-31, 2026  
 **Project:** KACI Parental Control - FreeBSD Package Build System  
 **Status:** ✅ 90% Complete - Minor issues remaining
+
+---
+
+## 🚨 v1.4.82 - Auto-Discovery Critical Fix (Jan 31, 2026)
+
+**Severity:** CRITICAL  
+**Issue:** Auto-discovery feature completely non-functional since v1.4.67  
+**Impact:** Unassigned devices (iPhone, MacBook Pro) accessed YouTube without detection/assignment
+
+### Bug Details
+- **Root Cause:** Undefined variable `$devices` in auto-discovery code (line 5021)
+- **Result:** Zero devices checked, zero assignments made
+- **Real-World Impact:** User's iPhone and MacBook Pro watched YouTube without profile assignment
+
+### Fix Applied
+- **File:** `parental_control.inc` (lines 5018-5032)
+- **Change:** Call `pc_discover_devices()` to get ALL network devices from DHCP
+- **Result:** Auto-discovery now checks all network devices, not just those in profiles
+
+### Documentation
+- See: `logs/AUTO_DISCOVERY_FIX_v1.4.82.md` for complete details
+- Testing required with real devices (iPhone/MacBook Pro)
 
 ---
 

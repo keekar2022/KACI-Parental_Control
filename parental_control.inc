@@ -5016,10 +5016,13 @@ function parental_control_cron_job() {
 	}
 	
 	// NEW v1.4.67: Auto-discovery for unassigned devices
-	// Collect service connections for auto-discovery
+	// CRITICAL FIX v1.4.82: Discover ALL network devices (not just those in profiles)
+	// to detect unassigned devices connecting to monitored services
 	$service_connections_by_ip = array();
-	foreach ($devices as $device) {
-		$ip = pc_get_device_ip($device);
+	$all_network_devices = pc_discover_devices(); // Get ALL devices from DHCP/network
+	
+	foreach ($all_network_devices as $device) {
+		$ip = isset($device['ip_address']) ? $device['ip_address'] : null;
 		if ($ip) {
 			$connections = pc_get_service_connections($ip, $service_ips_cache, $all_states);
 			if (!empty($connections)) {
