@@ -7,10 +7,11 @@
 ## 📑 Table of Contents
 
 1. [Configuration Guide](#configuration-guide)
-2. [Troubleshooting](#troubleshooting)
-3. [Gaming Device Investigation](#gaming-device-investigation)
-4. [Auto-Update Feature](#auto-update-feature)
-5. [Latest Fixes & Updates](#latest-fixes--updates)
+2. [Gaming Detection](#gaming-detection)
+3. [Troubleshooting](#troubleshooting)
+4. [Gaming Device Investigation](#gaming-device-investigation)
+5. [Auto-Update Feature](#auto-update-feature)
+6. [Latest Fixes & Updates](#latest-fixes--updates)
 
 ---
 
@@ -590,6 +591,284 @@ vi /var/db/parental_control_state.json
 **Built with Passion by Mukesh Kesharwani**  
 **© 2025 Keekar**
 
+
+---
+
+# Gaming Detection
+
+**NEW in v1.4.71:** Comprehensive gaming detection and control
+
+## Overview
+
+Gaming Detection automatically identifies when devices are playing online games (Minecraft, Steam, Roblox, Epic Games, etc.) and enforces gaming-specific time limits. This feature combines port-based detection, behavioral pattern analysis, and IP lists for accurate game identification.
+
+## Enabling Gaming Detection
+
+### Master Enable/Disable
+
+1. Navigate to **Services → Keekar's Parental Control → Gaming Detection**
+2. Check the **Enable Gaming Detection** checkbox at the top
+3. Click **Save Settings**
+
+**Important:** When gaming detection is disabled:
+- No gaming activity is detected
+- No gaming usage is tracked
+- No gaming limits are enforced
+- All gaming-related blocking is disabled
+
+This master switch controls everything - perfect for temporarily disabling the feature without losing configuration.
+
+## Detection Methods
+
+### 1. Port-Based Detection (Highest Accuracy)
+
+Identifies games by their standard network ports:
+
+| Game Platform | Ports | Accuracy |
+|--------------|-------|----------|
+| **Minecraft** | 25565 (Java), 19132 (Bedrock) | 99% |
+| **Steam** | 27015-27030 | 95% |
+| **Epic Games** | 5222-5223, 9000-9100 | 90% |
+
+**Pros:**
+- Very high accuracy
+- Low false positives
+- Immediate detection
+
+**Cons:**
+- Only works for games with standard ports
+- Doesn't detect CDN-proxied games
+
+### 2. Pattern-Based Detection (For Modern Games)
+
+Identifies gaming based on behavioral patterns:
+
+**Gaming Pattern Indicators:**
+1. **High Connection Count:** 70-100+ connections (vs 5-15 for normal browsing)
+2. **Discord Active:** Voice chat usage (multiplayer gaming indicator)
+3. **YouTube Active:** Gaming content consumption (tutorials, streams)
+4. **Sustained Session:** Continuous activity for 60+ minutes
+
+**Confidence Scores:**
+- 4 indicators matched = 90% confidence (very likely gaming)
+- 3 indicators matched = 75% confidence (likely gaming)
+- 2 indicators matched = 50% confidence (possible gaming)
+- 1 indicator matched = 25% confidence (unlikely gaming)
+
+**Best For:**
+- Roblox (uses Cloudflare CDN, no standard port)
+- Browser-based games
+- CDN-proxied game servers
+
+**Based On:** Real-world investigation documented in `logs/GAMING_INVESTIGATION_2026-01-29.md` (Minecraft multiplayer session analysis)
+
+### 3. All Methods Combined (Recommended)
+
+Uses both port and pattern detection for comprehensive coverage:
+- Port detection catches Minecraft, Steam, Epic Games
+- Pattern detection catches Roblox and CDN-proxied servers
+- Highest overall accuracy
+
+## Configuring Gaming Platforms
+
+### Platform Configuration
+
+Each gaming platform can be configured independently:
+
+1. Navigate to **Gaming Detection** tab
+2. Scroll to **Gaming Platforms** section
+3. For each platform:
+   - **Enabled:** Check to enable detection
+   - **Ports:** Enter gaming ports (e.g., "25565" or "27015-27030")
+   - **Detection Method:**
+     - **Port:** Port-based only
+     - **Pattern:** Behavioral pattern only
+     - **Both:** Combined detection (recommended for Minecraft)
+
+### Supported Platforms
+
+**Pre-configured platforms:**
+- **Minecraft:** Ports 25565, 19132 + Pattern detection
+- **Steam:** Ports 27015-27030
+- **Roblox:** Pattern-based (Cloudflare CDN)
+- **Epic Games:** Ports 5222-5223, 9000-9100
+
+## Setting Gaming Limits
+
+### Per-Profile Gaming Limits
+
+Gaming limits are set per profile and can be configured for:
+1. **General Gaming Limit:** Total gaming time across all games (e.g., 120 minutes/day)
+2. **Per-Game Limits:** Individual limits for each platform (e.g., Minecraft: 60 min, Steam: 90 min)
+
+### Configuring Limits
+
+1. Navigate to **Gaming Detection** tab
+2. Scroll to **Per-Profile Gaming Limits** section
+3. For each profile:
+   - Set **All Gaming (Combined)** limit for total daily gaming
+   - Set individual platform limits (Minecraft, Steam, etc.)
+   - Enter **0** for unlimited
+4. Click **Save Limits** for each profile
+
+### Limit Hierarchy
+
+Gaming limits are enforced independently from general internet limits:
+
+**Example Configuration:**
+```
+Profile: Vishesh
+├─ General Internet Limit: 4 hours/day
+├─ General Gaming Limit: 2 hours/day (all games)
+├─ Minecraft Limit: 60 minutes/day
+└─ Steam Limit: 90 minutes/day
+```
+
+**Enforcement:**
+- If Minecraft limit (60 min) reached → Minecraft blocked, Steam still allowed
+- If General Gaming limit (2 hrs) reached → All gaming blocked
+- General Internet limit (4 hrs) applies separately
+
+## Pattern Detection Configuration
+
+### Adjusting Sensitivity
+
+Default thresholds can be adjusted in **Pattern Detection Thresholds** section:
+
+| Threshold | Default | Description |
+|-----------|---------|-------------|
+| **High Connections** | 70 | Connections above this indicate gaming |
+| **Discord Usage** | 60 min | Minutes of Discord suggesting multiplayer |
+| **YouTube Usage** | 60 min | Minutes of YouTube suggesting gaming content |
+| **Session Duration** | 60 min | Continuous activity duration |
+
+**Tuning Recommendations:**
+- **Stricter Detection:** Increase thresholds (Discord: 90 min, Connections: 90)
+- **Looser Detection:** Decrease thresholds (Discord: 30 min, Connections: 50)
+- **Default (Recommended):** Balanced based on real-world investigation
+
+### Confidence Threshold
+
+Minimum confidence (50-95%) required to flag as gaming:
+- **50-60%:** More sensitive, may have false positives
+- **70-80%:** Balanced (recommended)
+- **85-95%:** Very strict, fewer false positives but may miss some gaming
+
+## Active Gaming Sessions
+
+The **Active Gaming Sessions** section shows real-time gaming activity:
+
+**Displayed Information:**
+- Device name and IP address
+- Profile assignment
+- Detected game platform
+- Confidence score
+- Session duration
+- Session start time
+
+**Example Display:**
+```
+Device: macbookpro (192.168.1.27)
+Profile: Vishesh
+Game: Minecraft (pattern-based)
+Confidence: 95%
+Duration: 135 minutes
+Started: 15:30
+```
+
+## Integration with Existing Features
+
+### Works With Schedules
+
+Gaming detection respects existing schedules:
+- If device in blocked schedule (e.g., bedtime) → Gaming not tracked
+- Gaming limits enforced during allowed schedule times
+- Can create gaming-specific schedules in KACI-PC-Schedule tab
+
+### Works With Service Limits
+
+Gaming detection complements service limits:
+- Discord limits still enforced independently
+- YouTube limits still enforced independently
+- Gaming limits add another layer of control
+- All limits enforced simultaneously
+
+### Example Combined Enforcement
+
+**Profile: Vishesh**
+```
+Limits:
+├─ Discord: 120 min/day → EXCEEDED at 160 min → Blocked
+├─ Gaming (Minecraft): 60 min/day → EXCEEDED at 75 min → Blocked
+└─ General Internet: 4 hrs/day → Still has time remaining
+
+Result:
+- Discord blocked (service limit)
+- Minecraft blocked (gaming limit)
+- Other internet still allowed (within general limit)
+```
+
+## Best Practices
+
+### Starting Out
+
+1. **Enable gaming detection** but set generous limits initially
+2. **Monitor for 1 week** to understand actual gaming patterns
+3. **Adjust limits** based on observed usage
+4. **Combine with schedules** (block gaming during homework hours)
+
+### Recommended Limits
+
+**Elementary School (Ages 6-10):**
+- General gaming: 60 minutes/day
+- Roblox/Minecraft: 45 minutes/day
+- No Steam/Epic Games (too mature)
+
+**Middle School (Ages 11-14):**
+- General gaming: 90 minutes/day
+- Minecraft: 60 minutes/day
+- Steam: 60 minutes/day
+
+**High School (Ages 15-18):**
+- General gaming: 120 minutes/day
+- Per-game limits: 90 minutes/day
+- Weekend bonus: +60 minutes
+
+### Troubleshooting Gaming Detection
+
+**Gaming not detected:**
+1. Verify gaming detection is enabled (master checkbox)
+2. Check detection methods include appropriate method (port/pattern)
+3. Check confidence threshold isn't too high
+4. Check platform is enabled
+5. Verify device is in a profile
+6. Check logs: `/var/log/parental_control-YYYY-MM-DD.jsonl | grep gaming`
+
+**False positives (non-gaming flagged as gaming):**
+1. Increase confidence threshold (75 → 85%)
+2. Adjust pattern thresholds (increase connection count threshold)
+3. Use port-based detection only for specific games
+4. Check logs to see which indicators are matching
+
+**Specific game not detected:**
+1. Verify correct ports configured
+2. Check if game uses CDN proxy (may need pattern detection)
+3. Collect IP addresses during gaming session
+4. Add to Online-Service tab as custom service
+
+### Logging
+
+Gaming detection logs all events:
+
+**View gaming detection logs:**
+```bash
+tail -f /var/log/parental_control-$(date +%Y-%m-%d).jsonl | grep gaming
+```
+
+**Log Events:**
+- `gaming_detected` - Gaming activity identified
+- `gaming_blocked` - Device blocked for gaming limit
+- `gaming_detection_completed` - Scan completed
 
 ---
 

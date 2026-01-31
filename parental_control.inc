@@ -5006,11 +5006,23 @@ function parental_control_cron_job() {
 	// that aren't monitored services, causing 60-75 min phantom usage across ALL profiles
 	pc_detect_general_bot_behavior($state);
 	
+	// NEW v1.4.71: Gaming detection and enforcement
+	// Detects gaming activity via ports (Minecraft 25565, Steam 27015-27030) and behavioral patterns
+	// Enforces per-game and general gaming time limits
+	// Based on investigation documented in logs/GAMING_INVESTIGATION_2026-01-29.md
+	if (pc_is_gaming_enabled()) {
+		pc_detect_and_track_gaming($state, $service_ips_cache, $all_states);
+		pc_enforce_gaming_limits($state);
+	}
+	
 	// NEW v1.4.67: Auto-discovery for unassigned devices
-	// Collect service connections for auto-discovery
+	// CRITICAL FIX v1.4.82: Discover ALL network devices (not just those in profiles)
+	// to detect unassigned devices connecting to monitored services
 	$service_connections_by_ip = array();
-	foreach ($devices as $device) {
-		$ip = pc_get_device_ip($device);
+	$all_network_devices = pc_discover_devices(); // Get ALL devices from DHCP/network
+	
+	foreach ($all_network_devices as $device) {
+		$ip = isset($device['ip_address']) ? $device['ip_address'] : null;
 		if ($ip) {
 			$connections = pc_get_service_connections($ip, $service_ips_cache, $all_states);
 			if (!empty($connections)) {
@@ -7030,6 +7042,822 @@ function pc_detect_general_bot_behavior(&$state) {
 			'note' => 'General usage tracking paused for flagged devices'
 		));
 	}
+}
+
+// ============================================================================
+// GAMING DETECTION FUNCTIONS
+// ============================================================================
+// NEW v1.4.71: Comprehensive gaming detection and control
+// Combines port-based detection, behavioral patterns, and IP lists
+// Based on real-world investigation documented in logs/GAMING_INVESTIGATION_2026-01-29.md
+
+/**
+ * Check if gaming detection is enabled globally
+ * 
+ * @return bool True if gaming detection is enabled
+ * @since 1.4.71
+ */
+function pc_is_gaming_enabled() {
+	$gaming_config = config_get_path('installedpackages/parentalcontrolgaming/config/0', array());
+	return isset($gaming_config['enable']) && $gaming_config['enable'] === 'on';
+}
+
+/**
+ * Get gaming detection configuration
+ * 
+ * @return array Gaming configuration with defaults
+ * @since 1.4.71
+ */
+function pc_get_gaming_config() {
+	$gaming_config = config_get_path('installedpackages/parentalcontrolgaming/config/0', array());
+	
+	// Set defaults if not configured
+	if (empty($gaming_config)) {
+		$gaming_config = array(
+			'enable' => 'off',
+			'detection_methods' => 'all',
+			'confidence_threshold' => 75,
+			'pattern_high_connections' => 70,
+			'pattern_discord_minutes' => 60,
+			'pattern_youtube_minutes' => 60,
+			'pattern_session_minutes' => 60,
+			'platforms' => array(),
+			'exempt_macs' => array()
+		);
+	}
+	
+	return $gaming_config;
+}
+
+/**
+ * Check if a MAC address is exempted from gaming detection
+ * 
+ * @param string $mac MAC address to check (will be normalized)
+ * @return bool True if exempted, false otherwise
+ */
+function pc_is_mac_exempted_from_gaming($mac) {
+	$gaming_config = pc_get_gaming_config();
+	
+	if (!isset($gaming_config['exempt_macs']) || empty($gaming_config['exempt_macs'])) {
+		return false;
+	}
+	
+	// Normalize MAC address (uppercase with colons)
+	$normalized_mac = strtoupper(str_replace('-', ':', $mac));
+	
+	return isset($gaming_config['exempt_macs'][$normalized_mac]);
+}
+
+/**
+ * Detect gaming activity by checking for gaming ports in firewall state table
+ * 
+ * Uses pfctl state table to check if device has connections to gaming ports.
+ * Port detection is the most accurate method for games with standard ports.
+ * 
+ * @param string $device_ip Device IP address to check
+ * @param array $all_states Pre-loaded pfctl state table (optional, for performance)
+ * @return array Detection result: ['detected' => bool, 'platforms' => array, 'ports' => array]
+ * @since 1.4.71
+ * 
+ * @example
+ * $result = pc_detect_gaming_by_port('192.168.1.27');
+ * if ($result['detected']) {
+ *     echo "Gaming detected: " . implode(', ', $result['platforms']);
+ * }
+ */
+function pc_detect_gaming_by_port($device_ip, $all_states = null) {
+	if (empty($device_ip)) {
+		return array('detected' => false, 'platforms' => array(), 'ports' => array(), 'confidence' => 0);
+	}
+	
+	// Load state table if not provided
+	if ($all_states === null) {
+		$all_states = pc_get_all_established_states();
+	}
+	
+	if (empty($all_states)) {
+		return array('detected' => false, 'platforms' => array(), 'ports' => array(), 'confidence' => 0);
+	}
+	
+	// Get gaming configuration
+	$gaming_config = pc_get_gaming_config();
+	
+	if (!isset($gaming_config['platforms']) || empty($gaming_config['platforms'])) {
+		return array('detected' => false, 'platforms' => array(), 'ports' => array(), 'confidence' => 0);
+	}
+	
+	// Filter states for this device
+	$device_states = array_filter($all_states, function($line) use ($device_ip) {
+		return strpos($line, "({$device_ip}:") !== false || strpos($line, "{$device_ip}:") !== false;
+	});
+	
+	if (empty($device_states)) {
+		return array('detected' => false, 'platforms' => array(), 'ports' => array(), 'confidence' => 0);
+	}
+	
+	// Port specificity scoring (higher = more specific to gaming)
+	// High-specificity ports require fewer connections, low-specificity require more
+	$port_specificity = array(
+		25565 => 95,  // Minecraft Java - very specific
+		19132 => 95,  // Minecraft Bedrock - very specific
+		27015 => 85,  // Steam Source engine - specific
+		27016 => 85,  // Steam Source engine
+		27030 => 80,  // Steam range end
+		5222  => 20,  // XMPP - very common (Facebook, WhatsApp, chat apps)
+		5223  => 20,  // XMPP/APNs - very common (Apple Push Notifications)
+		9000  => 30,  // Generic - many services use this range
+		9100  => 30   // Generic - many services use this range
+	);
+	
+	$detected_platforms = array();
+	$detected_ports = array();
+	$port_connections = array(); // Track connection count per port
+	
+	// First pass: Count connections per port
+	foreach ($device_states as $line) {
+		if (preg_match('/-> (\d+\.\d+\.\d+\.\d+):(\d+)/', $line, $matches)) {
+			$dst_port = intval($matches[2]);
+			if (!isset($port_connections[$dst_port])) {
+				$port_connections[$dst_port] = 0;
+			}
+			$port_connections[$dst_port]++;
+		}
+	}
+	
+	// Check each gaming platform's ports
+	foreach ($gaming_config['platforms'] as $platform_id => $platform) {
+		// Skip if platform disabled
+		if (!isset($platform['enabled']) || $platform['enabled'] !== 'on') {
+			continue;
+		}
+		
+		// Skip if detection method doesn't include ports
+		if (isset($platform['detection_method']) && $platform['detection_method'] === 'pattern') {
+			continue;
+		}
+		
+		// Get port list
+		$ports_str = $platform['ports'] ?? '';
+		if (empty($ports_str)) {
+			continue;
+		}
+		
+		// Parse ports (supports: "25565", "25565,19132", "27015-27030")
+		$ports = explode(',', $ports_str);
+		
+		foreach ($ports as $port_def) {
+			$port_def = trim($port_def);
+			
+			// Handle port range (e.g., "27015-27030")
+			if (strpos($port_def, '-') !== false) {
+				list($start_port, $end_port) = explode('-', $port_def);
+				$start_port = intval(trim($start_port));
+				$end_port = intval(trim($end_port));
+				
+				// Check if any port in range is being used
+				foreach ($port_connections as $dst_port => $conn_count) {
+					if ($dst_port >= $start_port && $dst_port <= $end_port) {
+						// Get port specificity (default to 50 for unknown ports)
+						$specificity = isset($port_specificity[$dst_port]) ? $port_specificity[$dst_port] : 50;
+						
+						// Calculate minimum connections required based on specificity
+						// High specificity (90+): 1 connection
+						// Medium specificity (50-89): 3 connections
+						// Low specificity (<50): 5 connections
+						$min_connections = 1;
+						if ($specificity >= 80) {
+							$min_connections = 2;
+						} elseif ($specificity >= 50) {
+							$min_connections = 4;
+						} else {
+							$min_connections = 8; // Low specificity requires many connections
+						}
+						
+						// Only detect if connection count meets threshold
+						if ($conn_count >= $min_connections) {
+							$detected_platforms[$platform_id] = $platform['name'];
+							$detected_ports[] = $dst_port;
+						}
+					}
+				}
+			} else {
+				// Single port
+				$port = intval($port_def);
+				
+				// Check if this port is in use with enough connections
+				if (isset($port_connections[$port])) {
+					$conn_count = $port_connections[$port];
+					$specificity = isset($port_specificity[$port]) ? $port_specificity[$port] : 50;
+					
+					// Calculate minimum connections required
+					$min_connections = 1;
+					if ($specificity >= 80) {
+						$min_connections = 2;
+					} elseif ($specificity >= 50) {
+						$min_connections = 4;
+					} else {
+						$min_connections = 8; // Low specificity requires many connections
+					}
+					
+					// Only detect if connection count meets threshold
+					if ($conn_count >= $min_connections) {
+						$detected_platforms[$platform_id] = $platform['name'];
+						$detected_ports[] = $port;
+					}
+				}
+			}
+		}
+	}
+	
+	// Calculate overall confidence based on detected ports
+	$confidence = 0;
+	if (!empty($detected_ports)) {
+		$total_specificity = 0;
+		foreach (array_unique($detected_ports) as $port) {
+			$total_specificity += isset($port_specificity[$port]) ? $port_specificity[$port] : 50;
+		}
+		$confidence = min(99, intval($total_specificity / count(array_unique($detected_ports))));
+	}
+	
+	return array(
+		'detected' => !empty($detected_platforms),
+		'platforms' => $detected_platforms,
+		'ports' => array_unique($detected_ports),
+		'confidence' => $confidence
+	);
+}
+
+/**
+ * Detect gaming activity by analyzing behavioral patterns
+ * 
+ * Identifies gaming based on connection patterns:
+ * - High connection count (70-100+)
+ * - Concurrent Discord usage (voice chat indicator)
+ * - YouTube gaming content consumption
+ * - Sustained session duration
+ * 
+ * Based on real-world investigation of Minecraft gaming session
+ * (see logs/GAMING_INVESTIGATION_2026-01-29.md)
+ * 
+ * @param array &$state Reference to state array
+ * @param string $device_ip Device IP address to check
+ * @return array Detection result: ['detected' => bool, 'confidence' => int, 'indicators' => array]
+ * @since 1.4.71
+ * 
+ * @example
+ * $result = pc_detect_gaming_by_pattern($state, '192.168.1.27');
+ * if ($result['detected'] && $result['confidence'] >= 75) {
+ *     echo "Gaming detected with {$result['confidence']}% confidence";
+ * }
+ */
+function pc_detect_gaming_by_pattern(&$state, $device_ip) {
+	if (empty($device_ip) || !isset($state['devices_by_ip'][$device_ip])) {
+		return array('detected' => false, 'confidence' => 0, 'indicators' => array());
+	}
+	
+	$device_state = $state['devices_by_ip'][$device_ip];
+	$gaming_config = pc_get_gaming_config();
+	
+	// Get thresholds from config
+	$high_connections_threshold = intval($gaming_config['pattern_high_connections'] ?? 70);
+	$discord_minutes_threshold = intval($gaming_config['pattern_discord_minutes'] ?? 60);
+	$youtube_minutes_threshold = intval($gaming_config['pattern_youtube_minutes'] ?? 60);
+	$session_minutes_threshold = intval($gaming_config['pattern_session_minutes'] ?? 60);
+	
+	// Initialize indicators
+	$indicators = array(
+		'high_connections' => false,
+		'discord_active' => false,
+		'youtube_active' => false,
+		'sustained_session' => false
+	);
+	
+	// Indicator 1: High Connection Count
+	$connection_count = $device_state['connections_last_check'] ?? 0;
+	if ($connection_count >= $high_connections_threshold) {
+		$indicators['high_connections'] = true;
+	}
+	
+	// Indicator 2: Discord Active (voice chat for multiplayer)
+	if (isset($device_state['service_usage']['Discord'])) {
+		$discord_usage = $device_state['service_usage']['Discord']['usage_today'] ?? 0;
+		if ($discord_usage >= $discord_minutes_threshold) {
+			$indicators['discord_active'] = true;
+		}
+	}
+	
+	// Indicator 3: YouTube Active (gaming videos/streams)
+	if (isset($device_state['service_usage']['YouTube'])) {
+		$youtube_usage = $device_state['service_usage']['YouTube']['usage_today'] ?? 0;
+		if ($youtube_usage >= $youtube_minutes_threshold) {
+			$indicators['youtube_active'] = true;
+		}
+	}
+	
+	// Indicator 4: Sustained Session
+	$device_usage_today = $device_state['usage_today'] ?? 0;
+	if ($device_usage_today >= $session_minutes_threshold) {
+		$indicators['sustained_session'] = true;
+	}
+	
+	// Calculate confidence score
+	// 4 indicators = 90%, 3 indicators = 75%, 2 indicators = 50%, 1 indicator = 25%
+	$matched_count = count(array_filter($indicators));
+	$confidence = 0;
+	switch ($matched_count) {
+		case 4: $confidence = 90; break;
+		case 3: $confidence = 75; break;
+		case 2: $confidence = 50; break;
+		case 1: $confidence = 25; break;
+		default: $confidence = 0;
+	}
+	
+	// Require at least 2 indicators for detection
+	$detected = ($matched_count >= 2);
+	
+	return array(
+		'detected' => $detected,
+		'confidence' => $confidence,
+		'indicators' => $indicators,
+		'matched_count' => $matched_count
+	);
+}
+
+/**
+ * Identify which game platform is being played
+ * 
+ * Combines port detection and pattern analysis to identify specific game platform.
+ * Returns platform with highest confidence score.
+ * 
+ * @param array &$state Reference to state array
+ * @param string $device_ip Device IP address
+ * @param array $all_states Pre-loaded pfctl state table
+ * @return array Platform detection: ['platform' => string, 'confidence' => int, 'method' => string]
+ * @since 1.4.71
+ */
+function pc_identify_game_platform(&$state, $device_ip, $all_states = null) {
+	$gaming_config = pc_get_gaming_config();
+	
+	// Port-based detection (highest accuracy)
+	$port_result = pc_detect_gaming_by_port($device_ip, $all_states);
+	if ($port_result['detected']) {
+		// Port detection confidence varies based on port specificity and connection count
+		$platform_id = array_keys($port_result['platforms'])[0];
+		$platform_name = $port_result['platforms'][$platform_id];
+		
+		return array(
+			'platform' => $platform_id,
+			'platform_name' => $platform_name,
+			'confidence' => $port_result['confidence'], // Confidence based on port specificity
+			'method' => 'port',
+			'details' => array('ports' => $port_result['ports'], 'specificity' => $port_result['confidence'])
+		);
+	}
+	
+	// Pattern-based detection (for CDN-proxied games like Roblox)
+	$pattern_result = pc_detect_gaming_by_pattern($state, $device_ip);
+	if ($pattern_result['detected']) {
+		// Try to identify specific platform based on patterns
+		// Roblox pattern: Cloudflare heavy + younger profile
+		// Minecraft pattern: Cloudflare + Discord + YouTube (as documented)
+		
+		$device_state = $state['devices_by_ip'][$device_ip];
+		$profile_name = $device_state['profile'] ?? 'Unknown';
+		
+		// Check service usage patterns
+		$has_minecraft_pattern = false;
+		$has_roblox_pattern = false;
+		
+		// Minecraft indicators: High Discord + High YouTube + Very high connections
+		if ($pattern_result['indicators']['discord_active'] && 
+		    $pattern_result['indicators']['youtube_active'] &&
+		    $pattern_result['indicators']['high_connections']) {
+			$has_minecraft_pattern = true;
+		}
+		
+		// Roblox indicators: High connections + Cloudflare (but less Discord/YouTube)
+		if ($pattern_result['indicators']['high_connections'] && 
+		    !$pattern_result['indicators']['discord_active']) {
+			$has_roblox_pattern = true;
+		}
+		
+		// Default to most likely platform
+		if ($has_minecraft_pattern) {
+			$platform = 'minecraft';
+			$platform_name = 'Minecraft';
+		} elseif ($has_roblox_pattern) {
+			$platform = 'roblox';
+			$platform_name = 'Roblox';
+		} else {
+			$platform = 'unknown';
+			$platform_name = 'Unknown Gaming';
+		}
+		
+		return array(
+			'platform' => $platform,
+			'platform_name' => $platform_name,
+			'confidence' => $pattern_result['confidence'],
+			'method' => 'pattern',
+			'details' => array('indicators' => $pattern_result['indicators'])
+		);
+	}
+	
+	// No gaming detected
+	return array(
+		'platform' => 'none',
+		'platform_name' => 'None',
+		'confidence' => 0,
+		'method' => 'none',
+		'details' => array()
+	);
+}
+
+/**
+ * Update gaming usage tracking for a device
+ * 
+ * Tracks gaming time at both device and profile level.
+ * Updates gaming_detection state with platform, confidence, and usage.
+ * 
+ * @param array &$state Reference to state array
+ * @param string $device_ip Device IP address
+ * @param string $game_platform Game platform ID (minecraft, steam, roblox, etc.)
+ * @param int $confidence Confidence score (0-100)
+ * @param int $interval_minutes Minutes to add to usage
+ * @param string $detection_method Detection method used (port, pattern, ip, combined)
+ * @return void Updates state array directly
+ * @since 1.4.71
+ */
+function pc_update_gaming_usage(&$state, $device_ip, $game_platform, $confidence, $interval_minutes, $detection_method) {
+	if (!isset($state['devices_by_ip'][$device_ip])) {
+		return;
+	}
+	
+	$device_state = &$state['devices_by_ip'][$device_ip];
+	$profile_name = $device_state['profile'] ?? null;
+	
+	if (empty($profile_name)) {
+		return; // Device not in a profile
+	}
+	
+	// Initialize gaming detection state at device level
+	if (!isset($device_state['gaming_detection'])) {
+		$device_state['gaming_detection'] = array(
+			'detected_platform' => 'none',
+			'confidence_score' => 0,
+			'detection_method' => 'none',
+			'session_start' => 0,
+			'usage_today' => 0,
+			'usage_week' => 0,
+			'last_detected' => 0
+		);
+	}
+	
+	// Update detection data
+	$device_state['gaming_detection']['detected_platform'] = $game_platform;
+	$device_state['gaming_detection']['confidence_score'] = $confidence;
+	$device_state['gaming_detection']['detection_method'] = $detection_method;
+	$device_state['gaming_detection']['last_detected'] = time();
+	
+	// Track session start (first detection)
+	if ($device_state['gaming_detection']['session_start'] === 0) {
+		$device_state['gaming_detection']['session_start'] = time();
+	}
+	
+	// Add usage time
+	$device_state['gaming_detection']['usage_today'] += $interval_minutes;
+	$device_state['gaming_detection']['usage_week'] += $interval_minutes;
+	
+	// Initialize profile gaming usage tracking
+	if (!isset($state['profiles'])) {
+		$state['profiles'] = array();
+	}
+	if (!isset($state['profiles'][$profile_name])) {
+		$state['profiles'][$profile_name] = array();
+	}
+	if (!isset($state['profiles'][$profile_name]['gaming_usage'])) {
+		$state['profiles'][$profile_name]['gaming_usage'] = array();
+	}
+	
+	// Track general gaming (all games combined)
+	if (!isset($state['profiles'][$profile_name]['gaming_usage']['general'])) {
+		$state['profiles'][$profile_name]['gaming_usage']['general'] = array(
+			'usage_today' => 0,
+			'usage_week' => 0
+		);
+	}
+	$state['profiles'][$profile_name]['gaming_usage']['general']['usage_today'] += $interval_minutes;
+	$state['profiles'][$profile_name]['gaming_usage']['general']['usage_week'] += $interval_minutes;
+	
+	// Track per-platform usage
+	if (!isset($state['profiles'][$profile_name]['gaming_usage'][$game_platform])) {
+		$state['profiles'][$profile_name]['gaming_usage'][$game_platform] = array(
+			'usage_today' => 0,
+			'usage_week' => 0,
+			'last_detected' => 0
+		);
+	}
+	$state['profiles'][$profile_name]['gaming_usage'][$game_platform]['usage_today'] += $interval_minutes;
+	$state['profiles'][$profile_name]['gaming_usage'][$game_platform]['usage_week'] += $interval_minutes;
+	$state['profiles'][$profile_name]['gaming_usage'][$game_platform]['last_detected'] = time();
+	
+	// Log gaming detection
+	$device_name = $device_state['name'] ?? $device_ip;
+	pc_log("Gaming detected: {$device_name} @ {$device_ip} playing {$game_platform}", 'info', array(
+		'event.action' => 'gaming_detected',
+		'device.name' => $device_name,
+		'client.address' => $device_ip,
+		'user.name' => $profile_name,
+		'gaming.platform' => $game_platform,
+		'gaming.confidence' => $confidence,
+		'gaming.method' => $detection_method,
+		'usage.added' => $interval_minutes
+	));
+}
+
+/**
+ * Detect and track gaming activity for all devices
+ * 
+ * Main entry point for gaming detection. Called from cron job every 5 minutes.
+ * Scans all devices, identifies gaming activity, and updates state.
+ * 
+ * @param array &$state Reference to state array
+ * @param array $service_ips_cache Pre-loaded service IPs (optional)
+ * @param array $all_states Pre-loaded pfctl state table (optional)
+ * @return void Updates state array directly
+ * @since 1.4.71
+ */
+function pc_detect_and_track_gaming(&$state, $service_ips_cache = null, $all_states = null) {
+	$gaming_config = pc_get_gaming_config();
+	$interval_minutes = ceil(PC_CRON_INTERVAL_SECONDS / 60);
+	$confidence_threshold = intval($gaming_config['confidence_threshold'] ?? 75);
+	$detection_methods = $gaming_config['detection_methods'] ?? 'all';
+	
+	// Load state table if not provided
+	if ($all_states === null) {
+		$all_states = pc_get_all_established_states();
+	}
+	
+	$gaming_detected_count = 0;
+	
+	if (!isset($state['devices_by_ip'])) {
+		return;
+	}
+	
+	foreach ($state['devices_by_ip'] as $ip => &$device_state) {
+		// Skip offline devices
+		$connection_count = $device_state['connections_last_check'] ?? 0;
+		if ($connection_count === 0) {
+			// Device offline - reset gaming detection if exists
+			if (isset($device_state['gaming_detection']) && 
+			    $device_state['gaming_detection']['detected_platform'] !== 'none') {
+				$device_state['gaming_detection']['detected_platform'] = 'none';
+				$device_state['gaming_detection']['confidence_score'] = 0;
+				$device_state['gaming_detection']['session_start'] = 0;
+			}
+			continue;
+		}
+		
+		// Check if this device's MAC address is exempted from gaming detection
+		// Gaming detection applies to ALL devices, but exemptions allow specific devices to be skipped
+		$device_mac = $device_state['mac'] ?? '';
+		if (!empty($device_mac) && pc_is_mac_exempted_from_gaming($device_mac)) {
+			// Device is exempted - clear any existing gaming detection
+			if (isset($device_state['gaming_detection']) && 
+			    $device_state['gaming_detection']['detected_platform'] !== 'none') {
+				$device_state['gaming_detection']['detected_platform'] = 'none';
+				$device_state['gaming_detection']['confidence_score'] = 0;
+				$device_state['gaming_detection']['session_start'] = 0;
+			}
+			continue;
+		}
+		
+		$detected = false;
+		$platform_result = null;
+		
+		// Try detection methods based on configuration
+		if ($detection_methods === 'all' || $detection_methods === 'ports') {
+			// Port-based detection
+			$platform_result = pc_identify_game_platform($state, $ip, $all_states);
+			if ($platform_result['confidence'] >= $confidence_threshold) {
+				$detected = true;
+			}
+		}
+		
+		// If not detected by ports, try pattern detection
+		if (!$detected && ($detection_methods === 'all' || $detection_methods === 'patterns')) {
+			$pattern_result = pc_detect_gaming_by_pattern($state, $ip);
+			if ($pattern_result['confidence'] >= $confidence_threshold) {
+				// Use pattern detection result
+				$platform_result = array(
+					'platform' => 'unknown', // Pattern detection can't identify specific game
+					'platform_name' => 'Unknown Gaming',
+					'confidence' => $pattern_result['confidence'],
+					'method' => 'pattern',
+					'details' => $pattern_result['indicators']
+				);
+				$detected = true;
+				
+				// Try to refine platform guess based on indicators
+				if ($pattern_result['indicators']['discord_active'] && $pattern_result['indicators']['youtube_active']) {
+					$platform_result['platform'] = 'minecraft';
+					$platform_result['platform_name'] = 'Minecraft (pattern-based)';
+				} elseif ($pattern_result['indicators']['high_connections'] && !$pattern_result['indicators']['discord_active']) {
+					$platform_result['platform'] = 'roblox';
+					$platform_result['platform_name'] = 'Roblox (pattern-based)';
+				}
+			}
+		}
+		
+		// If gaming detected, update usage
+		if ($detected && $platform_result) {
+			pc_update_gaming_usage(
+				$state, 
+				$ip, 
+				$platform_result['platform'], 
+				$platform_result['confidence'], 
+				$interval_minutes,
+				$platform_result['method']
+			);
+			$gaming_detected_count++;
+		} else {
+			// No gaming detected - clear detection state
+			if (isset($device_state['gaming_detection']) && 
+			    $device_state['gaming_detection']['detected_platform'] !== 'none') {
+				$device_state['gaming_detection']['detected_platform'] = 'none';
+				$device_state['gaming_detection']['confidence_score'] = 0;
+				$device_state['gaming_detection']['session_start'] = 0;
+			}
+		}
+	}
+	
+	if ($gaming_detected_count > 0) {
+		pc_log("Gaming detection scan completed: {$gaming_detected_count} devices gaming", 'info', array(
+			'event.action' => 'gaming_detection_completed',
+			'devices.gaming' => $gaming_detected_count
+		));
+	}
+}
+
+/**
+ * Check if gaming limits are exceeded for a device
+ * 
+ * Checks both per-game limits and general gaming limit.
+ * Returns true if any limit is exceeded.
+ * 
+ * @param array $device Device state data
+ * @param array &$state Reference to state array
+ * @return array Limit check result: ['exceeded' => bool, 'reason' => string, 'limit_type' => string]
+ * @since 1.4.71
+ */
+function pc_check_gaming_limits($device, &$state) {
+	$device_ip = null;
+	
+	// Find device IP
+	foreach ($state['devices_by_ip'] as $ip => $dev_state) {
+		if (isset($dev_state['mac']) && $dev_state['mac'] === $device['mac_address']) {
+			$device_ip = $ip;
+			break;
+		}
+	}
+	
+	if (!$device_ip || !isset($state['devices_by_ip'][$device_ip])) {
+		return array('exceeded' => false, 'reason' => '', 'limit_type' => '');
+	}
+	
+	$device_state = $state['devices_by_ip'][$device_ip];
+	$profile_name = $device_state['profile'] ?? null;
+	
+	if (empty($profile_name)) {
+		return array('exceeded' => false, 'reason' => '', 'limit_type' => '');
+	}
+	
+	// Check if device is currently gaming
+	if (!isset($device_state['gaming_detection']) || 
+	    $device_state['gaming_detection']['detected_platform'] === 'none') {
+		return array('exceeded' => false, 'reason' => '', 'limit_type' => '');
+	}
+	
+	// Get gaming configuration (WHO-based universal limits)
+	$gaming_config = pc_get_gaming_config();
+	$daily_limit = intval($gaming_config['daily_gaming_limit'] ?? 60); // Default 60 min (WHO recommendation)
+	$override_limit = intval($gaming_config['override_limit'] ?? 120); // Default 2 hours override
+	
+	// Check if administrator override is active for this profile
+	$override_active = false;
+	if (isset($gaming_config['override_enabled'][$profile_name])) {
+		$override_expires = $gaming_config['override_enabled'][$profile_name];
+		if ($override_expires > time()) {
+			$override_active = true;
+		}
+	}
+	
+	// Calculate effective limit (base + override if active)
+	$effective_limit = $daily_limit;
+	if ($override_active) {
+		$effective_limit += $override_limit;
+	}
+	
+	// Get profile's total gaming usage today
+	$gaming_usage = 0;
+	if (isset($state['profiles'][$profile_name]['gaming_usage']['general']['usage_today'])) {
+		$gaming_usage = $state['profiles'][$profile_name]['gaming_usage']['general']['usage_today'];
+	}
+	
+	// Check if limit exceeded
+	if ($gaming_usage >= $effective_limit) {
+		$reason = "WHO gaming limit exceeded ({$gaming_usage}/{$effective_limit} minutes)";
+		if ($override_active) {
+			$reason .= " [Override active: +{$override_limit} min]";
+		}
+		
+		return array(
+			'exceeded' => true,
+			'reason' => $reason,
+			'limit_type' => 'universal_who',
+			'usage' => $gaming_usage,
+			'limit' => $effective_limit,
+			'override_active' => $override_active
+		);
+	}
+	
+	return array('exceeded' => false, 'reason' => '', 'limit_type' => '');
+}
+
+/**
+ * Apply gaming-specific firewall blocks
+ * 
+ * Blocks gaming activity when limits are exceeded.
+ * Uses pfSense tables for efficient blocking.
+ * 
+ * @param array &$state Reference to state array
+ * @return array Stats: ['blocked' => int, 'unblocked' => int]
+ * @since 1.4.71
+ */
+function pc_enforce_gaming_limits(&$state) {
+	$devices = pc_get_devices();
+	$blocked_count = 0;
+	$unblocked_count = 0;
+	
+	foreach ($devices as $device) {
+		if (!pc_is_device_enabled($device)) {
+			continue;
+		}
+		
+		$mac = pc_normalize_mac($device['mac_address']);
+		
+		// Skip devices exempted from gaming detection
+		if (pc_is_mac_exempted_from_gaming($mac)) {
+			continue;
+		}
+		
+		$ip = pc_get_ip_from_mac($mac);
+		
+		if (empty($ip)) {
+			continue;
+		}
+		
+		// Check gaming limits
+		$limit_check = pc_check_gaming_limits($device, $state);
+		
+		if ($limit_check['exceeded']) {
+			// Block gaming for this device
+			// Use gaming-specific block reason
+			$reason = "Gaming limit exceeded: " . $limit_check['reason'];
+			$device_name = $device['device_name'] ?? $mac;
+			
+			// Add to blocked devices
+			if (!isset($state['blocked_devices'])) {
+				$state['blocked_devices'] = array();
+			}
+			
+			$state['blocked_devices'][$mac] = array(
+				'reason' => $reason,
+				'blocked_at' => time(),
+				'ip' => $ip,
+				'name' => $device_name,
+				'type' => 'gaming_limit'
+			);
+			
+			// Apply firewall block
+			pc_add_device_block_table($ip, $reason);
+			
+			pc_log("Gaming blocked: {$device_name} @ {$ip}", 'notice', array(
+				'event.action' => 'gaming_blocked',
+				'device.name' => $device_name,
+				'device.mac' => $mac,
+				'client.address' => $ip,
+				'block.reason' => $reason,
+				'limit.type' => $limit_check['limit_type']
+			));
+			
+			$blocked_count++;
+		}
+	}
+	
+	return array(
+		'blocked' => $blocked_count,
+		'unblocked' => $unblocked_count
+	);
 }
 
 /**

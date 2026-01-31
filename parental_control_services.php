@@ -609,6 +609,18 @@ $default_services = array(
 		),
 		'description' => 'Live streaming platform',
 		'icon' => 'fa-twitch'
+	),
+	array(
+		'name' => 'Online Gaming',
+		'urls' => array(
+			'https://raw.githubusercontent.com/v2fly/domain-list-community/refs/heads/master/data/steam',
+			'https://raw.githubusercontent.com/v2fly/domain-list-community/refs/heads/master/data/epicgames',
+			'https://raw.githubusercontent.com/v2fly/domain-list-community/refs/heads/master/data/ea',
+			'https://raw.githubusercontent.com/v2fly/domain-list-community/refs/heads/master/data/blizzard'
+		),
+		'description' => 'Online gaming platforms (Steam, Epic Games, EA, Blizzard/Battle.net) - Works with Gaming Detection feature',
+		'icon' => 'fa-gamepad',
+		'note' => 'This service provides domain lists for major gaming platforms. Combine with Gaming Detection feature (port + pattern detection) for comprehensive gaming control. Domain lists from v2fly community.'
 	)
 );
 
@@ -1140,6 +1152,7 @@ $tab_array[] = array(gettext("Settings"), false, "/pkg_edit.php?xml=parental_con
 $tab_array[] = array(gettext("Profiles"), false, "/parental_control_profiles.php");
 $tab_array[] = array(gettext("KACI-PC-Schedule"), false, "/parental_control_schedules.php");
 $tab_array[] = array(gettext("Online-Service"), true, "/parental_control_services.php");
+$tab_array[] = array(gettext("Gaming Detection"), false, "/parental_control_gaming.php");
 $tab_array[] = array(gettext("Status"), false, "/parental_control_status.php");
 display_top_tabs($tab_array);
 

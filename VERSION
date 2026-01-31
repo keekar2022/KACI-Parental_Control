@@ -1,4 +1,4 @@
-VERSION=1.4.71
-BUILD_DATE=2026-01-31
-RELEASE_TYPE=osversion_mismatch_fix
-STATUS=production-ready
+VERSION=1.5.0
+BUILD_DATE=2026-02-01
+RELEASE_TYPE=gaming_detection_major_release
+STATUS=stable

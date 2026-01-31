@@ -93,6 +93,7 @@ $tab_array[] = array(gettext("Settings"), false, "/pkg_edit.php?xml=parental_con
 $tab_array[] = array(gettext("Profiles"), false, "/parental_control_profiles.php");
 $tab_array[] = array(gettext("KACI-PC-Schedule"), false, "/parental_control_schedules.php");
 $tab_array[] = array(gettext("Online-Service"), false, "/parental_control_services.php");
+$tab_array[] = array(gettext("Gaming Detection"), false, "/parental_control_gaming.php");
 $tab_array[] = array(gettext("Status"), true, "/parental_control_status.php");
 display_top_tabs($tab_array);
 
@@ -210,6 +211,118 @@ if (is_array($profiles)) {
 				<strong><?=gettext("Note:")?>:</strong> <?=gettext("This will immediately reset all usage counters to zero for all profiles and devices.")?>
 			</p>
 		</form>
+	</div>
+</div>
+<?php endif; ?>
+
+<?php
+// Load gaming configuration
+$gaming_config = config_get_path('installedpackages/parentalcontrolgaming/config/0', array());
+$gaming_enabled = isset($gaming_config['enable']) && $gaming_config['enable'] === 'on';
+?>
+
+<?php if ($gaming_enabled): ?>
+<!-- WHO Gaming Disorder Prevention - Usage Monitoring -->
+<div class="panel panel-default">
+	<div class="panel-heading">
+		<h2 class="panel-title"><i class="fa fa-heartbeat"></i> <?=gettext("WHO Gaming Disorder Prevention")?></h2>
+	</div>
+	<div class="panel-body">
+		<div class="alert alert-info" style="padding: 8px 12px; margin-bottom: 15px;">
+			<h4 style="margin: 0 0 5px 0; font-size: 14px;"><i class="fa fa-info-circle"></i> <?=gettext("World Health Organization Guidelines")?></h4>
+			<p style="margin: 0; font-size: 13px;"><strong><?=gettext("Gaming disorder")?></strong> <?=gettext("is officially recognized in the WHO's International Classification of Diseases (ICD-11) as a pattern of gaming behavior characterized by impaired control over gaming, increasing priority given to gaming over other activities.")?></p>
+			<p style="margin: 5px 0 0 0; font-size: 13px;"><strong><?=gettext("Learn more:")?>:</strong> <a href="https://www.who.int/standards/classifications/frequently-asked-questions/gaming-disorder" target="_blank" rel="noopener"><?=gettext("WHO Gaming Disorder FAQ")?></a></p>
+		</div>
+		
+		<!-- Today's Gaming Usage by Profile -->
+		<h4 style="margin: 0 0 10px 0; font-size: 15px; font-weight: 600;"><?=gettext("Today's Gaming Usage by Profile")?></h4>
+		
+		<?php if (empty($profiles)): ?>
+		<div class="alert alert-warning">
+			<i class="fa fa-exclamation-triangle"></i>
+			<?=gettext("No profiles configured. Please create profiles in the")?> <a href="/parental_control_profiles.php"><?=gettext("Profiles")?></a> <?=gettext("tab first.")?>
+		</div>
+		<?php else: ?>
+		
+		<div class="table-responsive">
+			<table class="table table-striped table-hover">
+				<thead>
+					<tr>
+						<th><?=gettext("Profile")?></th>
+						<th><?=gettext("Gaming Time Today")?></th>
+						<th><?=gettext("Daily Limit")?></th>
+						<th><?=gettext("Override Active")?></th>
+						<th><?=gettext("Status")?></th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ($profiles as $profile): ?>
+					<?php
+					if (!isset($profile['name'])) continue;
+					
+					$profile_name = $profile['name'];
+					$gaming_usage = 0;
+					if (isset($state['profiles'][$profile_name]['gaming_usage']['general'])) {
+						$gaming_usage = $state['profiles'][$profile_name]['gaming_usage']['general']['usage_today'] ?? 0;
+					}
+					
+					$daily_limit = intval($gaming_config['daily_gaming_limit'] ?? 60);
+					$override_active = isset($gaming_config['override_enabled'][$profile_name]) && 
+					                   $gaming_config['override_enabled'][$profile_name] > time();
+					
+					$effective_limit = $daily_limit;
+					if ($override_active) {
+						$effective_limit += intval($gaming_config['override_limit'] ?? 120);
+					}
+					
+					$usage_percent = ($effective_limit > 0) ? ($gaming_usage / $effective_limit * 100) : 0;
+					?>
+					<tr>
+						<td><strong><?= htmlspecialchars($profile_name) ?></strong></td>
+						<td><?= intval($gaming_usage) ?> min</td>
+						<td>
+							<?= $daily_limit ?> min
+							<?php if ($override_active): ?>
+							<span class="label label-warning">+<?= intval($gaming_config['override_limit'] ?? 120) ?> min override</span>
+							<?php endif; ?>
+						</td>
+						<td>
+							<?php if ($override_active): ?>
+							<span class="label label-warning"><?=gettext("YES")?></span>
+							<br/><small><?=gettext("Expires")?>: <?= date('H:i', $gaming_config['override_enabled'][$profile_name]) ?></small>
+							<?php else: ?>
+							<span class="label label-default"><?=gettext("NO")?></span>
+							<?php endif; ?>
+						</td>
+						<td>
+							<?php if ($gaming_usage >= $effective_limit): ?>
+								<span class="label label-danger"><?=gettext("OVER LIMIT")?></span>
+								<div class="progress" style="margin-top: 5px; margin-bottom: 0;">
+									<div class="progress-bar progress-bar-danger" style="width: 100%">100%</div>
+								</div>
+							<?php elseif ($usage_percent >= 80): ?>
+								<span class="label label-warning"><?=gettext("NEAR LIMIT")?></span>
+								<div class="progress" style="margin-top: 5px; margin-bottom: 0;">
+									<div class="progress-bar progress-bar-warning" style="width: <?= round($usage_percent) ?>%"><?= round($usage_percent) ?>%</div>
+								</div>
+							<?php else: ?>
+								<span class="label label-success"><?=gettext("OK")?></span>
+								<div class="progress" style="margin-top: 5px; margin-bottom: 0;">
+									<div class="progress-bar progress-bar-success" style="width: <?= round($usage_percent) ?>%"><?= round($usage_percent) ?>%</div>
+								</div>
+							<?php endif; ?>
+						</td>
+					</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+		</div>
+		
+		<p style="margin: 10px 0 0 0; font-size: 13px;">
+			<i class="fa fa-cog"></i> <?=gettext("Configure gaming limits and detection settings in the")?> <a href="/parental_control_gaming.php"><?=gettext("Gaming Detection")?></a> <?=gettext("tab.")?>
+		</p>
+		
+		<?php endif; ?>
 	</div>
 </div>
 <?php endif; ?>
