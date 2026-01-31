@@ -429,7 +429,10 @@ body {
 			<div class="block-message">
 				<?php if ($gaming_block): ?>
 					<strong>🎮 Gaming Time Limit Reached</strong><br>
-					Your gaming time is up for today! The WHO recommends limiting gaming to prevent gaming disorder. Take a break, go outside, read a book, or spend time with family and friends.
+					Your gaming time is up for today! The WHO recommends limiting gaming to prevent gaming disorder. Take a break, go outside, read a book, or spend time with family and friends.<br><br>
+					<a href="https://www.who.int/news-room/questions-and-answers/item/addictive-behaviours-gaming-disorder" target="_blank" style="color: #667eea; font-weight: bold; text-decoration: none;">
+						<i class="fa-solid fa-external-link"></i> Learn more: WHO Gaming Disorder FAQ
+					</a>
 				<?php else: ?>
 					<?= htmlspecialchars($blocked_message) ?>
 				<?php endif; ?>
