@@ -297,132 +297,97 @@ $tab_array[] = array("Status", false, "/parental_control_status.php");
 display_top_tabs($tab_array);
 ?>
 
-<!-- Gaming Detection & WHO Gaming Disorder Prevention (Merged Section) -->
-<div class="panel panel-default">
-	<div class="panel-heading">
-		<h2 class="panel-title"><i class="fa fa-gamepad"></i> Gaming Detection & Control</h2>
-	</div>
-	<div class="panel-body">
-		<!-- Gaming Detection Description -->
-		<div class="content">
-			<p><strong>Gaming Detection</strong> automatically identifies when devices are playing online games (Minecraft, Steam, Roblox, etc.) and enforces gaming-specific time limits.</p>
-			<p><strong>How it works:</strong> Combines port detection (Minecraft: 25565, Steam: 27015-27030), behavioral patterns (high connections + Discord), and IP lists to identify gaming activity with confidence scores. <strong>Learn more:</strong> <a href="https://www.who.int/standards/classifications/frequently-asked-questions/gaming-disorder" target="_blank" rel="noopener">WHO Gaming Disorder FAQ</a></p>
-		</div>
-		
-		<!-- WHO Gaming Disorder Prevention -->
-		<div class="alert alert-info" style="margin-top: 15px;">
-			<h4 style="margin-top: 0;"><i class="fa fa-heartbeat"></i> World Health Organization Guidelines</h4>
-			<p style="margin-bottom: 0;"><strong>Gaming disorder</strong> is officially recognized in the WHO's International Classification of Diseases (ICD-11) as a pattern of gaming behavior characterized by impaired control over gaming, increasing priority given to gaming over other activities.</p>
-		</div>
-		
-		<!-- Universal Daily Gaming Limit Form -->
-		<form method="post" class="form-horizontal" style="margin-top: 20px;">
-			<div class="form-group">
-				<label class="col-sm-3 control-label">
-					<strong>Universal Daily Gaming Limit</strong>
-				</label>
-				<div class="col-sm-3">
-					<div class="input-group">
-						<input type="number" 
-						       name="daily_gaming_limit" 
-						       class="form-control" 
-						       value="<?= intval($gaming_config['daily_gaming_limit'] ?? 60) ?>" 
-						       min="30" max="180" />
-						<span class="input-group-addon">minutes</span>
-					</div>
-					<span class="help-block">
-						<strong>Applies to ALL profiles.</strong> WHO recommends limiting gaming time to prevent gaming disorder. Default: 60 minutes/day.
-					</span>
-				</div>
-			</div>
-			
-			<div class="form-group">
-				<div class="col-sm-offset-3 col-sm-6">
-					<button type="submit" name="save" value="save" class="btn btn-primary">
-						<i class="fa fa-save"></i> Save Gaming Limit
-					</button>
-				</div>
-			</div>
-		</form>
-		
-		<!-- Note about Status Tab -->
-		<div class="alert alert-info" style="margin: 15px 0 0 0;">
-			<i class="fa fa-info-circle"></i> <strong>Note:</strong> View real-time gaming usage and monitoring data on the <a href="/parental_control_status.php">Status</a> tab.
-		</div>
-	</div>
-</div>
-
-<!-- Gaming Detection Enable/Disable -->
+<!-- Gaming Detection & Control (Merged Configuration) -->
 <form method="post" class="form-horizontal">
 	<div class="panel panel-default">
 		<div class="panel-heading">
-			<h2 class="panel-title">Gaming Detection Status</h2>
+			<h2 class="panel-title"><i class="fa fa-gamepad"></i> Gaming Detection & Control</h2>
 		</div>
 		<div class="panel-body">
-			<div class="form-group">
-				<label class="col-sm-3 control-label">
-					<strong>Enable Gaming Detection</strong>
-				</label>
-				<div class="col-sm-6">
-					<input type="checkbox" name="enable" value="on" <?= ($gaming_config['enable'] === 'on') ? 'checked' : '' ?> />
-					<span class="help-block">
-						Master switch for all gaming detection, tracking, and blocking. 
-						When disabled, no gaming detection or enforcement occurs.
-					</span>
-				</div>
+			<!-- Gaming Detection Description -->
+			<div class="content">
+				<p><strong>Gaming Detection</strong> automatically identifies when devices are playing online games (Minecraft, Steam, Roblox, etc.) and enforces gaming-specific time limits.</p>
+				<p><strong>How it works:</strong> Combines port detection (Minecraft: 25565, Steam: 27015-27030), behavioral patterns (high connections + Discord), and IP lists to identify gaming activity with confidence scores. <strong>Learn more:</strong> <a href="https://www.who.int/standards/classifications/frequently-asked-questions/gaming-disorder" target="_blank" rel="noopener">WHO Gaming Disorder FAQ</a></p>
 			</div>
 			
-			<?php if ($gaming_config['enable'] === 'on'): ?>
-			<div class="form-group">
-				<label class="col-sm-3 control-label">
-					Current Status
-				</label>
-				<div class="col-sm-6">
-					<span class="label label-success">ENABLED</span>
-					<?php if (!empty($active_gaming)): ?>
-						<br/><br/>
-						<div class="alert alert-info">
-							<strong>Active Gaming Sessions: <?= count($active_gaming) ?></strong>
-							<ul>
-							<?php foreach ($active_gaming as $session): ?>
-								<li>
-									<strong><?= htmlspecialchars($session['name']) ?></strong> 
-									(<?= htmlspecialchars($session['profile']) ?>) 
-									- Playing <?= htmlspecialchars($session['platform']) ?> 
-									for <?= intval($session['duration']) ?> minutes 
-									(<?= intval($session['confidence']) ?>% confidence)
-								</li>
-							<?php endforeach; ?>
-							</ul>
-						</div>
-					<?php else: ?>
-						<br/><br/>
-						<div class="alert alert-success">
-							No active gaming sessions detected
-						</div>
-					<?php endif; ?>
-				</div>
+			<!-- WHO Gaming Disorder Prevention -->
+			<div class="alert alert-info" style="margin-top: 15px;">
+				<h4 style="margin-top: 0;"><i class="fa fa-heartbeat"></i> World Health Organization Guidelines</h4>
+				<p style="margin-bottom: 0;"><strong>Gaming disorder</strong> is officially recognized in the WHO's International Classification of Diseases (ICD-11) as a pattern of gaming behavior characterized by impaired control over gaming, increasing priority given to gaming over other activities.</p>
 			</div>
-			<?php else: ?>
-			<div class="form-group">
-				<label class="col-sm-3 control-label">
-					Current Status
-				</label>
-				<div class="col-sm-6">
-					<span class="label label-default">DISABLED</span>
-					<br/><br/>
-					<div class="alert alert-warning">
-						Gaming detection is currently disabled. Enable it above to start detecting and controlling gaming activity.
+			
+			<!-- Configuration Controls: Enable/Disable and Universal Limit Side by Side -->
+			<div style="margin-top: 20px; border: 1px solid #ddd; border-radius: 4px; padding: 15px; background-color: #f9f9f9;">
+				<div class="row">
+					<!-- Enable Gaming Detection (Left Side) -->
+					<div class="col-md-6">
+						<div class="form-group" style="margin-bottom: 0;">
+							<label style="font-weight: bold;">
+								<input type="checkbox" name="enable" value="on" <?= ($gaming_config['enable'] === 'on') ? 'checked' : '' ?> style="margin-right: 8px;" />
+								Enable Gaming Detection
+							</label>
+							<div class="help-block" style="margin-left: 24px;">
+								Master switch for all gaming detection, tracking, and blocking. When disabled, no gaming detection or enforcement occurs.
+							</div>
+						</div>
+					</div>
+					
+					<!-- Universal Daily Gaming Limit (Right Side) -->
+					<div class="col-md-6">
+						<div class="form-group" style="margin-bottom: 0;">
+							<label style="font-weight: bold;">Universal Daily Gaming Limit</label>
+							<div class="input-group">
+								<input type="number" 
+								       name="daily_gaming_limit" 
+								       class="form-control" 
+								       value="<?= intval($gaming_config['daily_gaming_limit'] ?? 60) ?>" 
+								       min="30" max="180" style="max-width: 120px;" />
+								<span class="input-group-addon">minutes</span>
+							</div>
+							<div class="help-block">
+								<strong>Applies to ALL profiles.</strong> WHO recommends limiting gaming time to prevent gaming disorder. Default: 60 minutes/day.
+							</div>
+						</div>
 					</div>
 				</div>
 			</div>
+			
+			<!-- Current Status -->
+			<?php if ($gaming_config['enable'] === 'on'): ?>
+			<div class="alert alert-success" style="margin-top: 15px;">
+				<strong><i class="fa fa-check-circle"></i> Current Status: ENABLED</strong>
+				<?php if (!empty($active_gaming)): ?>
+					<br/><br/>
+					<strong>Active Gaming Sessions: <?= count($active_gaming) ?></strong>
+					<ul style="margin-bottom: 0;">
+					<?php foreach ($active_gaming as $session): ?>
+						<li>
+							<strong><?= htmlspecialchars($session['name']) ?></strong> 
+							(<?= htmlspecialchars($session['profile']) ?>) 
+							- Playing <?= htmlspecialchars($session['platform']) ?> 
+							for <?= intval($session['duration']) ?> minutes 
+							(<?= intval($session['confidence']) ?>% confidence)
+						</li>
+					<?php endforeach; ?>
+					</ul>
+				<?php else: ?>
+					<br/>No active gaming sessions detected
+				<?php endif; ?>
+			</div>
+			<?php else: ?>
+			<div class="alert alert-warning" style="margin-top: 15px;">
+				<strong><i class="fa fa-exclamation-triangle"></i> Current Status: DISABLED</strong><br/>
+				Gaming detection is currently disabled. Enable it above to start detecting and controlling gaming activity.
+			</div>
 			<?php endif; ?>
 			
-			<div class="form-group">
-				<div class="col-sm-offset-3 col-sm-6">
-					<button type="submit" name="save" value="save" class="btn btn-primary">
-						<i class="fa fa-save"></i> Save Settings
-					</button>
+			<!-- Save Button and Status Link -->
+			<div style="margin-top: 20px;">
+				<button type="submit" name="save" value="save" class="btn btn-primary">
+					<i class="fa fa-save"></i> Save Settings
+				</button>
+				<div class="alert alert-info" style="margin-top: 15px; margin-bottom: 0;">
+					<i class="fa fa-info-circle"></i> <strong>Note:</strong> View real-time gaming usage and monitoring data on the <a href="/parental_control_status.php">Status</a> tab.
 				</div>
 			</div>
 		</div>
