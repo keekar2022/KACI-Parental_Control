@@ -717,8 +717,11 @@ function pc_is_boot_context() {
 	exec('sysctl -n kern.boottime 2>/dev/null', $uptime_output);
 	if (!empty($uptime_output)) {
 		// Parse boot time and check if less than 5 minutes ago
+		// BUG FIX v1.5.1.1: Use $matches[1] not $matches[0]
+		// $matches[0] = full match "sec = 1234567890"
+		// $matches[1] = captured group "1234567890"
 		if (preg_match('/sec = (\d+)/', $uptime_output[0], $matches)) {
-			$boot_time = intval($matches[0]);
+			$boot_time = intval($matches[1]);  // FIX: was $matches[0]
 			$current_time = time();
 			$uptime_seconds = $current_time - $boot_time;
 			if ($uptime_seconds < 300) { // Less than 5 minutes
