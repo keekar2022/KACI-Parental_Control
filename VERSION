@@ -1,4 +1,4 @@
-VERSION=1.5.0
-BUILD_DATE=2026-02-01
-RELEASE_TYPE=gaming_detection_major_release
+VERSION=1.5.1
+BUILD_DATE=2026-02-02
+RELEASE_TYPE=critical_bugfix_release
 STATUS=stable

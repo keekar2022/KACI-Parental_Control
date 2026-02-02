@@ -694,18 +694,126 @@ function parental_control_before_form() {
  * @see pc_setup_cron_job() For cron job installation
  * @see pc_process_profile_devices() For device extraction from profiles
  */
-function parental_control_sync() {
+/**
+ * Detect if we're being called during system boot
+ * @return bool True if during boot, false otherwise
+ */
+function pc_is_boot_context() {
+	// Check if booting subsystem is set
+	if (is_subsystem_dirty('boot')) {
+		return true;
+	}
+	
+	// Check if we're in the boot sequence by looking at running processes
+	// During boot, configd or rc scripts will be active
+	$output = array();
+	exec('ps -ax | grep -E "(configd|rc\.bootup)" | grep -v grep', $output);
+	if (!empty($output)) {
+		return true;
+	}
+	
+	// Check if system uptime is less than 5 minutes (likely boot)
+	$uptime_output = array();
+	exec('sysctl -n kern.boottime 2>/dev/null', $uptime_output);
+	if (!empty($uptime_output)) {
+		// Parse boot time and check if less than 5 minutes ago
+		if (preg_match('/sec = (\d+)/', $uptime_output[0], $matches)) {
+			$boot_time = intval($matches[0]);
+			$current_time = time();
+			$uptime_seconds = $current_time - $boot_time;
+			if ($uptime_seconds < 300) { // Less than 5 minutes
+				return true;
+			}
+		}
+	}
+	
+	return false;
+}
+
+/**
+ * Lightweight sync for boot - defers heavy operations
+ * Called during system boot to avoid blocking
+ */
+function pc_sync_boot_minimal() {
 	global $config;
 	
-	try {
-		pc_log("Syncing parental control configuration", 'info', array(
-			'event.action' => 'config_sync_start',
-			'event.category' => 'configuration'
+	pc_log("Boot sync: Minimal initialization (heavy operations deferred)", 'info', array(
+		'event.action' => 'boot_sync_minimal',
+		'event.category' => 'configuration'
+	));
+	
+	// Check if service is enabled
+	$enabled = config_get_path('installedpackages/parentalcontrol/config/0/enable') === 'on';
+	
+	if (!$enabled) {
+		pc_log("Parental control is disabled", 'info', array(
+			'event.action' => 'service_disabled',
+			'service.state' => 'disabled'
 		));
-		
-		// NEW v1.4.67: Ensure Default profile exists for auto-discovery
-		pc_ensure_default_profile();
-		
+		return;
+	}
+	
+	// Essential boot operations only (fast, non-blocking)
+	pc_ensure_default_profile();
+	pc_setup_cron_job();
+	pc_init_state();
+	
+	// Create essential aliases (fast, no downloads)
+	pc_create_blocking_alias();
+	pc_create_monitoring_alias();
+	
+	// Schedule full sync to run in background after boot completes
+	// This will handle: service monitoring rules, filter reload, captive portal
+	$post_boot_script = '/tmp/parental_control_post_boot.sh';
+	file_put_contents($post_boot_script, <<<'SCRIPT'
+#!/bin/sh
+# Parental Control Post-Boot Initialization
+# Runs heavy operations after boot completes
+
+# Wait for boot to complete (check for bootup process)
+sleep 30
+
+# Wait for system to be fully ready
+while pgrep -f 'rc.bootup' > /dev/null 2>&1; do
+    sleep 5
+done
+
+# Run full sync
+/usr/local/bin/php -r "
+require_once('/usr/local/pkg/parental_control.inc');
+pc_log('Post-boot: Running full sync', 'info');
+pc_sync_full();
+" >> /var/log/parental_control_post_boot.log 2>&1
+
+# Clean up
+rm -f /tmp/parental_control_post_boot.sh
+SCRIPT
+);
+	chmod($post_boot_script, 0755);
+	
+	// Execute in background
+	exec("nohup {$post_boot_script} > /dev/null 2>&1 &");
+	
+	pc_log("Boot sync complete - full sync scheduled for post-boot", 'info', array(
+		'event.action' => 'boot_sync_complete',
+		'event.category' => 'configuration',
+		'event.outcome' => 'success',
+		'note' => 'Heavy operations deferred to post-boot script'
+	));
+}
+
+/**
+ * Full sync with all operations (use for normal operation, NOT during boot)
+ */
+function pc_sync_full() {
+	global $config;
+	
+	pc_log("Full sync: All operations", 'info', array(
+		'event.action' => 'full_sync_start',
+		'event.category' => 'configuration'
+	));
+	
+	try {
 		// Check if service is enabled
 		$enabled = config_get_path('installedpackages/parentalcontrol/config/0/enable') === 'on';
 		
@@ -718,74 +826,52 @@ function parental_control_sync() {
 			return;
 		}
 		
-		// MINIMAL SYNC - Just ensure cron job and state file exist
-		// Everything else handled by cron job via anchors
-		
-		// Setup cron job for periodic checks
+		// Essential operations
+		pc_ensure_default_profile();
 		pc_setup_cron_job();
-		
-		// Initialize state file if needed
 		pc_init_state();
 		
-	// CRITICAL: Create pfSense aliases (tables) for dynamic blocking and monitoring
-	// WHY: Tables integrate properly with pfSense's rule system (unlike anchors)
-	// 1. parental_control_blocked - Devices that exceeded limits (for blocking)
-	// 2. parental_control_monitor - ALL profile devices (for usage tracking)
-	pc_create_blocking_alias();
-	pc_create_monitoring_alias();
-	
-	// v1.4.31: Initialize service-specific blocking tables
-	// Creates per-service blocking aliases for granular service limit enforcement
-	pc_init_service_block_tables();
-	
-	// CRITICAL: Create allow rules for DNS and pfSense access
-		// WHY: Blocked devices need DNS to resolve names and access to pfSense for block page
-		// ORDER: These MUST come BEFORE the block-all rule (floating rules with quick)
+		// Create pfSense aliases (tables) for dynamic blocking and monitoring
+		pc_create_blocking_alias();
+		pc_create_monitoring_alias();
+		
+		// Initialize service-specific blocking tables
+		pc_init_service_block_tables();
+		
+		// Create allow rules for DNS and pfSense access
 		pc_create_allow_rules();
 		
-	// NOTE: Captive portal start moved to async call below to avoid blocking boot
-	// Previous sync call caused boot hangs - see pc_ensure_captive_portal_running_async()
-		
-		// CRITICAL: Create NAT redirect rules for HTTP/HTTPS to captive portal
-		// WHY: Instead of silent blocking, show users a friendly explanation page
+		// Create NAT redirect rules for HTTP/HTTPS to captive portal
 		pc_create_redirect_rules();
 		
-	// CRITICAL: Create floating rule that blocks traffic from the alias
-	// WHY: Floating rules are evaluated BEFORE interface rules (fixes rule ordering)
-	// ORDER: This comes LAST so allow rules are checked first
-	
-	// Create service monitoring rules (must come BEFORE blocking rule)
-	pc_create_service_monitoring_rules();
-	
-	// Create the blocking rule (comes after monitoring rules)
-	pc_create_blocking_rule();
-	
-	// CRITICAL: Start captive portal server in background (non-blocking)
-	// WHY: Starting during boot sync can block boot process if server startup hangs
-	// SOLUTION: Use background execution to avoid blocking boot
-	// NOTE: Server will start automatically, cron job will verify/restart if needed
-	pc_ensure_captive_portal_running_async();
-	
-	// Reload filter/NAT if needed (only if alias or rules were created)
-	if (is_subsystem_dirty('aliases') || is_subsystem_dirty('filter') || is_subsystem_dirty('nat')) {
-		filter_configure();
-		clear_subsystem_dirty('aliases');
-		clear_subsystem_dirty('filter');
-		clear_subsystem_dirty('nat');
-	}
+		// Create service monitoring rules (must come BEFORE blocking rule)
+		pc_create_service_monitoring_rules();
 		
-		pc_log("Configuration sync completed (table-based blocking)", 'info', array(
-			'event.action' => 'config_sync_complete',
+		// Create the blocking rule (comes after monitoring rules)
+		pc_create_blocking_rule();
+		
+		// Start captive portal server in background
+		pc_ensure_captive_portal_running_async();
+		
+		// Reload filter/NAT if needed
+		if (is_subsystem_dirty('aliases') || is_subsystem_dirty('filter') || is_subsystem_dirty('nat')) {
+			filter_configure();
+			clear_subsystem_dirty('aliases');
+			clear_subsystem_dirty('filter');
+			clear_subsystem_dirty('nat');
+		}
+		
+		pc_log("Full sync completed", 'info', array(
+			'event.action' => 'full_sync_complete',
 			'event.category' => 'configuration',
 			'event.outcome' => 'success',
-			'method' => 'pf_table',
-			'note' => 'Using pfSense tables/aliases - proper rule ordering'
+			'method' => 'pf_table'
 		));
 		
 	} catch (Exception $e) {
-		$error_msg = "Configuration sync failed: " . $e->getMessage();
+		$error_msg = "Full sync failed: " . $e->getMessage();
 		pc_log($error_msg, 'error', array(
-			'event.action' => 'config_sync_failed',
+			'event.action' => 'full_sync_failed',
 			'event.category' => 'configuration',
 			'event.outcome' => 'failure',
 			'error.type' => get_class($e),
@@ -793,7 +879,39 @@ function parental_control_sync() {
 			'error.file' => $e->getFile(),
 			'error.line' => $e->getLine()
 		));
-		// Don't re-throw - allow system to continue functioning
+	}
+}
+
+/**
+ * Main sync function - detects boot context and calls appropriate sync
+ * 
+ * CRITICAL FIX v1.5.1: Boot sequence blocking fix
+ * - During boot, only essential fast operations are performed
+ * - Heavy operations (service rules, filter reload) deferred to post-boot
+ * - Prevents "Loading keekar Parental Control" hang during firewall reboot
+ * 
+ * ROOT CAUSE: Creating service monitoring rules during boot is SLOW because:
+ *   1. pc_create_service_monitoring_rules() loads all aliases
+ *   2. filter_configure() reloads entire firewall ruleset (can take 10-30+ seconds)
+ *   3. During boot, this blocks pfSense from returning to prompt
+ * 
+ * SOLUTION: Detect boot context and defer heavy operations to background script
+ * - Boot sync: Fast, minimal operations only (<2 seconds)
+ * - Post-boot: Full sync runs in background after boot completes
+ * - User sees normal boot completion, heavy operations happen in background
+ */
+function parental_control_sync() {
+	try {
+		if (pc_is_boot_context()) {
+			pc_sync_boot_minimal();
+		} else {
+			pc_sync_full();
+		}
+	} catch (Exception $e) {
+		pc_log("Sync failed: " . $e->getMessage(), 'error', array(
+			'event.action' => 'sync_failed',
+			'error.message' => $e->getMessage()
+		));
 	}
 }
 
@@ -5221,6 +5339,7 @@ function pc_should_reset_counters($last_reset, $reset_time) {
 function pc_reset_daily_counters(&$state) {
 	$reset_count = 0;
 	$profile_reset_count = 0;
+	$gaming_platforms_reset = 0;
 	
 	// Reset MAC-based tracking (legacy, for backward compatibility)
 	if (isset($state['devices']) && is_array($state['devices'])) {
@@ -5267,6 +5386,20 @@ function pc_reset_daily_counters(&$state) {
 				unset($service_data); // Break reference
 			}
 			
+			// CRITICAL FIX v1.5.1: Reset profile gaming usage (WHO Gaming Disorder Prevention)
+			// BUG: gaming_usage['usage_today'] was never reset, causing accumulation
+			// This is separate from service_usage and must be explicitly reset
+			if (isset($profile_state['gaming_usage']) && is_array($profile_state['gaming_usage'])) {
+				foreach ($profile_state['gaming_usage'] as $platform => &$gaming_data) {
+					if (is_array($gaming_data) && isset($gaming_data['usage_today'])) {
+						$gaming_data['usage_today'] = 0;
+						$gaming_platforms_reset++;
+						// Keep usage_week and last_detected for historical tracking
+					}
+				}
+				unset($gaming_data); // Break reference
+			}
+			
 			$profile_reset_count++;
 		}
 		unset($profile_state); // Break reference
@@ -5296,6 +5429,7 @@ function pc_reset_daily_counters(&$state) {
 		'event.category' => 'system',
 		'devices.reset' => $reset_count,
 		'profiles.reset' => $profile_reset_count,
+		'gaming_platforms.reset' => $gaming_platforms_reset,
 		'services.cleared' => $services_cleared,
 		'reset.type' => 'daily'
 	));

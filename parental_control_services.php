@@ -215,8 +215,85 @@ function pc_send_telemetry($action, $data = array()) {
 }
 
 /**
+ * Check if a line is a valid IP address or CIDR block
+ * @param string $line The line to check
+ * @return bool True if valid IP/CIDR, false otherwise
+ */
+function pc_is_valid_ip_or_cidr($line) {
+	// Check for IPv4 address
+	if (filter_var($line, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+		return true;
+	}
+	
+	// Check for IPv6 address
+	if (filter_var($line, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+		return true;
+	}
+	
+	// Check for CIDR notation (IPv4 or IPv6)
+	if (strpos($line, '/') !== false) {
+		$parts = explode('/', $line, 2);
+		$ip = $parts[0];
+		$mask = $parts[1];
+		
+		// Validate IP part
+		if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) || 
+		    filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+			// Validate mask is numeric and in valid range
+			if (is_numeric($mask)) {
+				$mask_int = intval($mask);
+				if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+					return $mask_int >= 0 && $mask_int <= 32;
+				} else {
+					return $mask_int >= 0 && $mask_int <= 128;
+				}
+			}
+		}
+	}
+	
+	return false;
+}
+
+/**
+ * Resolve a domain to IP addresses
+ * @param string $domain The domain to resolve
+ * @return array Array of IP addresses (empty if resolution fails)
+ */
+function pc_resolve_domain($domain) {
+	$ips = array();
+	
+	// Try IPv4 resolution (A records)
+	$records = @dns_get_record($domain, DNS_A);
+	if ($records) {
+		foreach ($records as $record) {
+			if (isset($record['ip'])) {
+				$ips[] = $record['ip'];
+			}
+		}
+	}
+	
+	// Try IPv6 resolution (AAAA records)
+	$records = @dns_get_record($domain, DNS_AAAA);
+	if ($records) {
+		foreach ($records as $record) {
+			if (isset($record['ipv6'])) {
+				$ips[] = $record['ipv6'];
+			}
+		}
+	}
+	
+	return array_unique($ips);
+}
+
+/**
  * Download URLs synchronously and create table files
  * This prevents "Unresolvable alias" errors by ensuring table files exist before filter reload
+ * 
+ * CRITICAL FIX v1.5.1: Handle domain lists from v2fly community
+ * - v2fly domain lists contain DOMAINS (not IPs) which pfctl cannot load directly
+ * - SOLUTION: Filter domains and resolve to IPs, skip unresolvable domains gracefully
+ * - If domain resolution fails, skip that entry instead of failing entire table
+ * 
  * @param string $alias_name The alias name (e.g., PC_Service_YouTube)
  * @param array $urls Array of URLs to download
  * @return bool True if successful, false otherwise
@@ -230,6 +307,9 @@ function pc_download_urls_sync($alias_name, $urls) {
 	@mkdir('/var/db/aliastables', 0755, true);
 	
 	$all_ips = array();
+	$domain_count = 0;
+	$resolved_count = 0;
+	$failed_domains = array();
 	
 	foreach ($urls as $url) {
 		error_log("Downloading URL for {$alias_name}: {$url}");
@@ -250,21 +330,65 @@ function pc_download_urls_sync($alias_name, $urls) {
 			$count = 0;
 			foreach ($lines as $line) {
 				$line = trim($line);
-				// Skip empty lines and comments
-				if (empty($line) || $line[0] == '#') continue;
-				$all_ips[] = $line;
-				$count++;
+				
+				// Skip empty lines, comments, and special directives
+				if (empty($line) || $line[0] == '#' || strpos($line, 'include:') === 0 || 
+				    strpos($line, 'domain:') === 0 || strpos($line, 'full:') === 0 || 
+				    strpos($line, 'regexp:') === 0 || strpos($line, 'keyword:') === 0) {
+					continue;
+				}
+				
+				// Check if it's a valid IP or CIDR
+				if (pc_is_valid_ip_or_cidr($line)) {
+					$all_ips[] = $line;
+					$count++;
+				} else {
+					// Might be a domain - try to resolve it
+					$domain_count++;
+					$resolved_ips = pc_resolve_domain($line);
+					if (!empty($resolved_ips)) {
+						foreach ($resolved_ips as $ip) {
+							$all_ips[] = $ip;
+							$count++;
+						}
+						$resolved_count++;
+						error_log("Resolved domain {$line} to " . count($resolved_ips) . " IP(s)");
+					} else {
+						// Domain resolution failed - skip gracefully
+						$failed_domains[] = $line;
+						error_log("Warning: Could not resolve domain '{$line}', skipping entry");
+					}
+				}
 			}
 			error_log("Downloaded {$count} IPs from {$url}");
+			if ($domain_count > 0) {
+				error_log("Processed {$domain_count} domains: {$resolved_count} resolved, " . 
+				         count($failed_domains) . " failed");
+			}
 		} else {
 			error_log("Failed to download {$url} (HTTP {$http_code})");
 		}
 	}
 	
 	if (!empty($all_ips)) {
+		// Remove duplicates and write to file
+		$all_ips = array_unique($all_ips);
 		file_put_contents($table_file, implode("\n", $all_ips) . "\n");
 		chmod($table_file, 0644);
-		error_log("Wrote " . count($all_ips) . " entries to {$table_file}");
+		error_log("Wrote " . count($all_ips) . " unique IP entries to {$table_file}");
+		
+		// Log domain resolution summary
+		if ($domain_count > 0) {
+			error_log("Domain resolution summary: {$domain_count} domains found, " .
+			         "{$resolved_count} resolved successfully, " . 
+			         count($failed_domains) . " failed (skipped gracefully)");
+			
+			// Log first few failed domains for debugging
+			if (!empty($failed_domains)) {
+				$sample_failed = array_slice($failed_domains, 0, 5);
+				error_log("Sample failed domains: " . implode(', ', $sample_failed));
+			}
+		}
 		
 		// Load into pf table
 		exec('/sbin/pfctl -t ' . escapeshellarg($alias_name) . ' -T replace -f ' . escapeshellarg($table_file) . ' 2>&1', $output, $ret);
