@@ -1395,19 +1395,9 @@ function pc_auto_discover_devices(&$state, $service_connections_by_ip) {
 			continue;
 		}
 		
-		// Check if device is connecting to monitored services
-		$monitored_services = array('Facebook', 'Discord', 'YouTube', 'WhatsApp');
-		$has_monitored_connection = false;
-		foreach ($services as $service_name => $count) {
-			if (in_array($service_name, $monitored_services) && $count > 0) {
-				$has_monitored_connection = true;
-				break;
-			}
-		}
-		
-		if (!$has_monitored_connection) {
-			continue; // Not connecting to monitored services
-		}
+		// CRITICAL FIX v1.5.2: Assign to Default on ANY service connection (not just 4 services).
+		// We already iterate only IPs with service_connections_by_ip, so any connection qualifies.
+		// This fixes devices that use Netflix, gaming, etc. never being auto-assigned.
 		
 		// Device qualifies for auto-discovery
 		$stats['discovered']++;
@@ -5138,20 +5128,38 @@ function parental_control_cron_job() {
 	
 	// NEW v1.4.67: Auto-discovery for unassigned devices
 	// CRITICAL FIX v1.4.82: Discover ALL network devices (not just those in profiles)
-	// to detect unassigned devices connecting to monitored services
+	// CRITICAL FIX v1.5.2: Ensure state has device entries for unassigned IPs with
+	// service connections (they were skipped before because they weren't in state).
 	$service_connections_by_ip = array();
 	$all_network_devices = pc_discover_devices(); // Get ALL devices from DHCP/network
-	
+	$network_devices_by_ip = array();
 	foreach ($all_network_devices as $device) {
 		$ip = isset($device['ip_address']) ? $device['ip_address'] : null;
 		if ($ip) {
+			$network_devices_by_ip[$ip] = $device;
 			$connections = pc_get_service_connections($ip, $service_ips_cache, $all_states);
 			if (!empty($connections)) {
 				$service_connections_by_ip[$ip] = $connections;
 			}
 		}
 	}
-	
+	// Ensure state['devices_by_ip'] has an entry for every IP with service connections,
+	// so unassigned devices can be auto-discovered (they were skipped when state had no entry).
+	if (!isset($state['devices_by_ip'])) {
+		$state['devices_by_ip'] = array();
+	}
+	foreach (array_keys($service_connections_by_ip) as $ip) {
+		if (!isset($state['devices_by_ip'][$ip]) && isset($network_devices_by_ip[$ip])) {
+			$dev = $network_devices_by_ip[$ip];
+			$state['devices_by_ip'][$ip] = array(
+				'mac' => isset($dev['mac_address']) ? $dev['mac_address'] : '',
+				'name' => isset($dev['device_name']) ? $dev['device_name'] : (isset($dev['hostname']) ? $dev['hostname'] : $ip),
+				'hostname' => isset($dev['hostname']) ? $dev['hostname'] : '',
+				'ip' => $ip,
+				'profile' => ''
+			);
+		}
+	}
 	// Run auto-discovery
 	$auto_discovery_stats = pc_auto_discover_devices($state, $service_connections_by_ip);
 	
@@ -5280,6 +5288,11 @@ function pc_has_active_override($mac, $state) {
  */
 function pc_should_reset_counters($last_reset, $reset_time) {
 	$now = time();
+	// CRITICAL FIX v1.5.2: Normalize "midnight" to "00:00" for reliable strtotime parsing
+	if (empty($reset_time) || strtolower(trim($reset_time)) === 'midnight') {
+		$reset_time = '00:00';
+	}
+	$reset_time = trim($reset_time);
 	$today_reset = strtotime("today " . str_replace(':', ':', $reset_time));
 	
 	// CRITICAL FIX: Proper daily reset boundary check
@@ -5436,6 +5449,48 @@ function pc_reset_daily_counters(&$state) {
 		'services.cleared' => $services_cleared,
 		'reset.type' => 'daily'
 	));
+}
+
+/**
+ * Reset only gaming usage "today" for all profiles and devices (WHO Gaming Disorder Prevention).
+ * Use when automatic daily reset did not run or admin wants to reset gaming time mid-day.
+ *
+ * @param array &$state State array (modified by reference)
+ * @return int Number of gaming platforms reset
+ * @since 1.5.2
+ */
+function pc_reset_gaming_today(&$state) {
+	$gaming_platforms_reset = 0;
+	// Reset profile gaming usage
+	if (isset($state['profiles']) && is_array($state['profiles'])) {
+		foreach ($state['profiles'] as $profile_name => &$profile_state) {
+			if (isset($profile_state['gaming_usage']) && is_array($profile_state['gaming_usage'])) {
+				foreach ($profile_state['gaming_usage'] as $platform => &$gaming_data) {
+					if (is_array($gaming_data) && isset($gaming_data['usage_today'])) {
+						$gaming_data['usage_today'] = 0;
+						$gaming_platforms_reset++;
+					}
+				}
+				unset($gaming_data);
+			}
+		}
+		unset($profile_state);
+	}
+	// Reset device-level gaming_detection usage_today
+	if (isset($state['devices_by_ip']) && is_array($state['devices_by_ip'])) {
+		foreach ($state['devices_by_ip'] as $ip => &$device_state) {
+			if (isset($device_state['gaming_detection']['usage_today'])) {
+				$device_state['gaming_detection']['usage_today'] = 0;
+			}
+		}
+		unset($device_state);
+	}
+	pc_log("Gaming time today reset (manual)", 'info', array(
+		'event.action' => 'gaming_today_reset',
+		'event.category' => 'system',
+		'gaming_platforms.reset' => $gaming_platforms_reset
+	));
+	return $gaming_platforms_reset;
 }
 
 /**

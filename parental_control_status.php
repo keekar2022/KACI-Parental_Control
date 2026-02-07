@@ -17,10 +17,10 @@ require_once("/usr/local/pkg/parental_control.inc");
 
 // Handle manual reset (admin only)
 // Note: CSRF protection is automatic via csrf-magic.php included in guiconfig.inc
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'manual_reset') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 	if (!pc_is_admin_user()) {
 		$error_message = "Access denied. Only administrators can reset usage.";
-	} else {
+	} elseif ($_POST['action'] === 'manual_reset') {
 		// Perform reset using proven logic from diagnostic script
 		$state = pc_load_state_from_disk();
 		pc_reset_daily_counters($state);

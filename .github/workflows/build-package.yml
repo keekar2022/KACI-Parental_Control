@@ -1,16 +1,7 @@
 name: Build FreeBSD Package
 
+# Manual only: run from Actions tab → "Build FreeBSD Package" → Run workflow
 on:
-  push:
-    branches:
-      - main
-      - develop
-    tags:
-      - 'v*.*.*'
-  pull_request:
-    branches:
-      - main
-      - develop
   workflow_dispatch:
 
 permissions:
