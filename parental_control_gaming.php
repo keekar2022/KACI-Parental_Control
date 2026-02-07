@@ -304,6 +304,11 @@ display_top_tabs($tab_array);
 			<h2 class="panel-title"><i class="fa fa-gamepad"></i> Gaming Detection & Control</h2>
 		</div>
 		<div class="panel-body">
+			<!-- Gaming Detection notice -->
+			<div class="alert alert-warning" style="margin-bottom: 15px;">
+				<strong><i class="fa fa-exclamation-triangle"></i> EXPERIMENTAL FEATURE.</strong><br/>
+				This feature is currently in experimental stage and may undergo significant changes in future releases.
+			</div>
 			<!-- Gaming Detection Description -->
 			<div class="content">
 				<p><strong>Gaming Detection</strong> automatically identifies when devices are playing online games (Minecraft, Steam, Roblox, etc.) and enforces gaming-specific time limits.</p>

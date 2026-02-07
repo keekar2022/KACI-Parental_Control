@@ -1,5 +1,5 @@
 name = "kaci-parental-control"
-version = "1.4.67"
+version = "1.5.3"
 origin = "sysutils/kaci-parental-control"
 comment = "Keekar's Parental Control for pfSense - Advanced time-based access control"
 arch = "FreeBSD:15:amd64"

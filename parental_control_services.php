@@ -1435,28 +1435,6 @@ if (isset($input_errors) && count($input_errors) > 0) {
 		</h2>
 	</div>
 	<div class="panel-body">
-		
-		<!-- EXPERIMENTAL FEATURE WARNING -->
-		<div class="alert alert-warning" style="border-left: 5px solid #ff9800; background-color: #fff3cd; padding: 15px; margin-bottom: 20px;">
-			<h4 style="color: #856404; margin-top: 0;">
-				<i class="fa fa-exclamation-triangle"></i> <strong>EXPERIMENTAL FEATURE - Data Collection Notice</strong>
-			</h4>
-			<p style="color: #856404; margin-bottom: 10px;">
-				<strong>⚠️ This feature is currently in EXPERIMENTAL stage.</strong> 
-				It may undergo significant changes in future releases.
-			</p>
-			<p style="color: #856404; margin-bottom: 10px;">
-				<strong>📊 Telemetry & Data Collection:</strong> 
-				When you perform actions on this page (verify URLs, create aliases, monitor services), 
-				<strong>anonymous usage data will be submitted to our GitHub repository</strong> to help improve the feature.
-			</p>
-			<p style="color: #856404; margin-bottom: 0;">
-				<strong>Data collected includes:</strong> Service names, URL status (active/dead), 
-				action timestamps, and feature usage patterns. 
-				<strong>No personally identifiable information (IP addresses, device MACs, usernames) is collected.</strong>
-			</p>
-		</div>
-		
 		<div class="info-banner">
 			<h4><i class="fa fa-info-circle"></i> Online Services - URL Management</h4>
 			<p>This feature manages URL sources for blocking popular online services (YouTube, Facebook, etc.) using <strong>URL Alias Tables</strong>.</p>
