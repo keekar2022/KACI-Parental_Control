@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "1.5.3",
-    "build_date": "2026-02-08T00:00:00Z",
+    "version": "1.5.4",
+    "build_date": "2026-02-09T00:00:00Z",
     "git_commit": "b32389f",
     "git_branch": "develop",
     "built_by": "development",
@@ -88,6 +88,15 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.5.4",
+      "date": "2026-02-09",
+      "type": "bugfix",
+      "changes": [
+        "Fix pc_add_device_block_table() argument count in gaming enforcement (cron crash)",
+        "Pass device, enforcement_mode, reason, state; ensure mac_to_ip_cache for lookup"
+      ]
+    },
     {
       "version": "1.5.3",
       "date": "2026-02-08",

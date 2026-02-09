@@ -8030,8 +8030,16 @@ function pc_enforce_gaming_limits(&$state) {
 				'type' => 'gaming_limit'
 			);
 			
-			// Apply firewall block
-			pc_add_device_block_table($ip, $reason);
+			// Ensure state has mac_to_ip for pc_add_device_block_table lookup
+			if (!isset($state['mac_to_ip_cache'])) {
+				$state['mac_to_ip_cache'] = array();
+			}
+			$state['mac_to_ip_cache'][$mac] = $ip;
+			
+			// Apply firewall block (device, enforcement_mode, reason, state)
+			$pc_config = config_get_path('installedpackages/parentalcontrol/config/0', array());
+			$enforcement_mode = isset($pc_config['enforcement_mode']) ? $pc_config['enforcement_mode'] : 'strict';
+			pc_add_device_block_table($device, $enforcement_mode, $reason, $state);
 			
 			pc_log("Gaming blocked: {$device_name} @ {$ip}", 'notice', array(
 				'event.action' => 'gaming_blocked',
