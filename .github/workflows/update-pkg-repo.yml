@@ -1,5 +1,7 @@
 name: Deploy to GitHub Pages
 
+# Runs only after "Build FreeBSD Package" completes successfully (artifact must exist).
+# Do not add workflow_dispatch: this job needs artifacts from the triggering run.
 on:
   workflow_run:
     workflows: ["Build FreeBSD Package"]
@@ -7,7 +9,6 @@ on:
       - completed
     branches:
       - main
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -18,7 +19,8 @@ jobs:
   deploy-to-pages:
     name: Deploy Package Repository to GitHub Pages
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    # Only run when the triggering "Build FreeBSD Package" run succeeded (artifact was uploaded).
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     
     steps:
       - name: Checkout repository

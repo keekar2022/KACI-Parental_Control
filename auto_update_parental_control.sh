@@ -59,10 +59,21 @@ if ! pkg update -q 2>&1 | tee -a "$LOG_FILE"; then
     exit 1
 fi
 
-# Check for available updates
+# Check for available updates via pkg (requires KACI repo configured)
 AVAILABLE_VERSION=$(pkg rquery "%v" ${PACKAGE_NAME} 2>/dev/null)
 if [ -z "$AVAILABLE_VERSION" ]; then
+    # Fallback: try to get version from GitHub Pages (works when repo not configured)
+    REPO_BASE="https://keekar2022.github.io/KACI-Parental_Control/packages/freebsd"
+    for ABI in "FreeBSD:14:amd64" "FreeBSD:15:amd64"; do
+        AVAILABLE_VERSION=$(fetch -q -o - "${REPO_BASE}/${ABI}/latest/version.txt" 2>/dev/null | tr -d '\r\n')
+        if [ -n "$AVAILABLE_VERSION" ]; then
+            log "Auto-Update: Available version $AVAILABLE_VERSION (from repo); pkg repo not configured or ABI mismatch"
+            log "Auto-Update: To enable auto-upgrade: add KACI repo to /usr/local/etc/pkg/repos/kaci.conf with url ending /latest, install fingerprint, then pkg update"
+            exit 0
+        fi
+    done
     log "Auto-Update: Could not query available version from repository"
+    log "Auto-Update: Ensure KACI repo is configured: /usr/local/etc/pkg/repos/kaci.conf with url .../packages/freebsd/\${ABI}/latest and fingerprint at /usr/local/etc/pkg/fingerprints/kaci/trusted"
     exit 1
 fi
 

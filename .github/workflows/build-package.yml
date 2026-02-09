@@ -191,8 +191,9 @@ jobs:
       - name: Prepare GitHub Pages deployment
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         run: |
-          # Create directory structure for GitHub Pages
+          # Create directory structure for GitHub Pages (both ABIs for pfSense 2.8/14 and 2.9/15)
           mkdir -p gh-pages/packages/freebsd/FreeBSD:15:amd64/latest
+          mkdir -p gh-pages/packages/freebsd/FreeBSD:14:amd64/latest
           
           # Debug: List files before copying
           echo "Files in current directory:"
@@ -234,6 +235,14 @@ jobs:
           # Debug: List files after copying
           echo "Files in gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/:"
           ls -la gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/
+          
+          # Mirror same content to FreeBSD:14 so pfSense 2.8 (FreeBSD 14) can use the repo
+          cp -r gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/* gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/
+          echo "Mirrored package repo to FreeBSD:14:amd64 for pfSense 2.8"
+          
+          # Write version.txt for auto-update script fallback (both ABIs)
+          echo "${{ steps.version.outputs.version }}" > gh-pages/packages/freebsd/FreeBSD:15:amd64/latest/version.txt
+          echo "${{ steps.version.outputs.version }}" > gh-pages/packages/freebsd/FreeBSD:14:amd64/latest/version.txt
           
           # Copy GPG fingerprint
           mkdir -p gh-pages/fingerprints
@@ -283,7 +292,8 @@ jobs:
             <h2>Links</h2>
             <ul>
               <li><a href="https://github.com/keekar2022/KACI-Parental_Control">GitHub Repository</a></li>
-              <li><a href="packages/freebsd/FreeBSD:15:amd64/latest/">Package Directory</a></li>
+              <li><a href="packages/freebsd/FreeBSD:14:amd64/latest/">Packages (FreeBSD 14 / pfSense 2.8)</a></li>
+              <li><a href="packages/freebsd/FreeBSD:15:amd64/latest/">Packages (FreeBSD 15)</a></li>
               <li><a href="fingerprints/fingerprint.txt">GPG Fingerprint</a></li>
             </ul>
           </body>
