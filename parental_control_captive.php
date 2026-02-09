@@ -54,36 +54,43 @@ if ($request_path === '/index.html' || $request_path === '/index') {
 }
 
 // Serve static files from document root (CSS, JS, images, etc.)
+// SECURITY: Use realpath() and docroot check to prevent path traversal (OWASP A06)
 if (preg_match('/\.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/i', $request_path)) {
-    $file_path = '/usr/local/www' . $request_path;
-    
-    if (file_exists($file_path) && is_file($file_path)) {
-        // Determine content type
-        $extension = strtolower(pathinfo($file_path, PATHINFO_EXTENSION));
-        $mime_types = [
-            'css' => 'text/css',
-            'js' => 'application/javascript',
-            'png' => 'image/png',
-            'jpg' => 'image/jpeg',
-            'jpeg' => 'image/jpeg',
-            'gif' => 'image/gif',
-            'ico' => 'image/x-icon',
-            'svg' => 'image/svg+xml',
-            'woff' => 'font/woff',
-            'woff2' => 'font/woff2',
-            'ttf' => 'font/ttf',
-            'eot' => 'application/vnd.ms-fontobject'
-        ];
-        
-        $content_type = isset($mime_types[$extension]) ? $mime_types[$extension] : 'application/octet-stream';
-        header("Content-Type: $content_type");
-        readfile($file_path);
-        exit;
-    } else {
+    $docroot = '/usr/local/www';
+    $file_path = $docroot . $request_path;
+    $resolved = @realpath($file_path);
+    $docroot_real = realpath($docroot);
+
+    if ($docroot_real === false || $resolved === false || !is_file($resolved)) {
         http_response_code(404);
         echo "File not found: " . htmlspecialchars($request_path);
         exit;
     }
+    // Ensure resolved path is under docroot (prevents /../ escape)
+    if (strpos($resolved, $docroot_real . '/') !== 0 && $resolved !== $docroot_real) {
+        http_response_code(403);
+        exit;
+    }
+
+    $extension = strtolower(pathinfo($resolved, PATHINFO_EXTENSION));
+    $mime_types = [
+        'css' => 'text/css',
+        'js' => 'application/javascript',
+        'png' => 'image/png',
+        'jpg' => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        'gif' => 'image/gif',
+        'ico' => 'image/x-icon',
+        'svg' => 'image/svg+xml',
+        'woff' => 'font/woff',
+        'woff2' => 'font/woff2',
+        'ttf' => 'font/ttf',
+        'eot' => 'application/vnd.ms-fontobject'
+    ];
+    $content_type = isset($mime_types[$extension]) ? $mime_types[$extension] : 'application/octet-stream';
+    header("Content-Type: $content_type");
+    readfile($resolved);
+    exit;
 }
 
 // ============================================================================
@@ -216,10 +223,8 @@ $override_error = null;
 $override_success = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['override_password'])) {
-	$submitted_password = $_POST['override_password'];
-	
-	// Use cached config value
-	if (!empty($override_password) && $submitted_password === $override_password) {
+	$submitted_password = (string) $_POST['override_password'];
+	if (!empty($override_password) && pc_override_password_verify($submitted_password, $override_password)) {
 		// Grant temporary override (using cached override_duration)
 		$override_until = time() + ($override_duration * 60);
 		

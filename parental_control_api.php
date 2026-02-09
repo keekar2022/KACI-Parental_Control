@@ -22,7 +22,7 @@
  *   GET  /api/status            - Get service status
  *   POST /api/override          - Grant temporary internet override
  *
- * Authentication: API key in X-API-Key header or api_key query parameter
+ * Authentication: API key in X-API-Key header only (query parameter deprecated - can leak in Referer/logs)
  *
  * @package ParentalControl
  * @version 0.3.0
@@ -81,13 +81,8 @@ function api_authenticate() {
 		return false;
 	}
 	
-	// Check X-API-Key header first, then query parameter
-	$provided_key = '';
-	if (isset($_SERVER['HTTP_X_API_KEY'])) {
-		$provided_key = $_SERVER['HTTP_X_API_KEY'];
-	} elseif (isset($_GET['api_key'])) {
-		$provided_key = $_GET['api_key'];
-	}
+	// Only accept API key via header (OWASP API2: query param can leak in Referer, logs, browser history)
+	$provided_key = isset($_SERVER['HTTP_X_API_KEY']) ? (string) $_SERVER['HTTP_X_API_KEY'] : '';
 	
 	// WHY: Use hash_equals to prevent timing attacks
 	// Rationale: Regular == comparison can leak information about key through timing
@@ -235,7 +230,7 @@ function parse_request_uri() {
 // ========================================================================
 
 if (!api_authenticate()) {
-	api_response(401, null, 'Unauthorized: Invalid or missing API key. Configure API key in Parental Control settings.');
+	api_response(401, null, 'Unauthorized: Provide API key in X-API-Key header. Configure key in Parental Control settings.');
 }
 
 // Check if service is enabled

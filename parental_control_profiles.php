@@ -207,8 +207,13 @@ if (isset($_POST['save'])) {
 			write_config("{$action} profile: {$profile['name']}");
 			// DEBUG: error_log("PARENTAL_CONTROL_DEBUG: write_config SUCCESS");
 		} catch (Exception $e) {
-			// DEBUG: error_log("PARENTAL_CONTROL_DEBUG: write_config FAILED: " . $e->getMessage());
-			$input_errors[] = "Failed to save configuration: " . $e->getMessage();
+			pc_log("Failed to save configuration", 'error', array(
+				'event.action' => 'config_save_failed',
+				'error.message' => $e->getMessage(),
+				'error.file' => $e->getFile(),
+				'error.line' => $e->getLine()
+			));
+			$input_errors[] = "Failed to save configuration. Please try again or check logs.";
 		}
 		
 		// Try to sync, but don't fail if it doesn't work
@@ -371,7 +376,13 @@ if (isset($_POST['discover_devices']) && isset($_POST['profile_id'])) {
 			}
 		}
 	} catch (Exception $e) {
-		$input_errors[] = "Auto-discovery failed: " . $e->getMessage();
+		pc_log("Auto-discovery failed", 'error', array(
+			'event.action' => 'auto_discovery_failed',
+			'error.message' => $e->getMessage(),
+			'error.file' => $e->getFile(),
+			'error.line' => $e->getLine()
+		));
+		$input_errors[] = "Auto-discovery failed. Please try again or check logs.";
 	}
 }
 

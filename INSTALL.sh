@@ -260,8 +260,10 @@ upload_files() {
         "$PACKAGE_DIR/parental_control_profiles.php" \
         "$PACKAGE_DIR/parental_control_schedules.php" \
         "$PACKAGE_DIR/parental_control_services.php" \
+        "$PACKAGE_DIR/parental_control_gaming.php" \
         "$PACKAGE_DIR/parental_control_blocked.php" \
         "$PACKAGE_DIR/parental_control_captive.php" \
+        "$PACKAGE_DIR/parental_control_cron.php" \
         "$PACKAGE_DIR/parental_control_captive.sh" \
         "$PACKAGE_DIR/parental_control_health.php" \
         "$PACKAGE_DIR/parental_control_api.php" \
@@ -305,8 +307,10 @@ upload_files() {
         sudo -n mv /tmp/parental_control_profiles.php /usr/local/www/ && \
         sudo -n mv /tmp/parental_control_schedules.php /usr/local/www/ && \
         sudo -n mv /tmp/parental_control_services.php /usr/local/www/ && \
+        sudo -n mv /tmp/parental_control_gaming.php /usr/local/www/ && \
         sudo -n mv /tmp/parental_control_blocked.php /usr/local/www/ && \
         sudo -n mv /tmp/parental_control_captive.php /usr/local/www/ && \
+        sudo -n mv /tmp/parental_control_cron.php /usr/local/bin/ && \
         sudo -n mv /tmp/parental_control_captive.sh /usr/local/etc/rc.d/parental_control_captive && \
         sudo -n mv /tmp/parental_control_health.php /usr/local/www/ 2>/dev/null; true && \
         sudo -n mv /tmp/parental_control_api.php /usr/local/www/ 2>/dev/null; true && \
@@ -323,6 +327,7 @@ upload_files() {
         sudo -n chmod 644 /usr/local/pkg/parental_control.inc && \
         sudo -n chmod 644 /usr/local/pkg/parental_control_VERSION && \
         sudo -n chmod 644 /usr/local/www/parental_control*.php && \
+        sudo -n chmod 755 /usr/local/bin/parental_control_cron.php 2>/dev/null; true && \
         sudo -n chmod 755 /usr/local/etc/rc.d/parental_control_captive && \
         sudo -n chmod 755 /usr/local/bin/parental_control_analyzer.sh 2>/dev/null; true && \
         sudo -n chmod 755 /usr/local/bin/auto_update_parental_control.sh 2>/dev/null; true && \
@@ -341,8 +346,13 @@ upload_files() {
             sudo mv /tmp/parental_control_profiles.php /usr/local/www/ && \
             sudo mv /tmp/parental_control_schedules.php /usr/local/www/ && \
             sudo mv /tmp/parental_control_services.php /usr/local/www/ && \
+            sudo mv /tmp/parental_control_gaming.php /usr/local/www/ && \
             sudo mv /tmp/parental_control_blocked.php /usr/local/www/ && \
+            sudo mv /tmp/VERSION /usr/local/pkg/parental_control_VERSION && \
+            sudo mv /tmp/parental_control_captive.php /usr/local/www/ && \
+            sudo mv /tmp/parental_control_captive.sh /usr/local/etc/rc.d/parental_control_captive && \
             sudo mv /tmp/parental_control_health.php /usr/local/www/ 2>/dev/null; true && \
+            sudo mv /tmp/parental_control_cron.php /usr/local/bin/ 2>/dev/null; true && \
             sudo mv /tmp/parental_control_api.php /usr/local/www/ 2>/dev/null; true && \
             sudo mv /tmp/parental_control_analyzer.sh /usr/local/bin/ 2>/dev/null; true && \
             sudo mv /tmp/API.md /usr/local/share/pfSense-pkg-KACI-Parental_Control/docs/ 2>/dev/null; true && \

@@ -319,7 +319,7 @@ function pc_download_urls_sync($alias_name, $urls) {
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_TIMEOUT, 30);
 		curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
 		
 		$content = curl_exec($ch);
 		$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -518,7 +518,7 @@ function pc_test_url_accessibility($url) {
 	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 	curl_setopt($ch, CURLOPT_TIMEOUT, 5);
 	curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-	curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+	curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
 	curl_setopt($ch, CURLOPT_NOBODY, true); // HEAD request only
 	
 	$result = curl_exec($ch);
@@ -569,7 +569,7 @@ function pc_verify_service_urls($service_name, $service_config) {
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_TIMEOUT, 5);
 		curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
 		curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
 		curl_setopt($ch, CURLOPT_NOBODY, false); // Get content for basic analysis
 		
@@ -1157,8 +1157,8 @@ if ($_POST) {
 					session_start();
 				}
 			} catch (Exception $e) {
-				$input_errors[] = "Failed to save service config: " . $e->getMessage();
 				error_log("Failed to save service config: " . $e->getMessage());
+				$input_errors[] = "Failed to save service config. Please try again or check logs.";
 				break;
 			}
 			
@@ -1215,13 +1215,10 @@ if ($_POST) {
 					// NOTE: Service and URLs already saved to config BEFORE alias creation
 					// This prevents config corruption from multiple writes
 				} catch (Exception $e) {
-					$input_errors[] = "Failed to save URL alias for '{$service_name}': " . $e->getMessage();
 					error_log("Failed to write config for alias: " . $e->getMessage());
-					
-					// Send telemetry: Failed alias creation
+					$input_errors[] = "Failed to save URL alias for '{$service_name}'. Please try again or check logs.";
 					pc_send_telemetry('alias_created_failed', array(
-						'service' => $service_name,
-						'error' => $e->getMessage()
+						'service' => $service_name
 					));
 				}
 			} else {

@@ -535,6 +535,29 @@ function pc_get_profiles($no_cache = false) {
  *     // Display errors to user
  * }
  */
+
+/**
+ * Verify parent override password (OWASP A04/A07: hashed storage, timing-safe compare)
+ *
+ * Accepts stored value as bcrypt hash or legacy plaintext for backward compatibility.
+ * When stored value is plaintext, it is migrated to hash on next sync.
+ *
+ * @param string $submitted User-submitted password
+ * @param string $stored Stored value (hash or legacy plaintext)
+ * @return bool True if password matches
+ */
+function pc_override_password_verify($submitted, $stored) {
+	if (empty($stored) || $submitted === '') {
+		return false;
+	}
+	// Bcrypt hash (PHP default): $2y$ or $2a$
+	if (strpos($stored, '$2y$') === 0 || strpos($stored, '$2a$') === 0) {
+		return password_verify($submitted, $stored);
+	}
+	// Legacy plaintext (migrated to hash on next parental_control_sync)
+	return hash_equals($stored, $submitted);
+}
+
 function parental_control_validate_input($post, &$input_errors) {
 	// Validate grace period
 	if (isset($post['grace_period']) && $post['grace_period'] != '') {
@@ -904,6 +927,17 @@ function pc_sync_full() {
  * - User sees normal boot completion, heavy operations happen in background
  */
 function parental_control_sync() {
+	// OWASP A04/A07: Migrate plaintext override password to bcrypt hash (one-time)
+	$main = config_get_path('installedpackages/parentalcontrol/config/0', []);
+	if (is_array($main) && !empty($main['override_password'])) {
+		$p = $main['override_password'];
+		if (strpos($p, '$2y$') !== 0 && strpos($p, '$2a$') !== 0) {
+			$main['override_password'] = password_hash($p, PASSWORD_DEFAULT);
+			config_set_path('installedpackages/parentalcontrol/config/0', $main);
+			write_config("Hash override password (OWASP A04)");
+		}
+	}
+
 	try {
 		if (pc_is_boot_context()) {
 			pc_sync_boot_minimal();

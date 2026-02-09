@@ -125,13 +125,13 @@ try {
     echo json_encode($health, JSON_PRETTY_PRINT);
     
 } catch (Exception $e) {
-    // If health check itself fails, return error status
+    error_log("Parental Control health check failed: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
     http_response_code(503);
     echo json_encode(array(
         'status' => 'error',
         'timestamp' => gmdate('c'),
         'service' => 'KACI-Parental_Control',
-        'error' => $e->getMessage()
+        'error' => 'Service unavailable. Check server logs for details.'
     ), JSON_PRETTY_PRINT);
 }
 

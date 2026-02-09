@@ -137,10 +137,8 @@ $override_error = null;
 $override_success = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['override_password'])) {
-	$submitted_password = $_POST['override_password'];
-	
-	// Use cached config value
-	if (!empty($override_password) && $submitted_password === $override_password) {
+	$submitted_password = (string) $_POST['override_password'];
+	if (!empty($override_password) && pc_override_password_verify($submitted_password, $override_password)) {
 		// Grant temporary override (using cached override_duration)
 		$override_until = time() + ($override_duration * 60);
 		
