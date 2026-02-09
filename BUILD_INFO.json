@@ -1,6 +1,6 @@
 {
   "build_info": {
-    "version": "1.5.4",
+    "version": "1.5.5",
     "build_date": "2026-02-09T00:00:00Z",
     "git_commit": "b32389f",
     "git_branch": "develop",
@@ -88,6 +88,15 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.5.5",
+      "date": "2026-02-09",
+      "type": "update",
+      "changes": [
+        "Remove Roblox pattern-based detection (false positives); pattern-only assigns Minecraft or Unknown Gaming",
+        "Edit Device: add Profile dropdown to reassign device to another profile from same screen"
+      ]
+    },
     {
       "version": "1.5.4",
       "date": "2026-02-09",

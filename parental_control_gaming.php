@@ -70,13 +70,6 @@ $default_platforms = array(
 		'detection_method' => 'port',
 		'description' => 'Steam gaming platform and game servers'
 	),
-	'roblox' => array(
-		'name' => 'Roblox',
-		'enabled' => 'on',
-		'ports' => '',
-		'detection_method' => 'pattern',
-		'description' => 'Roblox (pattern-based via Cloudflare CDN)'
-	),
 	'epic' => array(
 		'name' => 'Epic Games',
 		'enabled' => 'on',
@@ -311,7 +304,7 @@ display_top_tabs($tab_array);
 			</div>
 			<!-- Gaming Detection Description -->
 			<div class="content">
-				<p><strong>Gaming Detection</strong> automatically identifies when devices are playing online games (Minecraft, Steam, Roblox, etc.) and enforces gaming-specific time limits.</p>
+				<p><strong>Gaming Detection</strong> automatically identifies when devices are playing online games (Minecraft, Steam, Epic Games, etc.) and enforces gaming-specific time limits.</p>
 				<p><strong>How it works:</strong> Combines port detection (Minecraft: 25565, Steam: 27015-27030), behavioral patterns (high connections + Discord), and IP lists to identify gaming activity with confidence scores. <strong>Learn more:</strong> <a href="https://www.who.int/standards/classifications/frequently-asked-questions/gaming-disorder" target="_blank" rel="noopener">WHO Gaming Disorder FAQ</a></p>
 			</div>
 			
@@ -418,7 +411,7 @@ display_top_tabs($tab_array);
 					<span class="help-block">
 						<strong>All Methods:</strong> Highest accuracy, combines port scanning, behavioral patterns, and IP lists<br/>
 						<strong>Ports Only:</strong> Fast, works for Minecraft (25565), Steam (27015-27030), Epic Games<br/>
-						<strong>Patterns Only:</strong> Works for CDN-proxied games (Roblox), based on connection behavior<br/>
+						<strong>Patterns Only:</strong> Works for pattern-based detection (e.g. Minecraft when Discord + YouTube present), based on connection behavior<br/>
 						<strong>IP Lists Only:</strong> Uses gaming platform IP ranges (requires maintenance)
 					</span>
 				</div>
@@ -870,7 +863,6 @@ display_top_tabs($tab_array);
 			<ul>
 				<li><strong>Minecraft:</strong> Port-based (25565, 19132) + Pattern detection for CDN-proxied servers</li>
 				<li><strong>Steam Games:</strong> Port-based (27015-27030) + IP lists</li>
-				<li><strong>Roblox:</strong> Pattern-based (uses Cloudflare CDN)</li>
 				<li><strong>Epic Games/Fortnite:</strong> Port-based (5222-5223, 9000-9100)</li>
 				<li><strong>Discord:</strong> Already tracked as service (voice chat indicator)</li>
 			</ul>

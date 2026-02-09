@@ -7606,40 +7606,18 @@ function pc_identify_game_platform(&$state, $device_ip, $all_states = null) {
 		);
 	}
 	
-	// Pattern-based detection (for CDN-proxied games like Roblox)
+	// Pattern-based detection (for CDN-proxied games; no Roblox heuristic - caused false positives)
 	$pattern_result = pc_detect_gaming_by_pattern($state, $device_ip);
 	if ($pattern_result['detected']) {
-		// Try to identify specific platform based on patterns
-		// Roblox pattern: Cloudflare heavy + younger profile
-		// Minecraft pattern: Cloudflare + Discord + YouTube (as documented)
-		
-		$device_state = $state['devices_by_ip'][$device_ip];
-		$profile_name = $device_state['profile'] ?? 'Unknown';
-		
-		// Check service usage patterns
-		$has_minecraft_pattern = false;
-		$has_roblox_pattern = false;
-		
-		// Minecraft indicators: High Discord + High YouTube + Very high connections
-		if ($pattern_result['indicators']['discord_active'] && 
+		// Only identify Minecraft from pattern: Discord + YouTube + high connections (documented).
+		// All other pattern matches stay "Unknown Gaming" to avoid false positives (e.g. Roblox).
+		$has_minecraft_pattern = ($pattern_result['indicators']['discord_active'] &&
 		    $pattern_result['indicators']['youtube_active'] &&
-		    $pattern_result['indicators']['high_connections']) {
-			$has_minecraft_pattern = true;
-		}
+		    $pattern_result['indicators']['high_connections']);
 		
-		// Roblox indicators: High connections + Cloudflare (but less Discord/YouTube)
-		if ($pattern_result['indicators']['high_connections'] && 
-		    !$pattern_result['indicators']['discord_active']) {
-			$has_roblox_pattern = true;
-		}
-		
-		// Default to most likely platform
 		if ($has_minecraft_pattern) {
 			$platform = 'minecraft';
 			$platform_name = 'Minecraft';
-		} elseif ($has_roblox_pattern) {
-			$platform = 'roblox';
-			$platform_name = 'Roblox';
 		} else {
 			$platform = 'unknown';
 			$platform_name = 'Unknown Gaming';
@@ -7672,7 +7650,7 @@ function pc_identify_game_platform(&$state, $device_ip, $all_states = null) {
  * 
  * @param array &$state Reference to state array
  * @param string $device_ip Device IP address
- * @param string $game_platform Game platform ID (minecraft, steam, roblox, etc.)
+ * @param string $game_platform Game platform ID (minecraft, steam, epic, unknown, etc.)
  * @param int $confidence Confidence score (0-100)
  * @param int $interval_minutes Minutes to add to usage
  * @param string $detection_method Detection method used (port, pattern, ip, combined)
@@ -7849,13 +7827,10 @@ function pc_detect_and_track_gaming(&$state, $service_ips_cache = null, $all_sta
 				);
 				$detected = true;
 				
-				// Try to refine platform guess based on indicators
+				// Refine platform only for Minecraft (Discord + YouTube). No Roblox heuristic (false positives).
 				if ($pattern_result['indicators']['discord_active'] && $pattern_result['indicators']['youtube_active']) {
 					$platform_result['platform'] = 'minecraft';
 					$platform_result['platform_name'] = 'Minecraft (pattern-based)';
-				} elseif ($pattern_result['indicators']['high_connections'] && !$pattern_result['indicators']['discord_active']) {
-					$platform_result['platform'] = 'roblox';
-					$platform_result['platform_name'] = 'Roblox (pattern-based)';
 				}
 			}
 		}

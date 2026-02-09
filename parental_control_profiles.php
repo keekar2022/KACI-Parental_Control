@@ -64,6 +64,9 @@ $service_aliases = pc_get_service_aliases();
 // Handle form submissions
 $input_errors = [];
 $savemsg = '';
+if (!empty($_GET['savemsg'])) {
+	$savemsg = htmlspecialchars($_GET['savemsg'], ENT_QUOTES, 'UTF-8');
+}
 
 // DEBUG: Check if this is a POST request
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -264,12 +267,24 @@ if ($_POST['save_device']) {
 			'hostname' => trim($_POST['hostname'])
 		);
 		
+		$source_profile_id = isset($_POST['source_profile_id']) && is_numeric($_POST['source_profile_id']) ? intval($_POST['source_profile_id']) : null;
+		$is_reassign = ($source_profile_id !== null && isset($_POST['device_id']) && is_numeric($_POST['device_id']) && $source_profile_id !== $profile_id);
+		
 		if (!isset($profiles[$profile_id]['row'])) {
 			$profiles[$profile_id]['row'] = [];
 		}
 		
-		if (isset($_POST['device_id']) && is_numeric($_POST['device_id'])) {
-			// Edit existing device
+		if ($is_reassign) {
+			// Reassign device to another profile: remove from source, add to target
+			$device_id = intval($_POST['device_id']);
+			if (isset($profiles[$source_profile_id]['row'][$device_id])) {
+				unset($profiles[$source_profile_id]['row'][$device_id]);
+				$profiles[$source_profile_id]['row'] = array_values($profiles[$source_profile_id]['row']);
+			}
+			$profiles[$profile_id]['row'][] = $device;
+			$action = "Reassigned";
+		} elseif (isset($_POST['device_id']) && is_numeric($_POST['device_id'])) {
+			// Edit existing device (same profile)
 			$device_id = intval($_POST['device_id']);
 			
 			// NEW v1.4.67: Check if device is being moved FROM Default profile
@@ -277,7 +292,6 @@ if ($_POST['save_device']) {
 			$is_from_default = ($old_device && isset($old_device['auto_discovered']) && !empty($old_device['auto_discovered']));
 			
 			// If device was auto-discovered in Default and still in Default, mark as manually managed
-			// This prevents it from being reassigned by auto-discovery
 			if ($is_from_default && isset($profiles[$profile_id]['name']) && $profiles[$profile_id]['name'] === 'Default') {
 				$device['manually_managed'] = 'on';
 			}
@@ -290,10 +304,9 @@ if ($_POST['save_device']) {
 			$action = "Added";
 		}
 		
-		// NEW v1.4.67: Mark device as manually managed if being added to non-Default profile
-		// This prevents auto-discovery from reassigning it
+		// NEW v1.4.67: Mark device as manually managed if in non-Default profile
 		if (isset($profiles[$profile_id]['name']) && $profiles[$profile_id]['name'] !== 'Default') {
-			$device_idx = isset($_POST['device_id']) ? intval($_POST['device_id']) : (count($profiles[$profile_id]['row']) - 1);
+			$device_idx = $is_reassign ? (count($profiles[$profile_id]['row']) - 1) : (isset($_POST['device_id']) ? intval($_POST['device_id']) : (count($profiles[$profile_id]['row']) - 1));
 			$profiles[$profile_id]['row'][$device_idx]['manually_managed'] = 'on';
 		}
 		
@@ -310,6 +323,10 @@ if ($_POST['save_device']) {
 		
 		// Reload profiles
 		$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', []);
+		
+		// Redirect to target profile's device list so user sees the result (avoids edit form for moved device)
+		header("Location: parental_control_profiles.php?act=devices&id={$profile_id}&savemsg=" . urlencode($savemsg));
+		exit;
 		}
 	}
 }
@@ -928,19 +945,35 @@ function toggleAllDevices(checkbox) {
 <!-- Add/Edit Device Form -->
 <?php if (($manage_devices_id !== null && $edit_device_id !== null) || ($_GET['act'] === 'add_device')): ?>
 <form method="post" action="parental_control_profiles.php" class="form-horizontal">
-	<input type="hidden" name="profile_id" value="<?=$manage_devices_id?>" />
 	<?php if ($edit_device_id !== null): ?>
+		<input type="hidden" name="source_profile_id" value="<?=$manage_devices_id?>" />
 		<input type="hidden" name="device_id" value="<?=$edit_device_id?>" />
 	<?php endif; ?>
 	
 	<div class="panel panel-default">
 		<div class="panel-heading">
 			<h2 class="panel-title">
-				<?=$edit_device_id !== null ? 'Edit Device' : 'Add Device'?> - 
-				Profile: <strong><?=htmlspecialchars($profiles[$manage_devices_id]['name'])?></strong>
+				<?=$edit_device_id !== null ? 'Edit Device' : 'Add Device'?>
 			</h2>
 		</div>
 		<div class="panel-body">
+			
+			<!-- Profile (target profile; when editing, allows reassignment) -->
+			<div class="form-group">
+				<label class="col-sm-2 control-label">Profile <span class="text-danger">*</span></label>
+				<div class="col-sm-10">
+					<select name="profile_id" class="form-control" required>
+						<?php foreach ($profiles as $pid => $p): ?>
+							<option value="<?=$pid?>" <?= ($pid === $manage_devices_id) ? 'selected="selected"' : ''?>>
+								<?=htmlspecialchars($p['name'] ?? "Profile {$pid}")?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+					<span class="help-block">
+						<?=$edit_device_id !== null ? 'Change profile to reassign this device to another profile.' : 'Select which profile this device belongs to.'?>
+					</span>
+				</div>
+			</div>
 			
 			<!-- Device Name -->
 			<div class="form-group">
