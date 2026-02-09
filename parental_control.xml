@@ -258,6 +258,17 @@
 			<description>How long override access lasts (1-240 minutes)</description>
 		</field>
 		
+		<field>
+			<fielddescr>API CORS Origins</fielddescr>
+			<fieldname>api_cors_origins</fieldname>
+			<type>input</type>
+			<size>60</size>
+			<description>Comma-separated allowed origins for API CORS (e.g. https://dashboard.example.com). Leave empty for * (any origin).</description>
+			<sethelp>
+				Restrict API access to specific origins. Example: https://monitor.example.com,https://app.example.com
+			</sethelp>
+		</field>
+		
 	</fields>
 	
 	<!-- Custom PHP hooks -->

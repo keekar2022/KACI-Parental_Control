@@ -247,11 +247,16 @@ if (isset($_POST['save'])) {
 }
 
 // SAVE DEVICE action (Add or Edit Device)
-if ($_POST['save_device']) {
+if (isset($_POST['save_device']) && $_POST['save_device']) {
 	// Admin access control - check FIRST before any validation
 	if (!pc_is_admin_user()) {
 		$input_errors[] = "Access denied. Only administrators can modify devices.";
 	} else {
+		// Reload profiles so we modify latest config (avoids overwriting concurrent changes)
+		$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', []);
+		if (!is_array($profiles)) {
+			$profiles = [];
+		}
 		$profile_id = intval($_POST['profile_id']);
 		
 		// Validation
@@ -273,18 +278,28 @@ if ($_POST['save_device']) {
 		);
 		
 		$source_profile_id = isset($_POST['source_profile_id']) && is_numeric($_POST['source_profile_id']) ? intval($_POST['source_profile_id']) : null;
-		$is_reassign = ($source_profile_id !== null && isset($_POST['device_id']) && is_numeric($_POST['device_id']) && $source_profile_id !== $profile_id);
+		$is_reassign = ($source_profile_id !== null && isset($_POST['device_id']) && is_numeric($_POST['device_id']) && (int)$source_profile_id !== (int)$profile_id);
 		
 		if (!isset($profiles[$profile_id]['row'])) {
 			$profiles[$profile_id]['row'] = [];
 		}
 		
 		if ($is_reassign) {
-			// Reassign device to another profile: remove from source, add to target
-			$device_id = intval($_POST['device_id']);
-			if (isset($profiles[$source_profile_id]['row'][$device_id])) {
-				unset($profiles[$source_profile_id]['row'][$device_id]);
-				$profiles[$source_profile_id]['row'] = array_values($profiles[$source_profile_id]['row']);
+			// Reassign: remove from source by MAC (robust vs string/int array keys), then add to target
+			$mac_normalized = pc_normalize_mac($device['mac_address']);
+			$removed = false;
+			if (isset($profiles[$source_profile_id]['row']) && is_array($profiles[$source_profile_id]['row'])) {
+				foreach ($profiles[$source_profile_id]['row'] as $idx => $row_device) {
+					$row_mac = isset($row_device['mac_address']) ? pc_normalize_mac($row_device['mac_address']) : '';
+					if ($row_mac !== '' && $row_mac === $mac_normalized) {
+						unset($profiles[$source_profile_id]['row'][$idx]);
+						$removed = true;
+						break;
+					}
+				}
+				if ($removed) {
+					$profiles[$source_profile_id]['row'] = array_values($profiles[$source_profile_id]['row']);
+				}
 			}
 			$profiles[$profile_id]['row'][] = $device;
 			$action = "Reassigned";
@@ -975,7 +990,7 @@ function toggleAllDevices(checkbox) {
 				<div class="col-sm-10">
 					<select name="profile_id" class="form-control" required>
 						<?php foreach ($profiles as $pid => $p): ?>
-							<option value="<?=$pid?>" <?= ($pid === $manage_devices_id) ? 'selected="selected"' : ''?>>
+							<option value="<?= (int)$pid ?>" <?= ((int)$pid === (int)$manage_devices_id) ? 'selected="selected"' : ''?>>
 								<?=htmlspecialchars($p['name'] ?? "Profile {$pid}")?>
 							</option>
 						<?php endforeach; ?>

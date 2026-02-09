@@ -48,10 +48,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 	header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
 }
 
-// WHY: Enable CORS for API access from external apps
-// Design Decision: Allow CORS but require API key for security
-// Rationale: External monitoring dashboards, mobile apps, automation tools need access
-header("Access-Control-Allow-Origin: *");
+// CORS: Use allowlist if configured (OWASP A02); otherwise * for backward compatibility
+$api_cors_origins = config_get_path('installedpackages/parentalcontrol/config/0/api_cors_origins', '');
+if ($api_cors_origins !== '') {
+	$allowed_origins = array_map('trim', array_filter(explode(',', $api_cors_origins)));
+	$request_origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
+	if (in_array($request_origin, $allowed_origins, true)) {
+		header("Access-Control-Allow-Origin: " . $request_origin);
+	}
+} else {
+	header("Access-Control-Allow-Origin: *");
+}
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, X-API-Key");
 
@@ -59,6 +66,43 @@ header("Access-Control-Allow-Headers: Content-Type, X-API-Key");
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 	http_response_code(200);
 	exit;
+}
+
+/**
+ * Simple file-based rate limit by IP (OWASP API4: prevent brute-force and DoS)
+ * Limit: 120 requests per 60 seconds per IP.
+ *
+ * @return bool True if under limit, false if over limit (caller should send 429)
+ */
+function api_rate_limit_check() {
+	$window_sec = 60;
+	$max_per_window = 120;
+	$file = '/tmp/parental_control_api_ratelimit.json';
+	$ip = isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : '0.0.0.0';
+	$now = time();
+	$data = array();
+	if (file_exists($file)) {
+		$raw = @file_get_contents($file);
+		if ($raw !== false) {
+			$data = json_decode($raw, true);
+			if (!is_array($data)) {
+				$data = array();
+			}
+		}
+	}
+	if (!isset($data[$ip]) || !is_array($data[$ip])) {
+		$data[$ip] = array('count' => 0, 'window_start' => $now);
+	}
+	if ($now - $data[$ip]['window_start'] >= $window_sec) {
+		$data[$ip] = array('count' => 0, 'window_start' => $now);
+	}
+	$data[$ip]['count']++;
+	@file_put_contents($file, json_encode($data), LOCK_EX);
+	return $data[$ip]['count'] <= $max_per_window;
+}
+
+if (!api_rate_limit_check()) {
+	api_response(429, null, 'Too many requests. Try again later.');
 }
 
 /**
@@ -437,7 +481,7 @@ if ($method === 'GET' && $resource === 'profiles' && $id !== null) {
 	$profiles = pc_get_profiles();
 	
 	foreach ($profiles as $profile) {
-		if (isset($profile['id']) && $profile['id'] == $id) {
+		if (isset($profile['id']) && (string)$profile['id'] === (string)$id) {
 		// Get schedules that apply to this profile
 		$profile_name = isset($profile['name']) ? $profile['name'] : '';
 		$schedules_applied = api_get_schedules_for_profile($profile_name);
@@ -754,8 +798,11 @@ if ($method === 'GET' && $resource === 'schedules' && $id === 'active') {
 // GET /api/schedules/{id} - Get schedule details by ID
 if ($method === 'GET' && $resource === 'schedules' && $id !== null && $action === null && $id !== 'active') {
 	$schedules = config_get_path('installedpackages/parentalcontrolschedules/config', []);
+	// Strict ID: reject non-numeric to avoid type juggling (e.g. "1abc")
+	if ((string)(intval($id)) !== (string)$id) {
+		api_response(404, null, "Schedule not found: {$id}");
+	}
 	$schedule_id = intval($id);
-	
 	if (is_array($schedules) && isset($schedules[$schedule_id])) {
 		$schedule = $schedules[$schedule_id];
 		
@@ -828,7 +875,7 @@ if ($method === 'GET' && $resource === 'profiles' && $id !== null && $action ===
 	$profile_found = false;
 	
 	foreach ($profiles as $profile) {
-		if (isset($profile['id']) && $profile['id'] == $id) {
+		if (isset($profile['id']) && (string)$profile['id'] === (string)$id) {
 			$profile_found = true;
 			$profile_name = isset($profile['name']) ? $profile['name'] : '';
 			$schedules_applied = api_get_schedules_for_profile($profile_name);
