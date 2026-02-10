@@ -4203,6 +4203,31 @@ sudo pfctl -a parental_control -f /tmp/rules.parental_control
 
 ---
 
+### Resetting YouTube usage and clearing service block
+
+When YouTube detection causes false positives (e.g. Gmail/Google Photos counted as YouTube and devices incorrectly blocked), reset **only** YouTube usage and clear the YouTube block table. Other usage (general, Facebook, etc.) is unchanged.
+
+**Run on the firewall via jump host:**
+```bash
+ssh nas.keekar.com "fw exec 'php /usr/local/pkg/reset_youtube_usage.php'"
+```
+
+**What it does:**
+- Zeros `service_usage.YouTube.usage_today` and `usage_week` for all devices and profiles
+- Clears bot/connection history for YouTube so detection restarts clean
+- Flushes the `pc_blocked_youtube` pf table (all devices unblocked from YouTube)
+
+**Reducing YouTube false positives (already in code):**
+1. **Port filtering:** Email ports (25, 465, 587, 993, 995) are excluded; only streaming ports (e.g. 443) count as YouTube.
+2. **Minimum connections:** Usage is only counted when concurrent connections to YouTube IPs are ≥ this value. Gmail/Photos typically have 1–5 connections; video streaming has many more.
+3. **Bot detection:** Sustained low, consistent connections for 15+ minutes are treated as bot/background and tracking is paused.
+
+**Where to tune the minimum connections:**
+- **GUI (recommended):** **Services → Keekar's Parental Control → Settings** → under **Advanced Settings**, set **YouTube minimum connections** (1–20, default 5). Save. No cron or shell changes needed.
+- **Environment (overrides GUI):** On the firewall, set `PC_YOUTUBE_MIN_CONNECTIONS` before the cron runs (e.g. in the cron line: `PC_YOUTUBE_MIN_CONNECTIONS=3 /usr/local/bin/php .../parental_control_cron.php`). Use this only if you need a per-execution override.
+
+---
+
 ## 📝 **Quick Reference**
 
 | Task | Command |

@@ -2,7 +2,7 @@
 <packagegui>
 	<title>Services/Keekar's Parental Control</title>
 	<name>KACI-Parental_Control</name>
-	<version>1.5.5</version>
+	<version>1.5.6</version>
 	<include_file>/usr/local/pkg/parental_control.inc</include_file>
 	<configpath>installedpackages/parentalcontrol/config/0</configpath>
 	
@@ -209,6 +209,20 @@
 			<sethelp>
 				Lower values provide more responsive enforcement but use more system resources.
 				Recommended: 60 seconds.
+			</sethelp>
+		</field>
+		
+		<field>
+			<fielddescr>YouTube minimum connections</fielddescr>
+			<fieldname>youtube_min_connections</fieldname>
+			<type>input</type>
+			<size>5</size>
+			<default_value>5</default_value>
+			<description>Only count as YouTube usage when concurrent connections to YouTube IPs are at least this many (1–20). Reduces false positives from Gmail/Photos/Drive.</description>
+			<sethelp>
+				<![CDATA[
+				Google shares IPs: Gmail, Photos, Drive and YouTube use the same ranges. To avoid counting email/sync as &quot;YouTube&quot;, usage is only added when connection count ≥ this value. Video streaming typically has many connections; email/Photos often 1–5. Default: 5. Lower (e.g. 3) = more sensitive; higher = fewer false positives.
+				]]>
 			</sethelp>
 		</field>
 		

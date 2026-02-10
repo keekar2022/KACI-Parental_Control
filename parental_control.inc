@@ -51,6 +51,23 @@ define('PC_PID_FILE', getenv('PC_PID_FILE') ?: '/tmp/parental_control.pid');
 define('PC_CRON_MINUTE', getenv('PC_CRON_MINUTE') ?: '*/5');  // Check every 5 minutes
 define('PC_CRON_INTERVAL_SECONDS', 300);  // Match the cron interval (5 minutes = 300 seconds)
 
+// YouTube false-positive reduction: only count as "YouTube usage" when concurrent connections >= this
+// WHY: Google shares IPs (Gmail, Drive, Photos, YouTube). Port 443 is used by all. Video streaming
+// typically has many concurrent connections; email/Photos sync often has 1-5. Default 5 reduces false positives.
+// Tunable: GUI Settings > YouTube minimum connections, or env PC_YOUTUBE_MIN_CONNECTIONS (overrides GUI).
+if (!defined('PC_YOUTUBE_MIN_CONNECTIONS')) {
+	$pc_youtube_min = 5;
+	if (getenv('PC_YOUTUBE_MIN_CONNECTIONS') !== false && getenv('PC_YOUTUBE_MIN_CONNECTIONS') !== '') {
+		$pc_youtube_min = max(1, min(20, (int)getenv('PC_YOUTUBE_MIN_CONNECTIONS')));
+	} elseif (function_exists('config_get_path')) {
+		$cfg = @config_get_path('installedpackages/parentalcontrol/config/0', array());
+		if (!empty($cfg['youtube_min_connections'])) {
+			$pc_youtube_min = max(1, min(20, (int)$cfg['youtube_min_connections']));
+		}
+	}
+	define('PC_YOUTUBE_MIN_CONNECTIONS', $pc_youtube_min);
+}
+
 // Log rotation settings - Environment overridable for different deployment scenarios
 define('PC_MAX_LOG_SIZE', getenv('PC_MAX_LOG_SIZE') ?: (5 * 1024 * 1024));  // 5MB per log file
 define('PC_MAX_LOG_FILES', getenv('PC_MAX_LOG_FILES') ?: 10);  // Keep last 10 log files
@@ -4664,6 +4681,73 @@ function pc_clear_service_table($service_name) {
 }
 
 /**
+ * Reset usage for a single service only and optionally clear its block table.
+ *
+ * Use this to fix false-positive service blocks (e.g. YouTube) without resetting
+ * other services or general usage. Only YouTube (or the given service) usage
+ * and block table are touched.
+ *
+ * @param array &$state State array (modified by reference)
+ * @param string $service_name Display name (e.g. 'YouTube', 'Facebook')
+ * @param bool $clear_block_table If true, flush the service block table so all devices are unblocked from that service
+ * @return void
+ * @since 1.5.x
+ */
+function pc_reset_service_usage_and_unblock(&$state, $service_name, $clear_block_table = true) {
+	if (empty($service_name)) {
+		return;
+	}
+
+	$devices_reset = 0;
+	$profiles_reset = 0;
+
+	// Reset device-level service usage for this service only
+	if (isset($state['devices_by_ip']) && is_array($state['devices_by_ip'])) {
+		foreach ($state['devices_by_ip'] as $ip => &$device_state) {
+			if (!isset($device_state['service_usage'][$service_name])) {
+				continue;
+			}
+			$device_state['service_usage'][$service_name]['usage_today'] = 0;
+			$device_state['service_usage'][$service_name]['usage_week'] = 0;
+			// Clear connection history and bot flag so detection restarts clean
+			$device_state['service_usage'][$service_name]['connection_history'] = array();
+			$device_state['service_usage'][$service_name]['is_bot'] = false;
+			$device_state['service_usage'][$service_name]['bot_score'] = 0;
+			$device_state['service_usage'][$service_name]['bot_detected_at'] = 0;
+			$devices_reset++;
+		}
+		unset($device_state);
+	}
+
+	// Reset profile-level service usage for this service only
+	if (isset($state['profiles']) && is_array($state['profiles'])) {
+		foreach ($state['profiles'] as $profile_name => &$profile_state) {
+			if (!isset($profile_state['service_usage'][$service_name])) {
+				continue;
+			}
+			$profile_state['service_usage'][$service_name]['usage_today'] = 0;
+			$profile_state['service_usage'][$service_name]['usage_week'] = 0;
+			$profiles_reset++;
+		}
+		unset($profile_state);
+	}
+
+	if ($clear_block_table) {
+		$service_name_lower = strtolower($service_name);
+		pc_clear_service_table($service_name_lower);
+	}
+
+	pc_log("Reset {$service_name} usage and cleared block table (devices: {$devices_reset}, profiles: {$profiles_reset})", 'info', array(
+		'event.action' => 'service_usage_reset',
+		'event.category' => 'configuration',
+		'service.name' => $service_name,
+		'devices_reset' => $devices_reset,
+		'profiles_reset' => $profiles_reset,
+		'block_table_cleared' => $clear_block_table
+	));
+}
+
+/**
  * Add firewall block for a specific device using pfSense anchor
  * 
  * @deprecated since 1.1.8 - Use pc_add_device_block_table() instead
@@ -6670,13 +6754,30 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 			
 			// Only track usage and update timestamps if device has actual connections
 			if ($conn_count > 0) {
-				// Add interval minutes to service usage (ONLY if not flagged as bot)
+				// YouTube false-positive reduction: only count usage when connections meet minimum
+				// WHY: Gmail/Photos/Drive use same Google IPs on 443; video streaming has many more connections
+				$count_as_usage = true;
+				if ($service_name === 'YouTube' && $conn_count < PC_YOUTUBE_MIN_CONNECTIONS) {
+					$count_as_usage = false;
+				}
+
+				// Add interval minutes to service usage (ONLY if not flagged as bot and count_as_usage)
 				$is_bot = isset($state['devices_by_ip'][$ip]['service_usage'][$service_name]['is_bot']) && 
 				          $state['devices_by_ip'][$ip]['service_usage'][$service_name]['is_bot'];
 				
-				if (!$is_bot) {
+				if (!$is_bot && $count_as_usage) {
 					$state['devices_by_ip'][$ip]['service_usage'][$service_name]['usage_today'] += $interval_minutes;
 					$state['devices_by_ip'][$ip]['service_usage'][$service_name]['usage_week'] += $interval_minutes;
+				} elseif (!$count_as_usage && $service_name === 'YouTube') {
+					// Log only at debug to avoid noise; low connections = likely not video
+					pc_log("YouTube: skipping usage (connections={$conn_count} < " . PC_YOUTUBE_MIN_CONNECTIONS . ")", 'debug', array(
+						'event.action' => 'youtube_low_connections_skipped',
+						'device.name' => $device_name,
+						'client.address' => $ip,
+						'service.name' => 'YouTube',
+						'connections' => $conn_count,
+						'threshold' => PC_YOUTUBE_MIN_CONNECTIONS
+					));
 				} else {
 					pc_log("Skipping usage tracking for $device_name @ $ip - $service_name (bot traffic detected)", 'debug', array(
 						'event.action' => 'bot_traffic_skipped',
@@ -8127,17 +8228,17 @@ function pc_reset_service_tracking(&$state, $ip, $service_name, $reason = 'manua
 	
 	// Remove IP from service-specific blocking table if present
 	// This ensures the device can continue to access the service while bot traffic is ignored
-	$service_alias_name = 'pc_blocked_' . strtolower(preg_replace('/[^a-zA-Z0-9_]/', '_', $service_name));
-	$blocked_ips = pc_get_service_blocked_ips($service_alias_name);
+	$service_name_lower = strtolower($service_name);
+	$blocked_ips = pc_get_service_blocked_ips($service_name_lower);
 	
 	if (in_array($ip, $blocked_ips)) {
-		pc_remove_ip_from_service_table($service_alias_name, $ip);
+		pc_remove_ip_from_service_table($ip, $service_name_lower);
 		
-		pc_log("Removed {$ip} from {$service_alias_name} table (bot traffic)", 'debug', array(
+		pc_log("Removed {$ip} from {$service_name} block table (bot traffic)", 'debug', array(
 			'event.action' => 'ip_removed_from_service_table',
 			'client.address' => $ip,
 			'service.name' => $service_name,
-			'table.name' => $service_alias_name
+			'table.name' => 'pc_blocked_' . $service_name_lower
 		));
 	}
 	

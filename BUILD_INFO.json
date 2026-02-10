@@ -1,7 +1,7 @@
 {
   "build_info": {
-    "version": "1.5.5",
-    "build_date": "2026-02-09T00:00:00Z",
+    "version": "1.5.6",
+    "build_date": "2026-02-10T00:00:00Z",
     "git_commit": "b32389f",
     "git_branch": "develop",
     "built_by": "development",
@@ -88,6 +88,16 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.5.6",
+      "date": "2026-02-10",
+      "type": "minor",
+      "changes": [
+        "YouTube: reset usage + clear block (pc_reset_service_usage_and_unblock, reset_youtube_usage.php)",
+        "YouTube false-positive reduction: min connections threshold (GUI: Settings > YouTube minimum connections)",
+        "Fix pc_reset_service_tracking bot unblock (correct service name/args for block table)"
+      ]
+    },
     {
       "version": "1.5.5",
       "date": "2026-02-09",

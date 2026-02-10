@@ -12,6 +12,7 @@ usr/local/www/parental_control_api.php
 usr/local/etc/rc.d/parental_control_captive.sh
 usr/local/bin/auto_update_parental_control.sh
 usr/local/bin/parental_control_cron.php
+usr/local/pkg/reset_youtube_usage.php
 usr/local/share/pfSense-pkg-KACI-Parental_Control/info.xml
 @dir /var/log
 @dir /var/db
