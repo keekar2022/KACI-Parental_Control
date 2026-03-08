@@ -724,7 +724,7 @@ For issues, feature requests, or contributions:
 ---
 
 **Last Updated:** 2026-01-18
-**Package Version:** 1.4.x (Production)
+**Package Version:** 1.5.6x (Production)
 
 
 ---
@@ -1707,7 +1707,7 @@ function pc_migrate_state_to_v0_2_1($old_state) {
 
 ---
 
-**Architecture Version**: 1.4.x  
+**Architecture Version**: 1.5.6x  
 **Last Updated**: January 18, 2026  
 **Status**: Production Ready
 
@@ -2359,7 +2359,7 @@ keekar2022/KACI-Parental_Control
   - ✅ Must be tagged with version numbers
   - ❌ No direct commits (except hotfixes)
   - ❌ No experimental features
-- **Current Version**: v1.4.x
+- **Current Version**: v1.5.6x
 
 #### `develop` Branch
 - **Purpose**: Integration branch for new features
@@ -4225,6 +4225,18 @@ ssh nas.keekar.com "fw exec 'php /usr/local/pkg/reset_youtube_usage.php'"
 **Where to tune the minimum connections:**
 - **GUI (recommended):** **Services → Keekar's Parental Control → Settings** → under **Advanced Settings**, set **YouTube minimum connections** (1–20, default 5). Save. No cron or shell changes needed.
 - **Environment (overrides GUI):** On the firewall, set `PC_YOUTUBE_MIN_CONNECTIONS` before the cron runs (e.g. in the cron line: `PC_YOUTUBE_MIN_CONNECTIONS=3 /usr/local/bin/php .../parental_control_cron.php`). Use this only if you need a per-execution override.
+
+### Resetting Facebook usage and clearing service block
+
+When Facebook detection causes false positives (e.g. WhatsApp/Instagram background sync counted as Facebook, or "Profile Total 1h but Facebook 5h"), reset **only** Facebook usage and clear the Facebook block table.
+
+**Run on the firewall via jump host:**
+```bash
+ssh nas.keekar.com "fw exec 'php /usr/local/pkg/reset_facebook_usage.php'"
+```
+
+**Why "Profile Total 1h but Facebook 5h" can happen (and the fix):**  
+Profile **total** (usage_today) is only incremented when the device is **not** a general bot (e.g. background Apple/Google traffic). Profile **service** usage (e.g. Facebook) was previously incremented when only that service was not flagged as bot. So a device could be general_bot (so profile total stayed low) but Facebook is_bot false (so profile Facebook kept growing). The code now requires the device to **not** be a general bot when adding to profile service usage, so profile total and profile service usage stay consistent. Facebook also has a **minimum connections** threshold (Settings → Facebook minimum connections, default 5) to reduce WhatsApp/Instagram sync being counted as Facebook.
 
 ---
 

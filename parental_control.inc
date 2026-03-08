@@ -27,8 +27,8 @@ if (!defined('PC_VERSION')) {
 		define('PC_BUILD_DATE', $version_data['BUILD_DATE'] ?? date('Y-m-d'));
 	} else {
 		// Fallback if VERSION file not deployed (should not happen in production)
-		define('PC_VERSION', '1.0.1');
-		define('PC_BUILD_DATE', '2025-12-29');
+		define('PC_VERSION', '1.5.6');
+		define('PC_BUILD_DATE', '2026-03-08');
 	}
 }
 define('PC_AUTHOR', 'Mukesh Kesharwani');
@@ -66,6 +66,23 @@ if (!defined('PC_YOUTUBE_MIN_CONNECTIONS')) {
 		}
 	}
 	define('PC_YOUTUBE_MIN_CONNECTIONS', $pc_youtube_min);
+}
+
+// Facebook false-positive reduction: only count as "Facebook usage" when concurrent connections >= this
+// WHY: Meta shares IPs (Facebook, WhatsApp, Instagram, Messenger). Background sync (WhatsApp, Instagram)
+// often has 1-5 connections; active Facebook use typically has more. Default 5 reduces false positives.
+// Tunable: GUI Settings > Facebook minimum connections, or env PC_FACEBOOK_MIN_CONNECTIONS (overrides GUI).
+if (!defined('PC_FACEBOOK_MIN_CONNECTIONS')) {
+	$pc_facebook_min = 5;
+	if (getenv('PC_FACEBOOK_MIN_CONNECTIONS') !== false && getenv('PC_FACEBOOK_MIN_CONNECTIONS') !== '') {
+		$pc_facebook_min = max(1, min(20, (int)getenv('PC_FACEBOOK_MIN_CONNECTIONS')));
+	} elseif (function_exists('config_get_path')) {
+		$cfg = @config_get_path('installedpackages/parentalcontrol/config/0', array());
+		if (!empty($cfg['facebook_min_connections'])) {
+			$pc_facebook_min = max(1, min(20, (int)$cfg['facebook_min_connections']));
+		}
+	}
+	define('PC_FACEBOOK_MIN_CONNECTIONS', $pc_facebook_min);
 }
 
 // Log rotation settings - Environment overridable for different deployment scenarios
@@ -5992,18 +6009,31 @@ function pc_get_ip_from_mac($mac) {
 	$mac = pc_normalize_mac($mac);
 	static $mac_to_ip_cache = array();
 	
-	// Return cached result if available
+	// Return cached result if available (per-request only; new process each cron run)
 	if (isset($mac_to_ip_cache[$mac])) {
 		return $mac_to_ip_cache[$mac];
 	}
 	
-	// Try ARP table first
+	// CRITICAL: Prefer DHCP leases over ARP so MAC→IP mapping stays consistent with current lease
+	// WHY: We track by MAC so IP can change (DHCP). State must reflect the IP from the current
+	// lease, not a stale ARP entry. DHCP is the source of truth for "what IP we assigned this MAC".
+	$dhcp_leases = pc_get_dhcp_leases();
+	foreach ($dhcp_leases as $lease) {
+		if (isset($lease['mac']) && pc_normalize_mac($lease['mac']) === $mac && !empty($lease['ip'])) {
+			$ip = $lease['ip'];
+			$mac_to_ip_cache[$mac] = $ip;
+			return $ip;
+		}
+	}
+	
+	// Fallback: ARP table (for static IP devices or when not in DHCP)
 	try {
 		$arp_table = system_get_arp_table();
 		if (is_array($arp_table)) {
 			foreach ($arp_table as $entry) {
-				if (isset($entry['mac-address']) && 
-					pc_normalize_mac($entry['mac-address']) == $mac) {
+				if (isset($entry['mac-address']) &&
+					pc_normalize_mac($entry['mac-address']) === $mac &&
+					!empty($entry['ip-address'])) {
 					$ip = $entry['ip-address'];
 					$mac_to_ip_cache[$mac] = $ip;
 					return $ip;
@@ -6012,16 +6042,6 @@ function pc_get_ip_from_mac($mac) {
 		}
 	} catch (Exception $e) {
 		pc_log("Failed to get ARP table: " . $e->getMessage(), 'warn');
-	}
-	
-	// Try DHCP leases
-	$dhcp_leases = pc_get_dhcp_leases();
-	foreach ($dhcp_leases as $lease) {
-		if (pc_normalize_mac($lease['mac']) == $mac) {
-			$ip = $lease['ip'];
-			$mac_to_ip_cache[$mac] = $ip;
-			return $ip;
-		}
 	}
 	
 	// Not found
@@ -6754,10 +6774,13 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 			
 			// Only track usage and update timestamps if device has actual connections
 			if ($conn_count > 0) {
-				// YouTube false-positive reduction: only count usage when connections meet minimum
-				// WHY: Gmail/Photos/Drive use same Google IPs on 443; video streaming has many more connections
+				// YouTube/Facebook false-positive reduction: only count usage when connections meet minimum
+				// WHY: Google/Meta share IPs; background sync has 1-5 connections; active use has more.
 				$count_as_usage = true;
 				if ($service_name === 'YouTube' && $conn_count < PC_YOUTUBE_MIN_CONNECTIONS) {
+					$count_as_usage = false;
+				}
+				if ($service_name === 'Facebook' && $conn_count < PC_FACEBOOK_MIN_CONNECTIONS) {
 					$count_as_usage = false;
 				}
 
@@ -6777,6 +6800,15 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 						'service.name' => 'YouTube',
 						'connections' => $conn_count,
 						'threshold' => PC_YOUTUBE_MIN_CONNECTIONS
+					));
+				} elseif (!$count_as_usage && $service_name === 'Facebook') {
+					pc_log("Facebook: skipping usage (connections={$conn_count} < " . PC_FACEBOOK_MIN_CONNECTIONS . ")", 'debug', array(
+						'event.action' => 'facebook_low_connections_skipped',
+						'device.name' => $device_name,
+						'client.address' => $ip,
+						'service.name' => 'Facebook',
+						'connections' => $conn_count,
+						'threshold' => PC_FACEBOOK_MIN_CONNECTIONS
 					));
 				} else {
 					pc_log("Skipping usage tracking for $device_name @ $ip - $service_name (bot traffic detected)", 'debug', array(
@@ -6846,16 +6878,34 @@ function pc_update_device_usage(&$state, $service_ips_cache = null, $all_states 
 					$is_service_bot = isset($state['devices_by_ip'][$ip]['service_usage'][$service_name]['is_bot']) && 
 					                  $state['devices_by_ip'][$ip]['service_usage'][$service_name]['is_bot'];
 					
-					// Only add usage if NOT flagged as bot (matching device-level logic)
-					if (!$is_service_bot) {
+					// CRITICAL FIX: Also require device NOT general bot when adding to profile service usage
+					// WHY: When device is general_bot we don't add to profile usage_today, so profile total
+					// stays low. We were still adding to profile service_usage[Facebook] when only
+					// Facebook is_bot was false, causing "Profile Total 1h, Facebook 5h" (impossible).
+					// FIX: Only add to profile service_usage when !is_service_bot AND !is_device_bot.
+					$add_profile_service = !$is_service_bot && !$is_device_bot;
+					
+					// Only add usage if NOT flagged as bot (matching device-level logic) and device not general bot
+					if ($add_profile_service) {
 						// Add interval minutes to profile's service usage
 						$state['profiles'][$profile_name]['service_usage'][$service_name]['usage_today'] += $interval_minutes;
 						$state['profiles'][$profile_name]['service_usage'][$service_name]['usage_week'] += $interval_minutes;
 						$state['profiles'][$profile_name]['service_usage'][$service_name]['last_seen'] = time();
 					} else {
-						// Bot traffic detected - skip profile service usage increment
+						// Bot traffic or general device bot - skip profile service usage increment
 						// Only update last_seen timestamp
 						$state['profiles'][$profile_name]['service_usage'][$service_name]['last_seen'] = time();
+						if ($is_device_bot && !$is_service_bot) {
+							pc_log("Profile service usage skipped (device is general bot): {$profile_name} / {$service_name}", 'debug', array(
+								'event.action' => 'profile_service_skipped_device_bot',
+								'profile.name' => $profile_name,
+								'service.name' => $service_name,
+								'device.name' => $device_name,
+								'client.address' => $ip,
+								'is_device_bot' => true,
+								'is_service_bot' => false
+							));
+						}
 					}
 				}
 			}

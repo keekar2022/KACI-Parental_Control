@@ -4588,7 +4588,7 @@ We welcome contributions! See [Technical Reference](docs/TECHNICAL_REFERENCE.md)
 
 ## 📊 Project Statistics
 
-- **Version:** 1.0.0 (Stable)
+- **Version:** 1.5.6 (Stable)
 - **Lines of Code:** 4,000+
 - **Documentation:** 5,900+ lines
 - **Development Time:** 3 months

@@ -145,9 +145,9 @@ echo "Build Date: ${BUILD_DATE}"
 echo "Git Commit: ${GIT_COMMIT}"
 echo ""
 
-# Get current version from VERSION file
+# Get current version from VERSION file (support VERSION= or CURRENT_VERSION=)
 if [ -f "VERSION" ]; then
-    CURRENT_VERSION=$(grep "CURRENT_VERSION=" VERSION | cut -d'=' -f2)
+    CURRENT_VERSION=$(grep -E "^(CURRENT_VERSION|VERSION)=" VERSION | head -1 | cut -d'=' -f2)
     echo "Current Version: ${CURRENT_VERSION}"
 else
     echo -e "${RED}Error: VERSION file not found${NC}"
@@ -166,18 +166,24 @@ echo -e "${GREEN}Updating version files...${NC}"
 
 # 1. Update VERSION file
 echo "  → VERSION"
-sed -i '' "s/CURRENT_VERSION=.*/CURRENT_VERSION=${NEW_VERSION}/" VERSION
+sed -i '' -E "s/^(CURRENT_VERSION|VERSION)=.*/\1=${NEW_VERSION}/" VERSION
 sed -i '' "s/BUILD_DATE=.*/BUILD_DATE=${BUILD_DATE}/" VERSION
 
-# Add new changelog entry to VERSION file
-sed -i '' "/# Version History:/a\\
+# Add new changelog entry to VERSION file (if Version History section exists)
+if grep -q "# Version History:" VERSION 2>/dev/null; then
+    sed -i '' "/# Version History:/a\\
 # ${NEW_VERSION} - ${BUILD_DATE} - ${CHANGELOG}
 " VERSION
+fi
 
-# 2. Update parental_control.inc
-echo "  → parental_control.inc"
-sed -i '' "s/define('PC_VERSION', '.*');/define('PC_VERSION', '${NEW_VERSION}');/" parental_control.inc
-sed -i '' "s/define('PC_BUILD_DATE', '.*');/define('PC_BUILD_DATE', '${BUILD_DATE}');/" parental_control.inc
+# 2. Update parental_control.inc (only if version is hardcoded; package reads from parental_control_VERSION file)
+if grep -q "define('PC_VERSION'," parental_control.inc 2>/dev/null; then
+    echo "  → parental_control.inc (fallback version)"
+    sed -i '' "s/define('PC_VERSION', '.*');/define('PC_VERSION', '${NEW_VERSION}');/" parental_control.inc
+    sed -i '' "s/define('PC_BUILD_DATE', '.*');/define('PC_BUILD_DATE', '${BUILD_DATE}');/" parental_control.inc
+else
+    echo "  → parental_control.inc (version from file, skipping)"
+fi
 
 # 3. Update parental_control.xml
 echo "  → parental_control.xml"

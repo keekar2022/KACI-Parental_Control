@@ -227,6 +227,20 @@
 		</field>
 		
 		<field>
+			<fielddescr>Facebook minimum connections</fielddescr>
+			<fieldname>facebook_min_connections</fieldname>
+			<type>input</type>
+			<size>5</size>
+			<default_value>5</default_value>
+			<description>Only count as Facebook usage when concurrent connections to Meta IPs are at least this many (1–20). Reduces false positives from WhatsApp/Instagram sync.</description>
+			<sethelp>
+				<![CDATA[
+				Meta shares IPs: Facebook, WhatsApp, Instagram use the same ranges. To avoid counting WhatsApp/Instagram background sync as &quot;Facebook&quot;, usage is only added when connection count ≥ this value. Active Facebook use typically has more connections; sync often 1–5. Default: 5.
+				]]>
+			</sethelp>
+		</field>
+		
+		<field>
 			<fielddescr>Blocked Page Message</fielddescr>
 			<fieldname>blocked_message</fieldname>
 			<type>textarea</type>

@@ -18,7 +18,7 @@
 
 ## Professional-Grade Internet Time Management for Families
 
-**Version 1.4.x** | January 2026 | Open Source | Free
+**Version 1.5.6x** | January 2026 | Open Source | Free
 
 ---
 
@@ -1203,5 +1203,5 @@ After completing this guide, you should have:
 
 **Built with Passion by Mukesh Kesharwani**  
 **© 2025 Keekar**  
-**Version 1.4.2**
+**Version 1.5.6**
 
