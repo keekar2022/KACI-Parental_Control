@@ -1,8 +1,8 @@
 {
   "build_info": {
-    "version": "1.5.6",
-    "build_date": "2026-02-10T00:00:00Z",
-    "git_commit": "b32389f",
+    "version": "1.5.7",
+    "build_date": "2026-03-09T00:00:00Z",
+    "git_commit": "ccdb7e4",
     "git_branch": "develop",
     "built_by": "development",
     "build_environment": "local"
@@ -90,6 +90,14 @@
   "changelog": [
     {
       "version": "1.5.6",
+      "date": "2026-03-08",
+      "type": "update",
+      "changes": [
+        "Reassign device between profiles; DHCP-first MAC\u2192IP; Facebook/YouTube resets and min-connections"
+      ]
+    },
+    {
+      "version": "1.5.6",
       "date": "2026-02-10",
       "type": "minor",
       "changes": [
@@ -99,7 +107,7 @@
       ]
     },
     {
-      "version": "1.5.5",
+      "version": "1.5.6",
       "date": "2026-02-09",
       "type": "update",
       "changes": [
@@ -108,7 +116,7 @@
       ]
     },
     {
-      "version": "1.5.4",
+      "version": "1.5.6",
       "date": "2026-02-09",
       "type": "bugfix",
       "changes": [
@@ -117,7 +125,7 @@
       ]
     },
     {
-      "version": "1.5.3",
+      "version": "1.5.6",
       "date": "2026-02-08",
       "type": "update",
       "changes": [
@@ -127,16 +135,16 @@
       ]
     },
     {
-      "version": "1.4.59",
+      "version": "1.5.6",
       "date": "2026-01-23",
       "type": "critical_enhancement",
       "changes": [
-        "🚀 CRITICAL ENHANCEMENT: Universal bot detection for general internet usage",
-        "✅ APPLIES TO ALL PROFILES: Anita, Mukesh, Vishesh, GunGun, John",
+        "\ud83d\ude80 CRITICAL ENHANCEMENT: Universal bot detection for general internet usage",
+        "\u2705 APPLIES TO ALL PROFILES: Anita, Mukesh, Vishesh, GunGun, John",
         "PROBLEM: Sleeping users accumulate 60-75 minutes phantom usage overnight",
         "PROBLEM: Anita's iPhone shows 75 min usage while sleeping (1:10 consumed, bedtime active)",
-        "SCENARIO: User goes to sleep → iPhone maintains 1-2 Apple Push connections",
-        "SCENARIO: Every 5 minutes, system adds 5 min usage → 75 min accumulated while sleeping",
+        "SCENARIO: User goes to sleep \u2192 iPhone maintains 1-2 Apple Push connections",
+        "SCENARIO: Every 5 minutes, system adds 5 min usage \u2192 75 min accumulated while sleeping",
         "ROOT CAUSE: Bot detection ONLY applied to monitored services (YouTube, Facebook, etc.)",
         "ROOT CAUSE: General internet traffic (Apple Push, iCloud, Google services) NEVER analyzed",
         "ROOT CAUSE: Sleeping devices maintain stable non-monitored connections indefinitely",
@@ -147,22 +155,22 @@
         "FIX: Added pc_detect_general_bot_behavior() - analyzes ALL internet traffic",
         "FIX: New fields: general_connection_history, general_bot_score, is_general_bot",
         "FIX: Same detection logic as service bot: low activity + stable OR ultra-stable",
-        "FIX: Applies universally at device level → works for ALL profiles automatically",
-        "RESULT: Sleeping devices detected as bot within 25 minutes (5 samples × 5 min)",
+        "FIX: Applies universally at device level \u2192 works for ALL profiles automatically",
+        "RESULT: Sleeping devices detected as bot within 25 minutes (5 samples \u00d7 5 min)",
         "RESULT: Phantom usage reduced from 60-75 min to ~1-2 min (warmup period only)",
         "BENEFIT: Accurate usage tracking for ALL profiles, not just the one tested",
         "BENEFIT: Users no longer wake up to phantom consumed time",
         "BENEFIT: System-wide fix - no profile-specific configuration needed",
         "TECHNICAL: parental_control.inc lines 5746-5757, 5816-5830, 6252-6373",
         "DETECTION CRITERIA:",
-        "  - Method 1: ≤5 connections + variance ≤2.0 for 25+ minutes (iPhone/iPad idle)",
-        "  - Method 2: variance ≤1.5 for 25+ minutes at any level (Google TV idle)",
+        "  - Method 1: \u22645 connections + variance \u22642.0 for 25+ minutes (iPhone/iPad idle)",
+        "  - Method 2: variance \u22641.5 for 25+ minutes at any level (Google TV idle)",
         "UNIVERSAL APPLICATION:",
-        "  - Anita's iPhone: 1-2 Apple Push connections → bot detected → no phantom usage",
-        "  - Mukesh's iPhone: 2-3 iCloud connections → bot detected → no phantom usage",
-        "  - Vishesh's devices: Similar background traffic → bot detected → no phantom usage",
-        "  - GunGun's Basement TV: Google telemetry → bot detected → no phantom usage",
-        "  - John's devices: Any stable background → bot detected → no phantom usage",
+        "  - Anita's iPhone: 1-2 Apple Push connections \u2192 bot detected \u2192 no phantom usage",
+        "  - Mukesh's iPhone: 2-3 iCloud connections \u2192 bot detected \u2192 no phantom usage",
+        "  - Vishesh's devices: Similar background traffic \u2192 bot detected \u2192 no phantom usage",
+        "  - GunGun's Basement TV: Google telemetry \u2192 bot detected \u2192 no phantom usage",
+        "  - John's devices: Any stable background \u2192 bot detected \u2192 no phantom usage",
         "EXAMPLES OF DETECTED TRAFFIC:",
         "  - Apple Push Notifications (port 5223)",
         "  - iCloud sync services",
@@ -190,11 +198,11 @@
       }
     },
     {
-      "version": "1.4.58",
+      "version": "1.5.6",
       "date": "2026-01-23",
       "type": "critical_bugfix",
       "changes": [
-        "🔧 CRITICAL FIX: False positive service detection due to IP array accumulation",
+        "\ud83d\udd27 CRITICAL FIX: False positive service detection due to IP array accumulation",
         "PROBLEM: User shows TikTok usage despite never installing the app",
         "PROBLEM: TikTok has 12,278 IPs in alias, but TikTok URL source returns domains (not IPs)",
         "SCENARIO: User sees 'TikTok 30 minutes' despite no TikTok app installed",
@@ -213,8 +221,8 @@
         "BENEFIT: Accurate service detection - no more ghost app usage",
         "TECHNICAL: parental_control.inc line 5516 - added array initialization",
         "DEBUG EVIDENCE:",
-        "  Before fix: Discord(95) → Facebook(1106=95+1011) → YouTube(12278=1106+11172) → TikTok(12278=same!)",
-        "  After fix: Discord(95) → Facebook(1011) → YouTube(11172) → TikTok(0)",
+        "  Before fix: Discord(95) \u2192 Facebook(1106=95+1011) \u2192 YouTube(12278=1106+11172) \u2192 TikTok(12278=same!)",
+        "  After fix: Discord(95) \u2192 Facebook(1011) \u2192 YouTube(11172) \u2192 TikTok(0)",
         "  Proof: pfctl -t PC_Service_TikTok -T show returns 0 IPs (correct)",
         "  Proof: pc_load_all_service_ips() shows TikTok with 12278 IPs (bug!)",
         "  Root: exec() appends when $output not initialized per PHP documentation"
@@ -233,11 +241,11 @@
       }
     },
     {
-      "version": "1.4.57",
+      "version": "1.5.6",
       "date": "2026-01-23",
       "type": "critical_bugfix",
       "changes": [
-        "🔧 CRITICAL FIX: Gmail/Email traffic no longer counted as YouTube usage",
+        "\ud83d\udd27 CRITICAL FIX: Gmail/Email traffic no longer counted as YouTube usage",
         "PROBLEM: User actively using Gmail shows 29 'YouTube' connections",
         "PROBLEM: Gmail sync (port 993) counted as YouTube video streaming",
         "SCENARIO: Mukesh closed YouTube/Facebook but still shows 29 YouTube connections",
@@ -268,13 +276,13 @@
         "BENEFIT: Accurate YouTube tracking - only video streaming counted",
         "BENEFIT: Gmail/Drive/Photos no longer inflate YouTube usage",
         "EXAMPLE BEFORE:",
-        "  - Gmail: 6 connections (port 993) → Counted as YouTube",
-        "  - Google Photos: 5 connections (port 443) → Counted as YouTube",
-        "  - YouTube video: 0 connections → Total: 11 'YouTube' connections",
+        "  - Gmail: 6 connections (port 993) \u2192 Counted as YouTube",
+        "  - Google Photos: 5 connections (port 443) \u2192 Counted as YouTube",
+        "  - YouTube video: 0 connections \u2192 Total: 11 'YouTube' connections",
         "EXAMPLE AFTER:",
-        "  - Gmail: 6 connections (port 993) → NOT counted ✅",
-        "  - Google Photos: 5 connections (port 443) → Counted as YouTube (correct)",
-        "  - YouTube video: 0 connections → Total: 5 YouTube connections ✅",
+        "  - Gmail: 6 connections (port 993) \u2192 NOT counted \u2705",
+        "  - Google Photos: 5 connections (port 443) \u2192 Counted as YouTube (correct)",
+        "  - YouTube video: 0 connections \u2192 Total: 5 YouTube connections \u2705",
         "NOTE: Port 443 still counted because it's used for actual YouTube streaming",
         "NOTE: Can't distinguish Photos vs YouTube on port 443 (same protocol)",
         "NOTE: This is best-effort filtering given Google's shared infrastructure"
@@ -289,21 +297,21 @@
       }
     },
     {
-      "version": "1.4.56",
+      "version": "1.5.6",
       "date": "2026-01-23",
       "type": "performance_optimization",
       "changes": [
-        "⚡ PERFORMANCE: Reduced bot detection warmup period from 75 min to 25 min",
+        "\u26a1 PERFORMANCE: Reduced bot detection warmup period from 75 min to 25 min",
         "PROBLEM: Sleeping users showing phantom usage (3-4 minutes accumulated)",
         "SCENARIO: Mukesh sleeping, iPhone has 28 stable background connections",
         "SCENARIO: Status shows '3.45 minutes used' despite no active usage",
-        "ROOT CAUSE: Bot detection required 15 samples × 5-min cron = 75 min warmup",
+        "ROOT CAUSE: Bot detection required 15 samples \u00d7 5-min cron = 75 min warmup",
         "ROOT CAUSE: During warmup, stable background traffic counted as usage",
         "IMPACT: Every device accumulated 3-5 min phantom usage before bot detection",
         "IMPACT: User confusion - 'I was sleeping but shows usage'",
         "FIX: Reduced BOT_MIN_SAMPLES from 15 to 5 samples",
         "FIX: Reduced BOT_CONSECUTIVE_THRESHOLD from 15 to 5 samples",
-        "NEW BEHAVIOR: Bot detection starts after 5 samples × 5 min = 25 minutes",
+        "NEW BEHAVIOR: Bot detection starts after 5 samples \u00d7 5 min = 25 minutes",
         "BENEFIT: Phantom usage reduced from ~5 minutes to ~2 minutes maximum",
         "BENEFIT: Faster bot detection for all devices (TVs, phones, tablets)",
         "SAFETY: 5 consecutive stable samples still strong evidence of bot traffic",
@@ -336,11 +344,11 @@
       }
     },
     {
-      "version": "1.4.55",
+      "version": "1.5.6",
       "date": "2026-01-21",
       "type": "critical_bugfix",
       "changes": [
-        "🛡️ CRITICAL SAFETY CHECK: Prevent stale bot flags from blocking usage",
+        "\ud83d\udee1\ufe0f CRITICAL SAFETY CHECK: Prevent stale bot flags from blocking usage",
         "PROBLEM: Found bot_score=15 with only 1 sample in connection_history",
         "SCENARIO: User's iPhone (192.168.1.110) flagged as bot 1+ hour ago",
         "SCENARIO: User started using YouTube Music NOW but usage not tracked",
@@ -350,7 +358,7 @@
         "IMPACT: Legitimate usage blocked indefinitely until manual reset",
         "IMPACT: User confusion - 'I'm using YouTube but shows 0 minutes'",
         "FIX: Added safety check at start of bot detection loop",
-        "LOGIC: If is_bot=true BUT connection_history < 15 samples → RESET",
+        "LOGIC: If is_bot=true BUT connection_history < 15 samples \u2192 RESET",
         "WHY: Bot detection requires 15 consecutive samples to flag",
         "WHY: If flagged with <15 samples, state is corrupted/stale",
         "SAFETY CHECK TRIGGERS WHEN:",
@@ -402,40 +410,40 @@
       }
     },
     {
-      "version": "1.4.54",
+      "version": "1.5.6",
       "date": "2026-01-21",
       "type": "critical_enhancement",
       "changes": [
-        "🤖 CRITICAL ENHANCEMENT: Smarter variance-based bot detection",
+        "\ud83e\udd16 CRITICAL ENHANCEMENT: Smarter variance-based bot detection",
         "PROBLEM: Smart TVs (Google TV, etc.) maintain 6-10 idle connections",
-        "PROBLEM: Old logic only detected bots with ≤5 connections",
+        "PROBLEM: Old logic only detected bots with \u22645 connections",
         "RESULT: Google TV idle traffic was counted as real usage (8 connections)",
-        "ROOT CAUSE: Single threshold (≤5 connections) too strict for modern devices",
+        "ROOT CAUSE: Single threshold (\u22645 connections) too strict for modern devices",
         "FIX: Implemented dual-method bot detection using variance analysis",
-        "METHOD 1 (Original): Low activity (≤5 conn) + consistent (variance ≤2.0)",
+        "METHOD 1 (Original): Low activity (\u22645 conn) + consistent (variance \u22642.0)",
         "  - Example: iPhone background refresh with 2-3 stable connections",
-        "METHOD 2 (NEW): Ultra-stable (variance ≤1.5) at ANY connection level",
+        "METHOD 2 (NEW): Ultra-stable (variance \u22641.5) at ANY connection level",
         "  - Example: Google TV with 8 connections that never vary (telemetry)",
         "WHY VARIANCE WORKS:",
         "  - Real usage: Connections constantly change (variance 4-7)",
         "  - Bot traffic: Connections stay same/similar (variance <1.5)",
         "REAL USAGE PATTERNS (NOT detected as bot):",
-        "  - Active iPhone: 18 connections, variance ~5.2 ✅",
-        "  - Active MacBook: 18 connections, variance ~4.8 ✅",
-        "  - YouTube playing: 27 connections, variance ~6.3 ✅",
+        "  - Active iPhone: 18 connections, variance ~5.2 \u2705",
+        "  - Active MacBook: 18 connections, variance ~4.8 \u2705",
+        "  - YouTube playing: 27 connections, variance ~6.3 \u2705",
         "BOT TRAFFIC PATTERNS (NOW detected):",
-        "  - Google TV idle: 8 connections, variance ~1.5 ✅ DETECTED!",
-        "  - iPhone idle: 3 connections, variance ~0.8 ✅ DETECTED!",
-        "  - Smart TV telemetry: 6-10 stable connections ✅ DETECTED!",
+        "  - Google TV idle: 8 connections, variance ~1.5 \u2705 DETECTED!",
+        "  - iPhone idle: 3 connections, variance ~0.8 \u2705 DETECTED!",
+        "  - Smart TV telemetry: 6-10 stable connections \u2705 DETECTED!",
         "ENHANCED LOGGING:",
         "  - Added detection_method: 'low_activity' or 'ultra_stable'",
         "  - Added detection_reason: Human-readable explanation",
         "  - Added std_dev: Standard deviation for analysis",
         "DEVICE COMPATIBILITY:",
-        "  - ✅ iPhone/iPad: No impact on legitimate usage detection",
-        "  - ✅ MacBook: No impact on legitimate usage detection",
-        "  - ✅ Hisense TV: No impact when actively playing content",
-        "  - ✅ Google TV: NOW detects idle background connections!",
+        "  - \u2705 iPhone/iPad: No impact on legitimate usage detection",
+        "  - \u2705 MacBook: No impact on legitimate usage detection",
+        "  - \u2705 Hisense TV: No impact when actively playing content",
+        "  - \u2705 Google TV: NOW detects idle background connections!",
         "SCENARIO - Google TV (Basement-TV 192.168.1.95):",
         "  - Before: 8 connections, not detected, usage incremented",
         "  - After: 8 connections, variance 1.5, DETECTED as bot!",
@@ -463,18 +471,18 @@
       }
     },
     {
-      "version": "1.4.53",
+      "version": "1.5.6",
       "date": "2026-01-20",
       "type": "critical_architecture",
       "changes": [
-        "🏗️ CRITICAL ARCHITECTURE FIX: Reordered firewall rules with proper priorities",
+        "\ud83c\udfd7\ufe0f CRITICAL ARCHITECTURE FIX: Reordered firewall rules with proper priorities",
         "PROBLEM: General profile time limits could be bypassed via monitor table",
         "PROBLEM: Monitor pass rules evaluated BEFORE general block rules",
         "ROOT CAUSE: Rules inserted before general block instead of after",
         "ROOT CAUSE: No priority system - relied only on insertion order",
-        "SCENARIO: User exceeds 4hr limit → in parental_control_blocked table",
+        "SCENARIO: User exceeds 4hr limit \u2192 in parental_control_blocked table",
         "SCENARIO: User also in parental_control_monitor table (for tracking)",
-        "SCENARIO: Monitor pass rule matched FIRST → bypassed general block!",
+        "SCENARIO: Monitor pass rule matched FIRST \u2192 bypassed general block!",
         "FIX: Reorganized rule insertion to create proper priority order",
         "FIX: General block now comes FIRST (after DNS/pfSense access)",
         "FIX: Service blocks come SECOND (after general block)",
@@ -501,7 +509,7 @@
         "Deploy IMMEDIATELY - profile time limits can be bypassed",
         "After deployment, filter_configure() will reorder all rules",
         "Verify rule order: pfctl -sr | grep -E 'parental|USER_RULE'",
-        "Correct order: General block → Service blocks → Service monitors",
+        "Correct order: General block \u2192 Service blocks \u2192 Service monitors",
         "Test both profile limits AND service limits to verify"
       ],
       "verification": {
@@ -518,11 +526,11 @@
       }
     },
     {
-      "version": "1.4.52",
+      "version": "1.5.6",
       "date": "2026-01-20",
       "type": "critical_bugfix",
       "changes": [
-        "🚨 CRITICAL: Remove blocked IPs from monitor table to prevent bypass",
+        "\ud83d\udea8 CRITICAL: Remove blocked IPs from monitor table to prevent bypass",
         "PROBLEM: YouTube still playing despite blocking (1.7 GB of data passed)",
         "ROOT CAUSE: Blocked IPs were in BOTH monitor AND block tables",
         "ROOT CAUSE: pfSense 'first match wins' - pass rule evaluated before block rule",
@@ -551,11 +559,11 @@
       ]
     },
     {
-      "version": "1.4.51",
+      "version": "1.5.6",
       "date": "2026-01-20",
       "type": "critical_bugfix",
       "changes": [
-        "🚨 CRITICAL: Kill connections continuously, not just once",
+        "\ud83d\udea8 CRITICAL: Kill connections continuously, not just once",
         "PROBLEM: YouTube still playing despite blocking (smart TVs reconnect within seconds)",
         "PROBLEM: v1.4.50 only killed connections when ADDING IP to table",
         "ROOT CAUSE: pfctl -t table -T add <existing_ip> does nothing (returns success but no-op)",
@@ -583,7 +591,7 @@
       ]
     },
     {
-      "version": "1.4.50",
+      "version": "1.5.6",
       "date": "2026-01-20",
       "type": "enhancement",
       "changes": [
@@ -612,20 +620,20 @@
       ]
     },
     {
-      "version": "1.4.49",
+      "version": "1.5.6",
       "date": "2026-01-20",
       "type": "critical_bugfix",
       "changes": [
-        "🚨 CRITICAL BUGFIX #1: Profile assignment to devices was never being stored in state",
+        "\ud83d\udea8 CRITICAL BUGFIX #1: Profile assignment to devices was never being stored in state",
         "PROBLEM #1: All devices showing 'profile: null' despite being configured in profiles",
         "ROOT CAUSE #1: pc_update_device_usage() extracted profile_name but never saved to state",
         "FIX #1: Added $state['devices_by_ip'][$ip]['profile'] = $profile_name",
-        "🚨 CRITICAL BUGFIX #2: Service limit checking never found any devices to block",
+        "\ud83d\udea8 CRITICAL BUGFIX #2: Service limit checking never found any devices to block",
         "PROBLEM #2: Service blocking completely non-functional (pc_blocked_youtube alias always empty)",
         "PROBLEM #2: YouTube usage tracked (170 min) but limit (120 min) not enforced",
         "ROOT CAUSE #2: pc_check_profile_service_limits() checked $profile['devices'] but config uses $profile['row']",
         "FIX #2: Check both 'devices' and 'row' fields (pfSense rowhelpers use 'row')",
-        "🚨 CRITICAL BUGFIX #3: Service name case mismatch prevented usage lookups",
+        "\ud83d\udea8 CRITICAL BUGFIX #3: Service name case mismatch prevented usage lookups",
         "PROBLEM #3: Service limits stored as 'YouTube' (capitalized) but lookup used 'youtube' (lowercase)",
         "ROOT CAUSE #3: str_replace() + strtolower() created 'youtube', but state has 'YouTube'",
         "FIX #3: Use ucfirst() to capitalize service name to match state storage",
@@ -652,7 +660,7 @@
       ]
     },
     {
-      "version": "1.4.48",
+      "version": "1.5.6",
       "date": "2026-01-20",
       "type": "bugfix",
       "changes": [
@@ -679,7 +687,7 @@
       ]
     },
     {
-      "version": "1.4.47",
+      "version": "1.5.6",
       "date": "2026-01-20",
       "type": "critical_bugfix",
       "changes": [
@@ -708,7 +716,7 @@
       ]
     },
     {
-      "version": "1.4.46",
+      "version": "1.5.6",
       "date": "2026-01-20",
       "type": "critical_bugfix",
       "changes": [
@@ -793,7 +801,7 @@
       ]
     },
     {
-      "version": "1.4.45",
+      "version": "1.5.6",
       "date": "2026-01-18",
       "type": "feature",
       "changes": [
@@ -873,7 +881,7 @@
       ]
     },
     {
-      "version": "1.4.44",
+      "version": "1.5.6",
       "date": "2026-01-18",
       "type": "critical_bugfix",
       "changes": [
@@ -884,15 +892,15 @@
         "SCENARIO BEFORE (WRONG):",
         "  1. User watches YouTube for 60 minutes (usage_today = 60)",
         "  2. User leaves, bot detected after 15 minutes",
-        "  3. pc_reset_service_tracking() called → usage_today = 0 ❌",
+        "  3. pc_reset_service_tracking() called \u2192 usage_today = 0 \u274c",
         "  4. User's 60 minutes of legitimate usage LOST!",
-        "  5. User returns and watches 30 more minutes → usage_today = 30 (should be 90!)",
+        "  5. User returns and watches 30 more minutes \u2192 usage_today = 30 (should be 90!)",
         "SCENARIO AFTER (CORRECT):",
         "  1. User watches YouTube for 60 minutes (usage_today = 60)",
         "  2. User leaves, bot detected after 15 minutes",
-        "  3. pc_reset_service_tracking() called → usage_today = 60 ✓ (preserved)",
+        "  3. pc_reset_service_tracking() called \u2192 usage_today = 60 \u2713 (preserved)",
         "  4. Bot traffic continues: usage_today stays at 60 (tracking paused)",
-        "  5. User returns and watches 30 more minutes → usage_today = 90 ✓",
+        "  5. User returns and watches 30 more minutes \u2192 usage_today = 90 \u2713",
         "ROOT CAUSE: Function was resetting usage counters to 0",
         "SOLUTION: Changed to only clear connection_history and set is_bot flag",
         "SOLUTION: usage_today and usage_week are now PRESERVED",
@@ -905,12 +913,12 @@
         "  - pc_reset_service_tracking(): Removed lines resetting usage_today and usage_week to 0",
         "  - pc_reset_service_tracking(): Renamed in comments from 'reset' to 'pause'",
         "  - pc_detect_bot_behavior(): Updated comments to clarify usage preservation",
-        "  - pc_detect_bot_behavior(): Updated log messages 'resets' → 'paused'",
+        "  - pc_detect_bot_behavior(): Updated log messages 'resets' \u2192 'paused'",
         "  - Updated function documentation to explain preservation behavior",
         "LOGS UPDATED:",
-        "  - 'Reset service tracking' → 'Paused service tracking (bot)'",
-        "  - 'usage.new: 0' → 'usage.preserved: 60'",
-        "  - 'service_tracking_reset' → 'service_tracking_paused'",
+        "  - 'Reset service tracking' \u2192 'Paused service tracking (bot)'",
+        "  - 'usage.new: 0' \u2192 'usage.preserved: 60'",
+        "  - 'service_tracking_reset' \u2192 'service_tracking_paused'",
         "  - Added note: 'Usage counters preserved, tracking paused until human activity resumes'",
         "USER BENEFIT: Legitimate usage is never lost due to bot detection",
         "USER BENEFIT: Bot detection only affects bot traffic, not human usage",
@@ -932,7 +940,7 @@
       ]
     },
     {
-      "version": "1.4.43",
+      "version": "1.5.6",
       "date": "2026-01-18",
       "type": "feature",
       "changes": [
@@ -1001,7 +1009,7 @@
       ]
     },
     {
-      "version": "1.4.42",
+      "version": "1.5.6",
       "date": "2026-01-13",
       "type": "critical_bugfix",
       "changes": [
@@ -1011,7 +1019,7 @@
         "PROBLEM: Error persisted: 'Rule skipped: Unresolvable destination alias PC_Service_TikTok'",
         "ROOT CAUSE: pc_create_service_monitoring_rules() was calling write_config()!",
         "ROOT CAUSE: Delete flow had HIDDEN dual-write issue again",
-        "ROOT CAUSE: v1.4.41 delete flow: write_config() → pc_create_service_monitoring_rules() calls write_config() → filter_configure()",
+        "ROOT CAUSE: v1.4.41 delete flow: write_config() \u2192 pc_create_service_monitoring_rules() calls write_config() \u2192 filter_configure()",
         "ROOT CAUSE: First write saved deletion, second write added rules back WITH old aliases!",
         "INVESTIGATION: Traced pc_create_service_monitoring_rules() - line 3125 had write_config() call",
         "INVESTIGATION: Function removes old rules and creates new ones, then writes immediately",
@@ -1020,14 +1028,14 @@
         "DISCOVERY: TRUE atomic deletion requires ALL changes in memory before ANY write",
         "SOLUTION: Modified pc_create_service_monitoring_rules() to NOT write config",
         "SOLUTION: Function now only prepares rules in memory, lets caller write",
-        "SOLUTION: Delete flow now: prepare service + aliases + rules → ONE write → reload",
-        "SOLUTION: Create flow now: write service → prepare rules → write rules → reload",
+        "SOLUTION: Delete flow now: prepare service + aliases + rules \u2192 ONE write \u2192 reload",
+        "SOLUTION: Create flow now: write service \u2192 prepare rules \u2192 write rules \u2192 reload",
         "TRUE ATOMIC DELETION WORKFLOW (v1.4.42):",
         "  1. remove_service_by_name() - removes service (memory)",
         "  2. pc_delete_service_alias() - removes aliases (memory)",
         "  3. config_set_path() - updates service config (memory)",
         "  4. pc_create_service_monitoring_rules() - rebuilds rules WITHOUT deleted service (memory)",
-        "  5. safe_write_config() - ONE WRITE saves all 4 changes atomically ✓",
+        "  5. safe_write_config() - ONE WRITE saves all 4 changes atomically \u2713",
         "  6. filter_configure() - reload sees clean config with no orphaned rules",
         "CREATE SERVICE WORKFLOW (adjusted for compatibility):",
         "  1. Prepare service data (memory)",
@@ -1053,10 +1061,10 @@
         "USER BENEFIT: Clean firewall state maintained",
         "VERIFICATION STEPS:",
         "  1. Delete a service (e.g., TikTok)",
-        "  2. Check Firewall → Aliases - aliases gone ✓",
-        "  3. Check Firewall → Rules → Floating - rules gone ✓",
-        "  4. Check Status → System Logs - no errors ✓",
-        "  5. Wait 5 minutes - still no errors ✓",
+        "  2. Check Firewall \u2192 Aliases - aliases gone \u2713",
+        "  3. Check Firewall \u2192 Rules \u2192 Floating - rules gone \u2713",
+        "  4. Check Status \u2192 System Logs - no errors \u2713",
+        "  5. Wait 5 minutes - still no errors \u2713",
         "FILES MODIFIED:",
         "  - parental_control.inc: Disabled write_config() in pc_create_service_monitoring_rules()",
         "  - parental_control_services.php: Reordered delete flow for true atomic operation",
@@ -1075,15 +1083,15 @@
       ]
     },
     {
-      "version": "1.4.41",
+      "version": "1.5.6",
       "date": "2026-01-13",
       "type": "critical_bugfix",
       "changes": [
         "CRITICAL BUGFIX: Fixed aliases and rules persisting after service deletion",
         "USER REPORT: 'Despite deleting TikTok, rules and aliases still present in firewall'",
         "PROBLEM: pc_delete_service_alias() modified config in memory but never wrote to disk",
-        "PROBLEM: Aliases remained in Firewall → Aliases after deletion",
-        "PROBLEM: Rules remained in Firewall → Rules → Floating after deletion",
+        "PROBLEM: Aliases remained in Firewall \u2192 Aliases after deletion",
+        "PROBLEM: Rules remained in Firewall \u2192 Rules \u2192 Floating after deletion",
         "ROOT CAUSE: Function called config_set_path() but no write_config() call",
         "ROOT CAUSE: Changes only existed in $config variable, not persisted to config.xml",
         "ROOT CAUSE: Filter reload read old config.xml which still had aliases and rules",
@@ -1097,7 +1105,7 @@
         "  1. remove_service_by_name() - removes service from array (in memory)",
         "  2. pc_delete_service_alias() - removes aliases from config (in memory)",
         "  3. config_set_path() - updates service config (in memory)",
-        "  4. safe_write_config() - ONE write saves everything (to disk) ✓",
+        "  4. safe_write_config() - ONE write saves everything (to disk) \u2713",
         "  5. pc_create_service_monitoring_rules() - rebuilds rules without deleted service",
         "  6. filter_configure() - reloads firewall with clean config",
         "TECHNICAL CHANGES:",
@@ -1117,8 +1125,8 @@
         "USER BENEFIT: Rules actually removed from firewall",
         "USER BENEFIT: Clean firewall state after deletion",
         "VERIFICATION:",
-        "  - Check Firewall → Aliases - deleted aliases gone",
-        "  - Check Firewall → Rules → Floating - deleted rules gone",
+        "  - Check Firewall \u2192 Aliases - deleted aliases gone",
+        "  - Check Firewall \u2192 Rules \u2192 Floating - deleted rules gone",
         "  - No 'Unresolvable alias' errors in logs",
         "FILES MODIFIED:",
         "  - parental_control.inc: Removed write_config() from pc_delete_service_alias()",
@@ -1133,11 +1141,11 @@
         "CRITICAL FIX - Service deletion now actually works",
         "Aliases and rules properly removed from pfSense",
         "Single atomic config write prevents corruption",
-        "Verify by checking Firewall → Aliases and Rules after deletion"
+        "Verify by checking Firewall \u2192 Aliases and Rules after deletion"
       ]
     },
     {
-      "version": "1.4.40",
+      "version": "1.5.6",
       "date": "2026-01-13",
       "type": "ui_enhancement",
       "changes": [
@@ -1172,7 +1180,7 @@
       ]
     },
     {
-      "version": "1.4.39",
+      "version": "1.5.6",
       "date": "2026-01-13",
       "type": "critical_bugfix",
       "changes": [
@@ -1197,12 +1205,12 @@
         "  - Logs deletion events for audit trail",
         "  - Returns true if successful, false if no aliases found",
         "DELETE SERVICE WORKFLOW (FIXED):",
-        "  1. Check if service in session → remove from session",
-        "  2. Check if service in config → remove from config",
-        "  3. Call pc_delete_service_alias() → removes both aliases",
-        "  4. Call pc_create_service_monitoring_rules() → rebuilds rules without deleted service",
-        "  5. Call filter_configure() → reloads firewall with updated rules",
-        "  6. Write config → saves all changes",
+        "  1. Check if service in session \u2192 remove from session",
+        "  2. Check if service in config \u2192 remove from config",
+        "  3. Call pc_delete_service_alias() \u2192 removes both aliases",
+        "  4. Call pc_create_service_monitoring_rules() \u2192 rebuilds rules without deleted service",
+        "  5. Call filter_configure() \u2192 reloads firewall with updated rules",
+        "  6. Write config \u2192 saves all changes",
         "TECHNICAL DETAILS:",
         "  - pc_delete_service_alias located after pc_init_service_block_tables (line 2452)",
         "  - Removes aliases by name matching in config/aliases/alias array",
@@ -1229,7 +1237,7 @@
       ]
     },
     {
-      "version": "1.4.38",
+      "version": "1.5.6",
       "date": "2026-01-13",
       "type": "ui_enhancement",
       "changes": [
@@ -1250,7 +1258,7 @@
         "  - Color-coded borders: Red for blocked table, Blue for monitor table",
         "FORMATTING IMPROVEMENTS:",
         "  - Multi-line layout for Alias/Table, Floating Rules, CLI Command",
-        "  - Gray sub-text for navigation paths (Firewall → ...)",
+        "  - Gray sub-text for navigation paths (Firewall \u2192 ...)",
         "  - Highlighted CLI commands with white background and border",
         "  - Consistent 12px font across all informational sections",
         "  - Proper line-height (1.8) for better readability",
@@ -1277,7 +1285,7 @@
       ]
     },
     {
-      "version": "1.4.37",
+      "version": "1.5.6",
       "date": "2026-01-13",
       "type": "ui_enhancement",
       "changes": [
@@ -1332,7 +1340,7 @@
       ]
     },
     {
-      "version": "1.4.36",
+      "version": "1.5.6",
       "date": "2026-01-13",
       "type": "critical_bugfix",
       "changes": [
@@ -1394,7 +1402,7 @@
       ]
     },
     {
-      "version": "1.4.35",
+      "version": "1.5.6",
       "date": "2026-01-13",
       "type": "enhancement",
       "changes": [
@@ -1424,7 +1432,7 @@
       ]
     },
     {
-      "version": "1.4.34",
+      "version": "1.5.6",
       "date": "2026-01-13",
       "type": "critical_bugfix",
       "changes": [
@@ -1443,11 +1451,11 @@
         "SOLUTION: Only write to config.xml when clicking Monitor & Block (verified workflow)",
         "SOLUTION: Enhanced delete_service to handle both session and config services",
         "WORKFLOW FIX:",
-        "  1. User adds new service → Stored in session only",
-        "  2. Page reloads → Session service restored and displayed",
-        "  3. User adds URLs → Session URLs merged with service",
-        "  4. User clicks Verify → URLs verified, statuses stored in session",
-        "  5. User clicks Monitor & Block → Service AND URLs saved to config permanently",
+        "  1. User adds new service \u2192 Stored in session only",
+        "  2. Page reloads \u2192 Session service restored and displayed",
+        "  3. User adds URLs \u2192 Session URLs merged with service",
+        "  4. User clicks Verify \u2192 URLs verified, statuses stored in session",
+        "  5. User clicks Monitor & Block \u2192 Service AND URLs saved to config permanently",
         "TECHNICAL CHANGES:",
         "  - add_service: Now stores new services in $_SESSION['pc_new_services'] array",
         "  - add_service: Explicitly calls session_write_close() to persist session to disk",
@@ -1483,7 +1491,7 @@
       ]
     },
     {
-      "version": "1.4.33",
+      "version": "1.5.6",
       "date": "2026-01-13",
       "type": "bugfix",
       "changes": [
@@ -1505,11 +1513,11 @@
         "  - Session restoration: Now restores both URLs and their verification statuses",
         "  - Session merge: Uses array_values() to reindex arrays and prevent gaps",
         "WORKFLOW FIX:",
-        "  1. User adds URL → Saved to session immediately → Session persisted to disk",
-        "  2. Page reloads → Session URLs restored and merged with config URLs",
-        "  3. User clicks Verify → Verification statuses stored in session",
-        "  4. Page reloads → Both URLs and statuses restored from session",
-        "  5. User clicks Monitor&Block → URLs moved from session to permanent config",
+        "  1. User adds URL \u2192 Saved to session immediately \u2192 Session persisted to disk",
+        "  2. Page reloads \u2192 Session URLs restored and merged with config URLs",
+        "  3. User clicks Verify \u2192 Verification statuses stored in session",
+        "  4. Page reloads \u2192 Both URLs and statuses restored from session",
+        "  5. User clicks Monitor&Block \u2192 URLs moved from session to permanent config",
         "USER BENEFIT: URLs now persist throughout the entire workflow",
         "USER BENEFIT: No more confusion about disappearing URLs after verification",
         "USER BENEFIT: Verification statuses preserved across page reloads",
@@ -1528,7 +1536,7 @@
       ]
     },
     {
-      "version": "1.4.32",
+      "version": "1.5.6",
       "date": "2026-01-11",
       "type": "ui_enhancement",
       "changes": [
@@ -1545,8 +1553,8 @@
         "SOLUTION: Updated INSTALL.sh to register BOTH menu entries automatically",
         "SOLUTION: Updated UNINSTALL.sh to remove menu entries on uninstall",
         "SOLUTION: Menu entries now created with correct capitalization (Services, Status)",
-        "LOCATION: Status → Parental Control (new menu item)",
-        "LOCATION: Services → Keekar's Parental Control (existing, improved)",
+        "LOCATION: Status \u2192 Parental Control (new menu item)",
+        "LOCATION: Services \u2192 Keekar's Parental Control (existing, improved)",
         "CONSISTENCY: Follows pfSense convention (Dashboard, DHCP Leases, Services, etc.)",
         "USER BENEFIT: Faster access to monitoring page from standard location",
         "USER BENEFIT: Improved discoverability for new users",
@@ -1561,15 +1569,15 @@
         "  - Menu registration now automatic during installation",
         "  - Menu cleanup automatic during uninstallation",
         "  - No manual configuration required",
-        "RESULT: 'Parental Control' now appears in Status dropdown menu ✓",
-        "RESULT: Status page accessible from both Services and Status menus ✓",
-        "RESULT: Clean install and uninstall with proper menu management ✓",
+        "RESULT: 'Parental Control' now appears in Status dropdown menu \u2713",
+        "RESULT: Status page accessible from both Services and Status menus \u2713",
+        "RESULT: Clean install and uninstall with proper menu management \u2713",
         "Files Modified:",
         "  - parental_control.xml (added Status menu entry with correct case)",
         "  - info.xml (added Status menu entry with correct case)",
         "  - INSTALL.sh (automatic menu registration for both entries)",
         "  - UNINSTALL.sh (automatic menu cleanup)",
-        "  - VERSION (1.4.31 → 1.4.32)",
+        "  - VERSION (1.4.31 \u2192 1.4.32)",
         "  - BUILD_INFO.json (version bump and detailed changelog)"
       ],
       "impact": "low",
@@ -1582,7 +1590,7 @@
       ]
     },
     {
-      "version": "1.4.31",
+      "version": "1.5.6",
       "date": "2026-01-11",
       "type": "feature_enhancement",
       "changes": [
@@ -1675,13 +1683,13 @@
       ]
     },
     {
-      "version": "1.4.30",
+      "version": "1.5.6",
       "date": "2026-01-09",
       "type": "performance_optimization",
       "changes": [
         "MAJOR PERFORMANCE OPTIMIZATION: Comprehensive caching strategy across all pages",
         "PHASE 1 - Blocked/Captive Pages:",
-        "  - Consolidated config reads: Load once at top, reuse throughout (7 calls → 1)",
+        "  - Consolidated config reads: Load once at top, reuse throughout (7 calls \u2192 1)",
         "  - Replaced exec('arp -an') with cached pc_get_dhcp_leases() lookup (30s TTL)",
         "  - Direct profile iteration instead of pc_get_devices() (eliminates redundant config reload)",
         "  - Expected impact: 30-40% faster page load, critical for high-frequency access",
@@ -1717,7 +1725,7 @@
       ]
     },
     {
-      "version": "1.4.29",
+      "version": "1.5.6",
       "date": "2026-01-09",
       "type": "ui_improvement",
       "changes": [
@@ -1737,24 +1745,24 @@
       ]
     },
     {
-      "version": "1.4.28",
+      "version": "1.5.6",
       "date": "2026-01-08",
       "type": "performance_optimization",
       "changes": [
         "CRITICAL PERFORMANCE FIX: Optimized cron job to prevent watchdog timeouts",
         "PROBLEM: Cron job taking 60-65 seconds, exceeding 55-second watchdog timeout",
         "PROBLEM: Incomplete usage tracking due to forced exits",
-        "ROOT CAUSE: Redundant pfctl calls - N devices × M services = 20+ calls per run",
+        "ROOT CAUSE: Redundant pfctl calls - N devices \u00d7 M services = 20+ calls per run",
         "ROOT CAUSE: State table queried separately for each device (5+ pfctl -ss calls)",
         "BOTTLENECK ANALYSIS:",
         "  - pc_get_service_connections() called per device with fresh pfctl queries",
-        "  - 5 devices × 3 services = 15 service table reads per run",
-        "  - 5 devices × 1 state query = 5 state table queries per run",
+        "  - 5 devices \u00d7 3 services = 15 service table reads per run",
+        "  - 5 devices \u00d7 1 state query = 5 state table queries per run",
         "  - Total: 20 pfctl calls + regex parsing 500+ state lines",
         "OPTIMIZATION STRATEGY:",
         "  1. Global Service IP Cache - Load all service IPs once, reuse for all devices",
         "  2. Global State Table Cache - Query pfctl -ss once, filter in memory",
-        "  3. Increased Watchdog Timeout - 55s → 90s for busy firewalls",
+        "  3. Increased Watchdog Timeout - 55s \u2192 90s for busy firewalls",
         "  4. Performance Telemetry - Track execution time for monitoring",
         "NEW FUNCTIONS:",
         "  - pc_load_all_service_ips() - Loads all PC_Service_ aliases once",
@@ -1764,12 +1772,12 @@
         "  - pc_update_device_usage() - Now accepts and passes cache parameters",
         "  - parental_control_cron_job() - Loads caches once, passes to all calls",
         "PERFORMANCE IMPROVEMENTS:",
-        "  - Before: 5 devices × 3 services = 15 pfctl -t calls + 5 pfctl -ss calls = 20 total",
-        "  - After: 3 services × 1 pfctl -t call + 1 pfctl -ss call = 4 total",
-        "  - Reduction: 80% fewer pfctl calls (20 → 4 calls)",
-        "  - Expected: 60% faster execution (60-65s → 15-25s)",
+        "  - Before: 5 devices \u00d7 3 services = 15 pfctl -t calls + 5 pfctl -ss calls = 20 total",
+        "  - After: 3 services \u00d7 1 pfctl -t call + 1 pfctl -ss call = 4 total",
+        "  - Reduction: 80% fewer pfctl calls (20 \u2192 4 calls)",
+        "  - Expected: 60% faster execution (60-65s \u2192 15-25s)",
         "WATCHDOG CHANGES:",
-        "  - Timeout: 55 seconds → 90 seconds",
+        "  - Timeout: 55 seconds \u2192 90 seconds",
         "  - Rationale: Provides headroom for busy firewalls with large state tables",
         "  - Log message updated to reflect new 90s timeout",
         "TELEMETRY ENHANCEMENTS:",
@@ -1812,7 +1820,7 @@
       }
     },
     {
-      "version": "1.4.27",
+      "version": "1.5.6",
       "date": "2026-01-08",
       "type": "security_enhancement",
       "changes": [
@@ -1852,13 +1860,13 @@
       }
     },
     {
-      "version": "1.4.26",
+      "version": "1.5.6",
       "date": "2026-01-08",
       "type": "critical_bugfix",
       "changes": [
         "CRITICAL BUGFIX: Fixed admin check function using wrong pfSense API",
         "BUG: pc_is_admin_user() was using $userindex directly, expecting user data array",
-        "BUG: $userindex only contains username→integer mappings, not user data",
+        "BUG: $userindex only contains username\u2192integer mappings, not user data",
         "BUG: Function tried to access $userindex[$username]['groupname'] on integer, causing failure",
         "USER REPORT: 'I am mkesharw member of admins group but Administrator Controls panel not visible'",
         "ROOT CAUSE: Incorrect understanding of pfSense user data structure",
@@ -1881,11 +1889,11 @@
         "  - Fixed UID comparison (string '0' instead of integer 0)",
         "BENEFIT: Proper integration with pfSense authentication system",
         "BENEFIT: Works correctly with both local and external auth (LDAP/RADIUS)",
-        "VERSION: 1.4.25 → 1.4.26"
+        "VERSION: 1.4.25 \u2192 1.4.26"
       ]
     },
     {
-      "version": "1.4.25",
+      "version": "1.5.6",
       "date": "2026-01-08",
       "type": "feature",
       "changes": [
@@ -1897,22 +1905,22 @@
         "SECURITY: JavaScript confirmation dialog before reset",
         "SECURITY: All manual resets logged with admin username",
         "FUNCTIONALITY:",
-        "  • Manual reset sets all profile and device usage counters to zero",
-        "  • Updates last_reset timestamp to current time (not midnight)",
-        "  • Automatic midnight reset continues to run as scheduled",
-        "  • Reset uses proven logic from diagnostic script (same as pc_reset_daily_counters)",
+        "  \u2022 Manual reset sets all profile and device usage counters to zero",
+        "  \u2022 Updates last_reset timestamp to current time (not midnight)",
+        "  \u2022 Automatic midnight reset continues to run as scheduled",
+        "  \u2022 Reset uses proven logic from diagnostic script (same as pc_reset_daily_counters)",
         "UI/UX:",
-        "  • Orange warning panel with 'Administrator Controls' heading",
-        "  • Clear success/error feedback messages",
-        "  • Confirmation prompt: 'Are you sure you want to reset all usage counters?'",
-        "  • Explanatory note about what the reset does",
-        "  • Button uses warning color to indicate caution needed",
+        "  \u2022 Orange warning panel with 'Administrator Controls' heading",
+        "  \u2022 Clear success/error feedback messages",
+        "  \u2022 Confirmation prompt: 'Are you sure you want to reset all usage counters?'",
+        "  \u2022 Explanatory note about what the reset does",
+        "  \u2022 Button uses warning color to indicate caution needed",
         "USE CASES:",
-        "  ✓ Reset usage when starting a new monitoring period",
-        "  ✓ Clear incorrect/inflated usage data",
-        "  ✓ Test parental control functionality from zero",
-        "  ✓ Override automatic midnight reset timing",
-        "  ✓ Provide extra time as a reward",
+        "  \u2713 Reset usage when starting a new monitoring period",
+        "  \u2713 Clear incorrect/inflated usage data",
+        "  \u2713 Test parental control functionality from zero",
+        "  \u2713 Override automatic midnight reset timing",
+        "  \u2713 Provide extra time as a reward",
         "IMPLEMENTATION:",
         "  - Added pc_is_admin_user() to parental_control.inc (lines 295-353)",
         "  - Added POST handler to parental_control_status.php (lines 18-36)",
@@ -1921,23 +1929,23 @@
         "  - Uses pc_reset_daily_counters() for consistent reset logic",
         "  - Uses pc_save_state() to persist changes",
         "LOGGING:",
-        "  • Success: 'Manual usage reset performed by admin: username'",
-        "  • Failure: 'Access denied' or 'CSRF validation failed'",
+        "  \u2022 Success: 'Manual usage reset performed by admin: username'",
+        "  \u2022 Failure: 'Access denied' or 'CSRF validation failed'",
         "ADMIN CHECK LOGIC:",
-        "  • Checks $_SESSION['Username'] for current user",
-        "  • Looks up user in global $userindex",
-        "  • Returns true if user has UID 0 (root)",
-        "  • Returns true if user is in 'admins' group",
-        "  • Handles both array and string groupname formats",
+        "  \u2022 Checks $_SESSION['Username'] for current user",
+        "  \u2022 Looks up user in global $userindex",
+        "  \u2022 Returns true if user has UID 0 (root)",
+        "  \u2022 Returns true if user is in 'admins' group",
+        "  \u2022 Handles both array and string groupname formats",
         "BENEFIT: Administrators can now reset usage on-demand without waiting for midnight",
         "BENEFIT: Provides flexibility for special situations (rewards, testing, corrections)",
         "BENEFIT: Maintains audit trail of manual resets",
         "BENEFIT: Secure - only accessible to trusted administrators",
-        "VERSION: 1.4.24 → 1.4.25"
+        "VERSION: 1.4.24 \u2192 1.4.25"
       ]
     },
     {
-      "version": "1.4.24",
+      "version": "1.5.6",
       "date": "2026-01-07",
       "type": "hotfix",
       "changes": [
@@ -1950,11 +1958,11 @@
         "BENEFIT: Usage tracking now accurate (5 minutes added per 5-minute interval)",
         "NOTE: This restores the original 5-minute interval from before v1.4.18 emergency hotfix",
         "IMPACT: Existing usage data may be inflated by 2x, will correct over time",
-        "VERSION: 1.4.23 → 1.4.24"
+        "VERSION: 1.4.23 \u2192 1.4.24"
       ]
     },
     {
-      "version": "1.4.23",
+      "version": "1.5.6",
       "date": "2026-01-07",
       "type": "critical_bugfix",
       "changes": [
@@ -1967,11 +1975,11 @@
         "VERIFIED: State file now populates with per-service usage data",
         "VERIFIED: Status page now displays YouTube, Discord, and Facebook usage",
         "FUNCTION MODIFIED: pc_get_service_connections() in parental_control.inc:4723-4758",
-        "VERSION: 1.4.22 → 1.4.23"
+        "VERSION: 1.4.22 \u2192 1.4.23"
       ]
     },
     {
-      "version": "1.4.22",
+      "version": "1.5.6",
       "date": "2026-01-07",
       "type": "major_feature",
       "changes": [
@@ -1982,55 +1990,55 @@
         "NEW: Displays active connections count per service",
         "NEW: Per-service usage resets daily at midnight",
         "IMPLEMENTATION:",
-        "  • Added pc_get_service_connections($device_ip) - Analyzes pfSense state table",
-        "  • Added pc_ip_matches_range($ip, $range) - CIDR range matching helper",
-        "  • Modified pc_update_device_usage() - Now tracks per-service connections",
-        "  • Modified pc_reset_daily_counters() - Resets per-service usage at midnight",
-        "  • Added Per-Service Usage Breakdown panel to status page",
+        "  \u2022 Added pc_get_service_connections($device_ip) - Analyzes pfSense state table",
+        "  \u2022 Added pc_ip_matches_range($ip, $range) - CIDR range matching helper",
+        "  \u2022 Modified pc_update_device_usage() - Now tracks per-service connections",
+        "  \u2022 Modified pc_reset_daily_counters() - Resets per-service usage at midnight",
+        "  \u2022 Added Per-Service Usage Breakdown panel to status page",
         "STATE FILE STRUCTURE:",
-        "  • devices_by_ip[$ip]['service_usage'][$service_name]['usage_today']",
-        "  • devices_by_ip[$ip]['service_usage'][$service_name]['usage_week']",
-        "  • devices_by_ip[$ip]['service_usage'][$service_name]['last_seen']",
-        "  • devices_by_ip[$ip]['service_usage'][$service_name]['connections']",
+        "  \u2022 devices_by_ip[$ip]['service_usage'][$service_name]['usage_today']",
+        "  \u2022 devices_by_ip[$ip]['service_usage'][$service_name]['usage_week']",
+        "  \u2022 devices_by_ip[$ip]['service_usage'][$service_name]['last_seen']",
+        "  \u2022 devices_by_ip[$ip]['service_usage'][$service_name]['connections']",
         "STATUS PAGE DISPLAY:",
-        "  • Profile, Device, Service columns",
-        "  • Time Today (highlighted in blue badge)",
-        "  • Time This Week",
-        "  • Last Seen timestamp",
-        "  • Active Connections (green badge if active)",
-        "  • Service icons (Facebook, YouTube, Discord, etc.)",
+        "  \u2022 Profile, Device, Service columns",
+        "  \u2022 Time Today (highlighted in blue badge)",
+        "  \u2022 Time This Week",
+        "  \u2022 Last Seen timestamp",
+        "  \u2022 Active Connections (green badge if active)",
+        "  \u2022 Service icons (Facebook, YouTube, Discord, etc.)",
         "TRACKING METHOD:",
-        "  • Analyzes TCP ESTABLISHED connections from pfctl state table",
-        "  • Matches destination IPs against service alias IP ranges",
-        "  • Supports CIDR range matching (e.g., 157.240.0.0/16)",
-        "  • Caches service IP lists for performance",
-        "  • Updates every cron interval (5-10 minutes)",
+        "  \u2022 Analyzes TCP ESTABLISHED connections from pfctl state table",
+        "  \u2022 Matches destination IPs against service alias IP ranges",
+        "  \u2022 Supports CIDR range matching (e.g., 157.240.0.0/16)",
+        "  \u2022 Caches service IP lists for performance",
+        "  \u2022 Updates every cron interval (5-10 minutes)",
         "PERFORMANCE:",
-        "  • Minimal overhead: Single pfctl -ss query per device",
-        "  • Filtered to specific device IP (fast)",
-        "  • Service IP cache prevents repeated alias queries",
-        "  • Limits to first 50 connections per device",
+        "  \u2022 Minimal overhead: Single pfctl -ss query per device",
+        "  \u2022 Filtered to specific device IP (fast)",
+        "  \u2022 Service IP cache prevents repeated alias queries",
+        "  \u2022 Limits to first 50 connections per device",
         "USER BENEFITS:",
-        "  ✓ See exactly how much time spent on each service",
-        "  ✓ Identify which services kids use most",
-        "  ✓ Better visibility into internet usage patterns",
-        "  ✓ Foundation for future per-service time limits",
-        "  ✓ Weekly trends visible",
+        "  \u2713 See exactly how much time spent on each service",
+        "  \u2713 Identify which services kids use most",
+        "  \u2713 Better visibility into internet usage patterns",
+        "  \u2713 Foundation for future per-service time limits",
+        "  \u2713 Weekly trends visible",
         "FUTURE ENHANCEMENTS:",
-        "  • Per-service time limits (e.g., 1 hour YouTube per day)",
-        "  • Service-specific schedules (e.g., no Facebook after 8pm)",
-        "  • Service usage graphs/charts",
-        "  • Weekly/monthly service usage reports",
-        "  • Parental alerts when service limits reached",
+        "  \u2022 Per-service time limits (e.g., 1 hour YouTube per day)",
+        "  \u2022 Service-specific schedules (e.g., no Facebook after 8pm)",
+        "  \u2022 Service usage graphs/charts",
+        "  \u2022 Weekly/monthly service usage reports",
+        "  \u2022 Parental alerts when service limits reached",
         "TESTING:",
-        "  • Created show_service_usage.php proof-of-concept script",
-        "  • Verified service connection tracking works",
-        "  • Confirmed accurate service identification",
-        "VERSION: 1.4.21 → 1.4.22"
+        "  \u2022 Created show_service_usage.php proof-of-concept script",
+        "  \u2022 Verified service connection tracking works",
+        "  \u2022 Confirmed accurate service identification",
+        "VERSION: 1.4.21 \u2192 1.4.22"
       ]
     },
     {
-      "version": "1.4.21",
+      "version": "1.5.6",
       "date": "2026-01-07",
       "type": "critical_bugfix",
       "changes": [
@@ -2041,14 +2049,14 @@
         "ROOT CAUSE: Backup pfctl rules hardcoded interface 'em1' instead of dynamically detecting LAN interface",
         "ROOT CAUSE: Some service rules created with 'LAN_Interfaces', others with 'lan' (which becomes igc0)",
         "EVIDENCE:",
-        "  - Discord Monitor: on LAN_Interfaces → 0 packets (broken)",
-        "  - Facebook Monitor: on igc0 → 146 packets, 41KB (working)",
-        "  - YouTube Monitor: on igc0 → 234,602 packets, 165MB (working)",
+        "  - Discord Monitor: on LAN_Interfaces \u2192 0 packets (broken)",
+        "  - Facebook Monitor: on igc0 \u2192 146 packets, 41KB (working)",
+        "  - YouTube Monitor: on igc0 \u2192 234,602 packets, 165MB (working)",
         "DIAGNOSTIC FINDINGS:",
-        "  ✓ Service aliases loaded correctly (92-10,519 IPs each)",
-        "  ✓ Monitor alias populated by cron job (11 devices)",
-        "  ✓ Block rules working (showing packet counts)",
-        "  ✗ Monitor rules inconsistent interfaces",
+        "  \u2713 Service aliases loaded correctly (92-10,519 IPs each)",
+        "  \u2713 Monitor alias populated by cron job (11 devices)",
+        "  \u2713 Block rules working (showing packet counts)",
+        "  \u2717 Monitor rules inconsistent interfaces",
         "SOLUTION: Dynamically detect LAN interface using get_real_interface('lan')",
         "SOLUTION: Updated backup pfctl rules to use detected interface instead of hardcoded 'em1'",
         "SOLUTION: Added interface detection at line 2901: $lan_if = get_real_interface('lan')",
@@ -2068,11 +2076,11 @@
         "  - All service monitor rules now guaranteed to use same interface",
         "BENEFIT: Service monitoring works consistently across all services",
         "BENEFIT: No more interface mismatches causing blank state",
-        "VERSION: 1.4.20 → 1.4.21"
+        "VERSION: 1.4.20 \u2192 1.4.21"
       ]
     },
     {
-      "version": "1.4.20",
+      "version": "1.5.6",
       "date": "2026-01-07",
       "type": "critical_bugfix",
       "changes": [
@@ -2084,12 +2092,12 @@
         "ROOT CAUSE: Device names and profiles are stored in profile configuration (config.xml), not state file",
         "ROOT CAUSE: Blocked devices section works because it looks at $state['blocked_devices'][$mac]",
         "COMPARISON:",
-        "  - Blocked devices ✓: Looks at blocked_devices array with full device details",
-        "  - Monitored devices ✗: Only looked at devices array with limited info",
-        "  - Main status table ✓: Iterates through profile configuration to get device names",
+        "  - Blocked devices \u2713: Looks at blocked_devices array with full device details",
+        "  - Monitored devices \u2717: Only looked at devices array with limited info",
+        "  - Main status table \u2713: Iterates through profile configuration to get device names",
         "SOLUTION: Updated monitored devices lookup to search through ALL profiles",
         "SOLUTION: Matches the logic used in 'Profile & Device Status' section (lines 140-250)",
-        "SOLUTION: Search profiles → find device by MAC → extract device_name and profile_name",
+        "SOLUTION: Search profiles \u2192 find device by MAC \u2192 extract device_name and profile_name",
         "SOLUTION: Added fallback to state file if device not found in profiles",
         "RESULT: Monitored devices now show correct device names (e.g., 'Basement-TV', 'HISENSETV')",
         "RESULT: Monitored devices now show correct profile names (e.g., 'GunGun', 'Anita', 'Vishesh')",
@@ -2103,11 +2111,11 @@
         "  - Uses break 2 to exit nested loops when device found",
         "BENEFIT: Complete visibility and accurate device identification",
         "TESTING: Verified with production data showing 10 monitored devices with correct names",
-        "VERSION: 1.4.19 → 1.4.20"
+        "VERSION: 1.4.19 \u2192 1.4.20"
       ]
     },
     {
-      "version": "1.4.19",
+      "version": "1.5.6",
       "date": "2026-01-07",
       "type": "feature",
       "changes": [
@@ -2122,26 +2130,26 @@
         "PURPOSE: Provides visibility into which devices are actively being tracked for usage",
         "CLI COMMAND: Shows command to manually check monitored devices (pfctl -t parental_control_monitor -T show)",
         "USER BENEFIT: Complete visibility into both blocked and monitored device states",
-        "VERSION: 1.4.18 → 1.4.19"
+        "VERSION: 1.4.18 \u2192 1.4.19"
       ]
     },
     {
-      "version": "1.4.18",
+      "version": "1.5.6",
       "date": "2026-01-06",
       "type": "emergency_hotfix",
       "severity": "CRITICAL",
       "changes": [
-        "🚨 EMERGENCY HOTFIX: Kernel Panic Prevention - Test firewall had to be completely rebuilt",
+        "\ud83d\udea8 EMERGENCY HOTFIX: Kernel Panic Prevention - Test firewall had to be completely rebuilt",
         "SEVERITY: CRITICAL - v1.4.11-1.4.17 contain bugs that can cause system-level crashes",
         "DO NOT DEPLOY v1.4.11-1.4.17 to ANY system - immediate upgrade to v1.4.18 required",
         "",
-        "═══════════════════════════════════════════════════",
+        "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550",
         "ROOT CAUSES OF KERNEL PANIC:",
-        "═══════════════════════════════════════════════════",
+        "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550",
         "1. FILE DESCRIPTOR LEAKS in PID locking mechanism",
         "   - PID lock opens file, stores in global variable",
         "   - If exception thrown, file handle NEVER closed",
-        "   - Accumulates over time → resource exhaustion → kernel panic",
+        "   - Accumulates over time \u2192 resource exhaustion \u2192 kernel panic",
         "",
         "2. NO STALE LOCK CLEANUP - deadlock scenario",
         "   - If process crashes while holding lock, lock NEVER released",
@@ -2163,12 +2171,12 @@
         "   - No timeout protection",
         "   - Could trigger FreeBSD kernel bugs",
         "",
-        "═══════════════════════════════════════════════════",
+        "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550",
         "EMERGENCY FIXES IMPLEMENTED:",
-        "═══════════════════════════════════════════════════",
+        "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550",
         "",
         "FIX #1: Stale Lock Detection & Cleanup",
-        "────────────────────────────────────────────",
+        "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
         "- Detects locks older than 10 minutes (stuck processes)",
         "- Forces cleanup of stale locks automatically",
         "- Kills stuck processes before taking lock",
@@ -2176,7 +2184,7 @@
         "CODE: pc_acquire_pid_lock() - Added stale lock detection",
         "",
         "FIX #2: Guaranteed File Descriptor Cleanup",
-        "────────────────────────────────────────────",
+        "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
         "- Added try/finally blocks around ALL file operations",
         "- Ensures fclose() ALWAYS called, even on exception",
         "- Track acquisition state with $pc_pid_lock_acquired flag",
@@ -2185,7 +2193,7 @@
         "CODE: pc_release_pid_lock() - Only release if actually acquired",
         "",
         "FIX #3: Execution Timeout & Watchdog",
-        "────────────────────────────────────────────",
+        "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
         "- Set max_execution_time to 60 seconds",
         "- Added watchdog timer (55 second warning)",
         "- Auto-kill if execution exceeds limit",
@@ -2194,7 +2202,7 @@
         "CODE: parental_control_cron_job() - Added register_tick_function watchdog",
         "",
         "FIX #4: Reduced Cron Frequency",
-        "────────────────────────────────────────────",
+        "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
         "- Changed from */5 to */10 (10 minutes)",
         "- Reduces daily executions from 288 to 144 (50% reduction)",
         "- Much lower risk of overlap",
@@ -2204,7 +2212,7 @@
         "CODE: PC_CRON_INTERVAL_SECONDS - Changed from 300 to 600",
         "",
         "FIX #5: Safe pfctl Wrapper",
-        "────────────────────────────────────────────",
+        "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
         "- NEW FUNCTION: pc_safe_pfctl() - Wrapper for all pfctl operations",
         "- Validates command syntax (prevents injection)",
         "- Adds timeout (5 seconds default, max 30)",
@@ -2213,9 +2221,9 @@
         "- Detects timeout conditions (exit code 124)",
         "CODE: pc_safe_pfctl() - New safety wrapper function",
         "",
-        "═══════════════════════════════════════════════════",
+        "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550",
         "FILES MODIFIED:",
-        "═══════════════════════════════════════════════════",
+        "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550",
         "- parental_control.inc:",
         "  * pc_acquire_pid_lock() - 70 lines rewritten",
         "  * pc_release_pid_lock() - Added acquisition state check",
@@ -2224,13 +2232,13 @@
         "  * PC_CRON_MINUTE - Changed to '*/10'",
         "  * PC_CRON_INTERVAL_SECONDS - Changed to 600",
         "",
-        "═══════════════════════════════════════════════════",
+        "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550",
         "DEPLOYMENT NOTES:",
-        "═══════════════════════════════════════════════════",
-        "⚠️  CRITICAL: Do NOT deploy v1.4.11-1.4.17 to ANY system",
-        "✅ Deploy v1.4.18 to production (192.168.1.1) FIRST",
-        "✅ Monitor for 24 hours before deploying to test",
-        "✅ Rollback plan: v1.4.9 is safe fallback",
+        "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550",
+        "\u26a0\ufe0f  CRITICAL: Do NOT deploy v1.4.11-1.4.17 to ANY system",
+        "\u2705 Deploy v1.4.18 to production (192.168.1.1) FIRST",
+        "\u2705 Monitor for 24 hours before deploying to test",
+        "\u2705 Rollback plan: v1.4.9 is safe fallback",
         "",
         "WHAT CAUSED THE PANIC:",
         "- Test firewall (192.168.1.251) entered kernel panic (db> prompt)",
@@ -2241,11 +2249,11 @@
         "- BEFORE: System unstable, risk of kernel panic",
         "- AFTER: All critical bugs fixed, system stable",
         "",
-        "VERSION: 1.4.17 → 1.4.18 (EMERGENCY RELEASE)"
+        "VERSION: 1.4.17 \u2192 1.4.18 (EMERGENCY RELEASE)"
       ]
     },
     {
-      "version": "1.4.17",
+      "version": "1.5.6",
       "date": "2026-01-06",
       "type": "critical_fix",
       "changes": [
@@ -2284,11 +2292,11 @@
         "BENEFIT 4: Aligns with user expectations",
         "TESTING: Verified on production system (192.168.1.1)",
         "TESTING: Manual fix applied successfully, now permanent in code",
-        "VERSION: 1.4.16 → 1.4.17"
+        "VERSION: 1.4.16 \u2192 1.4.17"
       ]
     },
     {
-      "version": "1.4.16",
+      "version": "1.5.6",
       "date": "2026-01-06",
       "type": "hotfix",
       "changes": [
@@ -2297,7 +2305,7 @@
         "ERROR: IPv6 rule trying to use IPv4-only aliases and addresses",
         "SPECIFIC ERROR: pass log quick on { em1 } inet6 proto tcp from $parental_control_blocked to 192.168.1.251",
         "ROOT CAUSE: inet46 tells pfSense to create BOTH IPv4 and IPv6 rules",
-        "ROOT CAUSE: parental_control_blocked alias contains only IPv4 addresses (MACs → IPv4)",
+        "ROOT CAUSE: parental_control_blocked alias contains only IPv4 addresses (MACs \u2192 IPv4)",
         "ROOT CAUSE: Destination 192.168.1.251 is IPv4 address",
         "ROOT CAUSE: IPv6 rule with IPv4-only data = 'no valid combination'",
         "REALITY CHECK: User's network has NO IPv6 configured (grep inet6 /etc/pf.conf = 0)",
@@ -2322,11 +2330,11 @@
         "  - DNS Allow rule",
         "  - pfSense Access Allow rule",
         "MAINTAINED: direction 'any' and log 'yes' settings from v1.4.15",
-        "VERSION: 1.4.15 → 1.4.16"
+        "VERSION: 1.4.15 \u2192 1.4.16"
       ]
     },
     {
-      "version": "1.4.15",
+      "version": "1.5.6",
       "date": "2026-01-06",
       "type": "enhancement",
       "changes": [
@@ -2340,40 +2348,40 @@
         "  - direction: 'any' in some, missing in others",
         "  - log: 'yes' in some, missing in others",
         "AFTER: Consistent configuration in ALL 8 rule locations:",
-        "  ✓ ipprotocol: 'inet46' (IPv4 + IPv6)",
-        "  ✓ direction: 'any' (both directions, where applicable)",
-        "  ✓ log: 'yes' (enabled for all rules)",
+        "  \u2713 ipprotocol: 'inet46' (IPv4 + IPv6)",
+        "  \u2713 direction: 'any' (both directions, where applicable)",
+        "  \u2713 log: 'yes' (enabled for all rules)",
         "RULES UPDATED (8 locations):",
         "  1. Block Page Access rule (pc_create_block_rule)",
         "     - Added: ipprotocol 'inet46', log 'yes'",
         "  2. Device Block rule (pc_create_block_rule)",
         "     - Added: ipprotocol 'inet46', log 'yes'",
         "  3. Generic Blocking rule (pc_generate_blocking_rule)",
-        "     - Changed: ipprotocol 'inet' → 'inet46'",
+        "     - Changed: ipprotocol 'inet' \u2192 'inet46'",
         "  4. Dynamic Blocking rule (pc_create_blocking_rule)",
-        "     - Changed: ipprotocol 'inet' → 'inet46'",
+        "     - Changed: ipprotocol 'inet' \u2192 'inet46'",
         "     - Added: log 'yes'",
         "  5. Service Block rules (pc_create_service_monitoring_rules)",
-        "     - Changed: ipprotocol 'inet' → 'inet46'",
+        "     - Changed: ipprotocol 'inet' \u2192 'inet46'",
         "  6. Service Monitor rules (pc_create_service_monitoring_rules)",
-        "     - Changed: ipprotocol 'inet' → 'inet46'",
+        "     - Changed: ipprotocol 'inet' \u2192 'inet46'",
         "  7. DNS Allow rule (pc_create_allow_rules)",
-        "     - Changed: ipprotocol 'inet' → 'inet46'",
+        "     - Changed: ipprotocol 'inet' \u2192 'inet46'",
         "     - Added: log 'yes'",
         "  8. pfSense Access Allow rule (pc_create_allow_rules)",
-        "     - Changed: ipprotocol 'inet' → 'inet46'",
+        "     - Changed: ipprotocol 'inet' \u2192 'inet46'",
         "     - Added: log 'yes'",
         "BENEFITS:",
-        "  ✓ Consistent rule configuration across entire package",
-        "  ✓ IPv6-ready - supports dual-stack networks",
-        "  ✓ Complete visibility - all rules logged for debugging",
-        "  ✓ Simplified direction handling (no confusion about in/out)",
+        "  \u2713 Consistent rule configuration across entire package",
+        "  \u2713 IPv6-ready - supports dual-stack networks",
+        "  \u2713 Complete visibility - all rules logged for debugging",
+        "  \u2713 Simplified direction handling (no confusion about in/out)",
         "RESULT: Professional, maintainable firewall rule configuration",
-        "VERSION: 1.4.14 → 1.4.15"
+        "VERSION: 1.4.14 \u2192 1.4.15"
       ]
     },
     {
-      "version": "1.4.14",
+      "version": "1.5.6",
       "date": "2026-01-06",
       "type": "bugfix",
       "changes": [
@@ -2390,22 +2398,22 @@
         "  - 'Parental Control -' (dash) - matches system rules",
         "TECHNICAL: Modified strpos() check to handle both description formats",
         "VERIFICATION: All 9 rules now show direction 'any':",
-        "  ✓ Allow pfSense Access for Blocked Devices",
-        "  ✓ Allow DNS for Blocked Devices",
-        "  ✓ Discord Service Block",
-        "  ✓ Discord Service Monitor",
-        "  ✓ YouTube Service Block",
-        "  ✓ YouTube Service Monitor",
-        "  ✓ Facebook Service Block",
-        "  ✓ Facebook Service Monitor",
-        "  ✓ Dynamic Blocking",
+        "  \u2713 Allow pfSense Access for Blocked Devices",
+        "  \u2713 Allow DNS for Blocked Devices",
+        "  \u2713 Discord Service Block",
+        "  \u2713 Discord Service Monitor",
+        "  \u2713 YouTube Service Block",
+        "  \u2713 YouTube Service Monitor",
+        "  \u2713 Facebook Service Block",
+        "  \u2713 Facebook Service Monitor",
+        "  \u2713 Dynamic Blocking",
         "RESULT: Rule regeneration now works correctly",
         "RESULT: All rules use direction 'any' as intended",
-        "VERSION: 1.4.13 → 1.4.14"
+        "VERSION: 1.4.13 \u2192 1.4.14"
       ]
     },
     {
-      "version": "1.4.13",
+      "version": "1.5.6",
       "date": "2026-01-06",
       "type": "enhancement",
       "changes": [
@@ -2420,20 +2428,20 @@
         "BENEFIT 3: Consistent - all rules behave the same way",
         "BENEFIT 4: Foolproof - eliminates direction-related bugs",
         "RULES UPDATED:",
-        "  - Dynamic Blocking rule: 'in' → 'any'",
-        "  - Service Block rules: 'in' → 'any'",
-        "  - Service Monitor rules: 'in' → 'any'",
-        "  - DNS Allow rule: (no direction) → 'any'",
-        "  - pfSense Access rule: (no direction) → 'any'",
+        "  - Dynamic Blocking rule: 'in' \u2192 'any'",
+        "  - Service Block rules: 'in' \u2192 'any'",
+        "  - Service Monitor rules: 'in' \u2192 'any'",
+        "  - DNS Allow rule: (no direction) \u2192 'any'",
+        "  - pfSense Access rule: (no direction) \u2192 'any'",
         "RESULT: All floating rules now use direction 'any'",
         "RESULT: No more confusion about inbound vs outbound",
         "RESULT: Rules work correctly regardless of traffic direction",
         "TECHNICAL: Updated 5 rule creation functions in parental_control.inc",
-        "VERSION: 1.4.12 → 1.4.13"
+        "VERSION: 1.4.12 \u2192 1.4.13"
       ]
     },
     {
-      "version": "1.4.12",
+      "version": "1.5.6",
       "date": "2026-01-06",
       "type": "hotfix",
       "changes": [
@@ -2457,11 +2465,11 @@
         "  - Simplified content detection (5 lines instead of 10)",
         "APOLOGY: v1.4.11 warning was based on incorrect assumptions",
         "LESSON: pfSense is smarter than assumed - resolves domains automatically",
-        "VERSION: 1.4.11 → 1.4.12"
+        "VERSION: 1.4.11 \u2192 1.4.12"
       ]
     },
     {
-      "version": "1.4.11",
+      "version": "1.5.6",
       "date": "2026-01-06",
       "type": "critical_fix",
       "changes": [
@@ -2502,15 +2510,15 @@
         "  - parental_control_services.php: Enhanced pc_verify_service_urls()",
         "  - parental_control_services.php: Updated verify_fetch to show warnings",
         "USER IMPACT:",
-        "  ✓ Online Services page now works as expected",
-        "  ✓ URLs don't disappear when clicking Verify",
-        "  ✓ Clear feedback about domain vs IP lists",
-        "  ✓ Prevents wasted time adding incompatible URLs",
-        "VERSION: 1.4.10 → 1.4.11"
+        "  \u2713 Online Services page now works as expected",
+        "  \u2713 URLs don't disappear when clicking Verify",
+        "  \u2713 Clear feedback about domain vs IP lists",
+        "  \u2713 Prevents wasted time adding incompatible URLs",
+        "VERSION: 1.4.10 \u2192 1.4.11"
       ]
     },
     {
-      "version": "1.4.10",
+      "version": "1.5.6",
       "date": "2026-01-05",
       "type": "hotfix",
       "changes": [
@@ -2521,18 +2529,18 @@
         "ROOT CAUSE: pfSense state table shows each connection TWICE (with and without NAT)",
         "ROOT CAUSE: NAT format: '203.191.182.168:12345 (192.168.1.96:54321) -> 8.8.8.8:443'",
         "ROOT CAUSE: Old regex extracted WAN IP (203.191.182.168) instead of device IP (192.168.1.96)",
-        "ROOT CAUSE: IP comparison failed: WAN IP !== device IP → connection not counted",
+        "ROOT CAUSE: IP comparison failed: WAN IP !== device IP \u2192 connection not counted",
         "SOLUTION: Updated regex to extract IP from inside parentheses for NAT entries",
         "SOLUTION: Added deduplication using unique connection keys (src:port->dst:port)",
         "SOLUTION: Each connection now counted only once despite appearing twice in state table",
         "RESULT: Usage tracking now works correctly",
         "RESULT: HISENSE TV with 100+ active connections now properly tracked",
         "UPDATED: parental_control.inc - Fixed pc_has_active_connections() parsing",
-        "VERSION: 1.4.9 → 1.4.10"
+        "VERSION: 1.4.9 \u2192 1.4.10"
       ]
     },
     {
-      "version": "1.4.9",
+      "version": "1.5.6",
       "date": "2026-01-05",
       "type": "hotfix",
       "changes": [
@@ -2548,11 +2556,11 @@
         "RESULT: Auto-update now works correctly",
         "RESULT: No more 'directory does not exist' errors",
         "UPDATED: auto_update_parental_control.sh - corrected directory name",
-        "VERSION: 1.4.8 → 1.4.9"
+        "VERSION: 1.4.8 \u2192 1.4.9"
       ]
     },
     {
-      "version": "1.4.8",
+      "version": "1.5.6",
       "date": "2026-01-05",
       "type": "hotfix",
       "changes": [
@@ -2575,11 +2583,11 @@
         "RESULT: Status badge works correctly: Online (green) / Offline (gray)",
         "ARCHITECTURE: Separated concerns - network presence vs internet usage",
         "UPDATED: pc_is_device_online() - ARP table is now primary check",
-        "VERSION: 1.4.7 → 1.4.8"
+        "VERSION: 1.4.7 \u2192 1.4.8"
       ]
     },
     {
-      "version": "1.4.7",
+      "version": "1.5.6",
       "date": "2026-01-05",
       "type": "critical_fix",
       "changes": [
@@ -2588,14 +2596,14 @@
         "BUG: Basement TV showing 40 mins usage despite no internet communication",
         "BUG: Device at 192.168.1.30 showing 35 mins usage with zero internet activity",
         "ROOT CAUSE: pc_has_active_connections() counted ALL ESTABLISHED connections",
-        "ROOT CAUSE: Local traffic (192.168.x.x → 192.168.x.x) counted as 'internet usage'",
+        "ROOT CAUSE: Local traffic (192.168.x.x \u2192 192.168.x.x) counted as 'internet usage'",
         "ROOT CAUSE: Broadcast/multicast (255.255.255.255, 224.x.x.x) counted as usage",
         "ROOT CAUSE: Link-local traffic (169.254.x.x) counted as usage",
         "EXAMPLES OF INCORRECTLY COUNTED TRAFFIC:",
-        "  - Device talking to local NAS/printer (192.168.1.100 → 192.168.1.50)",
-        "  - DHCP broadcasts (→ 255.255.255.255)",
-        "  - mDNS/SSDP discovery (→ 224.0.0.251)",
-        "  - Local Plex streaming (→ 192.168.1.100)",
+        "  - Device talking to local NAS/printer (192.168.1.100 \u2192 192.168.1.50)",
+        "  - DHCP broadcasts (\u2192 255.255.255.255)",
+        "  - mDNS/SSDP discovery (\u2192 224.0.0.251)",
+        "  - Local Plex streaming (\u2192 192.168.1.100)",
         "SOLUTION: Added pc_is_private_ip() function to detect RFC 1918 private IPs",
         "SOLUTION: Parse state table lines to extract source and destination IPs",
         "SOLUTION: Only count connections where destination is a PUBLIC IP",
@@ -2610,11 +2618,11 @@
         "UPDATED: pc_has_active_connections() - Parses state table and filters by destination",
         "UPDATED: Logging messages now say 'internet connections' instead of 'connections'",
         "UPDATED: State file now stores 'internet_connections' count separately",
-        "VERSION: 1.4.6 → 1.4.7"
+        "VERSION: 1.4.6 \u2192 1.4.7"
       ]
     },
     {
-      "version": "1.4.6",
+      "version": "1.5.6",
       "date": "2026-01-05",
       "type": "critical_bugfix",
       "changes": [
@@ -2636,11 +2644,11 @@
         "ENHANCEMENT: Auto-update shows version numbers in log messages",
         "Updated pc_save_state() with disk space and file verification",
         "Updated auto_update_parental_control.sh with syslog logging",
-        "VERSION: 1.4.5 → 1.4.6"
+        "VERSION: 1.4.5 \u2192 1.4.6"
       ]
     },
     {
-      "version": "0.4.0",
+      "version": "1.5.6",
       "date": "2026-01-03",
       "type": "critical_bugfix",
       "changes": [
@@ -2659,11 +2667,11 @@
         "RESULT: Better error diagnostics for troubleshooting",
         "Updated pc_save_state() with copy+unlink fallback mechanism",
         "Added detailed diagnostic information in error messages",
-        "VERSION: 1.4.4 → 1.4.5"
+        "VERSION: 1.4.4 \u2192 1.4.5"
       ]
     },
     {
-      "version": "0.3.9",
+      "version": "1.5.6",
       "date": "2026-01-02",
       "type": "critical_bugfix",
       "changes": [
@@ -2672,7 +2680,7 @@
         "ROOT CAUSE: String comparison '20:30' < '7:30' returned TRUE (wrong!)",
         "ROOT CAUSE: Function incorrectly treated overnight range as normal range",
         "ROOT CAUSE: Used AND logic instead of OR logic for overnight spans",
-        "SOLUTION: Added time normalization with zero-padding (7:30 → 07:30)",
+        "SOLUTION: Added time normalization with zero-padding (7:30 \u2192 07:30)",
         "SOLUTION: String comparison now works correctly: '20:30' < '07:30' = FALSE",
         "RESULT: Overnight schedules now properly detected and enforced",
         "RESULT: Status page shows 'BLOCKING NOW' when schedule is active",
@@ -2685,11 +2693,11 @@
         "RESULT: State file writes succeed, cron job runs without errors",
         "Updated pc_is_time_in_range() with time normalization",
         "Updated pc_save_state() with directory checks and better error messages",
-        "VERSION: 1.4.3 → 1.4.4"
+        "VERSION: 1.4.3 \u2192 1.4.4"
       ]
     },
     {
-      "version": "0.3.8",
+      "version": "1.5.6",
       "date": "2026-01-02",
       "type": "critical_bugfix",
       "changes": [
@@ -2709,7 +2717,7 @@
       ]
     },
     {
-      "version": "0.3.7",
+      "version": "1.5.6",
       "date": "2026-01-01",
       "type": "enhancement",
       "changes": [
@@ -2720,7 +2728,7 @@
       ]
     },
     {
-      "version": "0.3.6",
+      "version": "1.5.6",
       "date": "2026-01-01",
       "type": "enhancement",
       "changes": [
@@ -2732,7 +2740,7 @@
       ]
     },
     {
-      "version": "0.3.5",
+      "version": "1.5.6",
       "date": "2026-01-01",
       "type": "enhancement",
       "changes": [
@@ -2755,7 +2763,7 @@
       ]
     },
     {
-      "version": "0.3.4",
+      "version": "1.5.6",
       "date": "2026-01-01",
       "type": "bugfix",
       "changes": [
@@ -2782,7 +2790,7 @@
       ]
     },
     {
-      "version": "0.3.3",
+      "version": "1.5.6",
       "date": "2025-12-27",
       "type": "feature",
       "changes": [
@@ -2803,7 +2811,7 @@
       ]
     },
     {
-      "version": "0.3.2",
+      "version": "1.5.6",
       "date": "2025-12-27",
       "type": "bugfix",
       "changes": [
@@ -2816,7 +2824,7 @@
       ]
     },
     {
-      "version": "0.3.1",
+      "version": "1.5.6",
       "date": "2025-12-26",
       "type": "hotfix",
       "changes": [
@@ -2828,7 +2836,7 @@
       ]
     },
     {
-      "version": "0.3.0",
+      "version": "1.5.6",
       "date": "2025-12-26",
       "type": "feature",
       "changes": [
@@ -2850,7 +2858,7 @@
       ]
     },
     {
-      "version": "0.2.9",
+      "version": "1.5.6",
       "date": "2025-12-26",
       "type": "update",
       "changes": [
@@ -2862,7 +2870,7 @@
       ]
     },
     {
-      "version": "0.2.8",
+      "version": "1.5.6",
       "date": "2025-12-26",
       "type": "update",
       "changes": [
@@ -2870,7 +2878,7 @@
       ]
     },
     {
-      "version": "0.2.8",
+      "version": "1.5.6",
       "date": "2025-12-26",
       "type": "update",
       "changes": [
@@ -2878,7 +2886,7 @@
       ]
     },
     {
-      "version": "0.2.8",
+      "version": "1.5.6",
       "date": "2025-12-26",
       "type": "update",
       "changes": [
@@ -2886,7 +2894,7 @@
       ]
     },
     {
-      "version": "0.2.8",
+      "version": "1.5.6",
       "date": "2025-12-26",
       "type": "update",
       "changes": [
@@ -2894,7 +2902,7 @@
       ]
     },
     {
-      "version": "0.2.8",
+      "version": "1.5.6",
       "date": "2025-12-26",
       "type": "bugfix",
       "changes": [
@@ -2905,7 +2913,7 @@
       ]
     },
     {
-      "version": "0.2.8",
+      "version": "1.5.6",
       "date": "2025-12-26",
       "type": "critical",
       "changes": [
@@ -2924,7 +2932,7 @@
       ]
     },
     {
-      "version": "0.2.8",
+      "version": "1.5.6",
       "date": "2025-12-26",
       "type": "hotfix",
       "changes": [
@@ -2940,7 +2948,7 @@
       ]
     },
     {
-      "version": "0.2.8",
+      "version": "1.5.6",
       "date": "2025-12-26",
       "type": "major",
       "changes": [
@@ -2965,7 +2973,7 @@
       ]
     },
     {
-      "version": "0.2.8",
+      "version": "1.5.6",
       "date": "2025-12-26",
       "type": "hotfix",
       "changes": [
@@ -2981,7 +2989,7 @@
       ]
     },
     {
-      "version": "0.2.8",
+      "version": "1.5.6",
       "date": "2025-12-25",
       "type": "major",
       "changes": [
@@ -3004,7 +3012,7 @@
       ]
     },
     {
-      "version": "0.2.8",
+      "version": "1.5.6",
       "date": "2025-12-25",
       "type": "minor",
       "changes": [
@@ -3024,7 +3032,7 @@
       ]
     },
     {
-      "version": "0.2.8",
+      "version": "1.5.6",
       "date": "2025-12-24",
       "changes": [
         "Version sync across all files",
@@ -3032,7 +3040,7 @@
       ]
     },
     {
-      "version": "0.2.8",
+      "version": "1.5.6",
       "date": "2025-12-24",
       "changes": [
         "Backend parsing of device_selector dropdown",

@@ -259,20 +259,26 @@ if (isset($_POST['save_device']) && $_POST['save_device']) {
 		}
 		$profile_id = intval($_POST['profile_id']);
 		
+		// Normalize MAC for validation (trim and lowercase; accept colons or hyphens)
+		$mac_input = trim($_POST['mac_address'] ?? '');
+		if (strpos($mac_input, '-') !== false) {
+			$mac_input = str_replace('-', ':', $mac_input);
+		}
+
 		// Validation
 		if (empty($_POST['device_name'])) {
 			$input_errors[] = "Device name is required.";
 		}
-		if (empty($_POST['mac_address'])) {
+		if (empty($mac_input)) {
 			$input_errors[] = "MAC address is required.";
-		} elseif (!preg_match('/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/', $_POST['mac_address'])) {
-			$input_errors[] = "Invalid MAC address format. Use format: XX:XX:XX:XX:XX:XX";
+		} elseif (!preg_match('/^([0-9A-Fa-f]{2}:){5}([0-9A-Fa-f]{2})$/', $mac_input)) {
+			$input_errors[] = "Invalid MAC address format. Use format: XX:XX:XX:XX:XX:XX (colons or hyphens, any case).";
 		}
-		
+
 		if (empty($input_errors)) {
 		$device = array(
 			'device_name' => trim($_POST['device_name']),
-			'mac_address' => strtolower(trim($_POST['mac_address'])),
+			'mac_address' => strtolower($mac_input),
 			'ip_address' => trim($_POST['ip_address']),
 			'hostname' => trim($_POST['hostname'])
 		);
@@ -280,58 +286,75 @@ if (isset($_POST['save_device']) && $_POST['save_device']) {
 		$source_profile_id = isset($_POST['source_profile_id']) && is_numeric($_POST['source_profile_id']) ? intval($_POST['source_profile_id']) : null;
 		$is_reassign = ($source_profile_id !== null && isset($_POST['device_id']) && is_numeric($_POST['device_id']) && (int)$source_profile_id !== (int)$profile_id);
 		
-		if (!isset($profiles[$profile_id]['row'])) {
-			$profiles[$profile_id]['row'] = [];
+		// Use integer indices (pfSense config can have string keys "0","1" from XML)
+		$source_idx = (int)$source_profile_id;
+		$target_idx = (int)$profile_id;
+		
+		if (!isset($profiles[$target_idx]['row'])) {
+			$profiles[$target_idx]['row'] = [];
 		}
 		
 		if ($is_reassign) {
 			// Reassign: remove from source by MAC (robust vs string/int array keys), then add to target
 			$mac_normalized = pc_normalize_mac($device['mac_address']);
 			$removed = false;
-			if (isset($profiles[$source_profile_id]['row']) && is_array($profiles[$source_profile_id]['row'])) {
-				foreach ($profiles[$source_profile_id]['row'] as $idx => $row_device) {
+			$existing_device = null;
+			if (isset($profiles[$source_idx]['row']) && is_array($profiles[$source_idx]['row'])) {
+				foreach ($profiles[$source_idx]['row'] as $idx => $row_device) {
 					$row_mac = isset($row_device['mac_address']) ? pc_normalize_mac($row_device['mac_address']) : '';
 					if ($row_mac !== '' && $row_mac === $mac_normalized) {
-						unset($profiles[$source_profile_id]['row'][$idx]);
+						$existing_device = $row_device;
+						unset($profiles[$source_idx]['row'][$idx]);
 						$removed = true;
 						break;
 					}
 				}
 				if ($removed) {
-					$profiles[$source_profile_id]['row'] = array_values($profiles[$source_profile_id]['row']);
+					$profiles[$source_idx]['row'] = array_values($profiles[$source_idx]['row']);
 				}
 			}
-			$profiles[$profile_id]['row'][] = $device;
+			// Preserve optional fields (manually_managed, auto_discovered, enable) when moving
+			if (is_array($existing_device)) {
+				foreach (array('manually_managed', 'auto_discovered', 'enable') as $key) {
+					if (array_key_exists($key, $existing_device) && !array_key_exists($key, $device)) {
+						$device[$key] = $existing_device[$key];
+					}
+				}
+			}
+			$profiles[$target_idx]['row'][] = $device;
 			$action = "Reassigned";
 		} elseif (isset($_POST['device_id']) && is_numeric($_POST['device_id'])) {
 			// Edit existing device (same profile)
 			$device_id = intval($_POST['device_id']);
-			
 			// NEW v1.4.67: Check if device is being moved FROM Default profile
-			$old_device = isset($profiles[$profile_id]['row'][$device_id]) ? $profiles[$profile_id]['row'][$device_id] : null;
+			$old_device = isset($profiles[$target_idx]['row'][$device_id]) ? $profiles[$target_idx]['row'][$device_id] : null;
 			$is_from_default = ($old_device && isset($old_device['auto_discovered']) && !empty($old_device['auto_discovered']));
 			
 			// If device was auto-discovered in Default and still in Default, mark as manually managed
-			if ($is_from_default && isset($profiles[$profile_id]['name']) && $profiles[$profile_id]['name'] === 'Default') {
+			if ($is_from_default && isset($profiles[$target_idx]['name']) && $profiles[$target_idx]['name'] === 'Default') {
 				$device['manually_managed'] = 'on';
 			}
 			
-			$profiles[$profile_id]['row'][$device_id] = $device;
+			$profiles[$target_idx]['row'][$device_id] = $device;
 			$action = "Updated";
 		} else {
 			// Add new device
-			$profiles[$profile_id]['row'][] = $device;
+			$profiles[$target_idx]['row'][] = $device;
 			$action = "Added";
 		}
 		
 		// NEW v1.4.67: Mark device as manually managed if in non-Default profile
-		if (isset($profiles[$profile_id]['name']) && $profiles[$profile_id]['name'] !== 'Default') {
-			$device_idx = $is_reassign ? (count($profiles[$profile_id]['row']) - 1) : (isset($_POST['device_id']) ? intval($_POST['device_id']) : (count($profiles[$profile_id]['row']) - 1));
-			$profiles[$profile_id]['row'][$device_idx]['manually_managed'] = 'on';
+		if (isset($profiles[$target_idx]['name']) && $profiles[$target_idx]['name'] !== 'Default') {
+			$device_idx = $is_reassign ? (count($profiles[$target_idx]['row']) - 1) : (isset($_POST['device_id']) ? intval($_POST['device_id']) : (count($profiles[$target_idx]['row']) - 1));
+			$profiles[$target_idx]['row'][$device_idx]['manually_managed'] = 'on';
 		}
 		
 		config_set_path('installedpackages/parentalcontrolprofiles/config', $profiles);
-		write_config("{$action} device: {$device['device_name']} to profile: {$profiles[$profile_id]['name']}");
+		write_config("{$action} device: {$device['device_name']} to profile: " . ($profiles[$target_idx]['name'] ?? ''));
+
+		// Invalidate device/profile caches so cron and next page load see the new config
+		pc_clear_cache('devices_all');
+		pc_clear_cache('profiles_all');
 		
 		try {
 			parental_control_sync();
@@ -345,7 +368,7 @@ if (isset($_POST['save_device']) && $_POST['save_device']) {
 		$profiles = config_get_path('installedpackages/parentalcontrolprofiles/config', []);
 		
 		// Redirect to target profile's device list so user sees the result (avoids edit form for moved device)
-		header("Location: parental_control_profiles.php?act=devices&id={$profile_id}&savemsg=" . urlencode($savemsg));
+		header("Location: parental_control_profiles.php?act=devices&id={$target_idx}&savemsg=" . urlencode($savemsg));
 		exit;
 		}
 	}
@@ -478,6 +501,19 @@ if (isset($_GET['act']) && $_GET['act'] === 'edit_device' && isset($_GET['id']) 
 
 if (isset($_GET['act']) && $_GET['act'] === 'add_device' && isset($_GET['id'])) {
 	$manage_devices_id = intval($_GET['id']);
+}
+
+// When Save Device fails validation (POST), restore edit form context so user sees the form and can fix errors
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_device']) && !empty($input_errors)) {
+	$manage_devices_id = isset($_POST['source_profile_id']) && is_numeric($_POST['source_profile_id'])
+		? intval($_POST['source_profile_id']) : (isset($_POST['profile_id']) && is_numeric($_POST['profile_id']) ? intval($_POST['profile_id']) : null);
+	$edit_device_id = (isset($_POST['device_id']) && is_numeric($_POST['device_id'])) ? intval($_POST['device_id']) : null;
+	$edit_device = array(
+		'device_name' => trim($_POST['device_name'] ?? ''),
+		'mac_address' => trim($_POST['mac_address'] ?? ''),
+		'ip_address' => trim($_POST['ip_address'] ?? ''),
+		'hostname' => trim($_POST['hostname'] ?? '')
+	);
 }
 
 include("head.inc");
@@ -614,7 +650,7 @@ display_top_tabs($tab_array);
 								<a href="?act=edit&amp;id=<?=$idx?>" class="btn btn-xs btn-info" title="Edit Profile">
 									<i class="fa fa-pencil"></i> Edit
 								</a>
-								<form method="post" style="display:inline;" onsubmit="return confirm('Delete this profile and all its devices?');">
+								<form method="post" style="display:inline;">
 									<input type="hidden" name="act" value="del" />
 									<input type="hidden" name="id" value="<?=$idx?>" />
 									<button type="submit" class="btn btn-xs btn-danger" title="Delete">
@@ -861,7 +897,7 @@ display_top_tabs($tab_array);
 									class="btn btn-xs btn-info" title="Edit Device">
 									<i class="fa fa-pencil"></i> Edit
 								</a>
-								<form method="post" style="display:inline;" onsubmit="return confirm('Delete this device?');">
+								<form method="post" style="display:inline;">
 									<input type="hidden" name="act" value="del_device" />
 									<input type="hidden" name="profile_id" value="<?=$manage_devices_id?>" />
 									<input type="hidden" name="device_id" value="<?=$dev_idx?>" />
@@ -1019,9 +1055,10 @@ function toggleAllDevices(checkbox) {
 					<input type="text" name="mac_address" class="form-control" 
 						value="<?=htmlspecialchars($edit_device['mac_address'] ?? '')?>" 
 						placeholder="XX:XX:XX:XX:XX:XX" 
-						pattern="([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})" required />
+						pattern="\s*([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})\s*" 
+						title="MAC address: 6 pairs of hex digits separated by colons or hyphens (e.g. d8:6b:83:04:6b:4d)" required />
 					<span class="help-block">
-						Hardware address (required). Format: <code>AA:BB:CC:DD:EE:FF</code>
+						Hardware address (required). Format: <code>AA:BB:CC:DD:EE:FF</code> (colons or hyphens; upper or lower case).
 					</span>
 				</div>
 			</div>
